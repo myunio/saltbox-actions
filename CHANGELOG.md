@@ -6,7 +6,10 @@
   declares (name, verb, kind, connections, unique names and CLI commands). `rails actions:check`
   runs every other check (policy rules, fields, summaries, `check_action` and `check_registry`), as
   do the registry shared example and `assert_valid_action_registry`. It and `actions:catalogue`
-  say they need the database when they cannot connect.
+  say they need the database when they cannot connect. An app that does not run
+  `rails actions:check` in CI (or the registry spec or test) now boots with a missing policy
+  rule, a policy field that is not a column or a bad summary, and finds out only at run time,
+  when a caller first hits that action.
 - A create or update's input schema is built with the real caller on first use, inside
   `around_invocation`, and cached per list of permitted fields, so callers whose policy permits
   different fields see different schemas. A model field the caller may not set is refused as
