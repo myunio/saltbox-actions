@@ -596,10 +596,10 @@ rules need; the rest keep the allow-everything defaults.
 | `policy_scope(scope)` | action | The records the person may see. |
 | `skip_authorization`, `skip_policy_scope` | action | Marks the check done, for an action that needs none. |
 | `verify_authorized`, `verify_policy_scoped` | action | Raise when `perform` skipped the check. Run after `perform`. |
-| `permitted_attribute_names(record)` | action | The fields the person may set on the record. |
+| `permitted_attribute_names(record)` | action | The fields the person may set. `record` is a record, or the model class for a create (`permitted_attributes(Event)`). |
 | `scoped_records(model)` | action | The records the person may pick for a `belongs_to` field. |
 | `permitted?(account)` | class | Whether the person may run the action at all, before any record loads. Decides the actions list too. |
-| `permitted_attribute_names_for(account, record)` | class | The fields a create or update takes, for the input schema. The account may be `nil` at boot (see `schema_principal`). |
+| `permitted_attribute_names_for(account, record)` | class | The fields a create or update takes, for the input schema. The account may be `nil` at boot (see `schema_principal`), and `record` a record or a model class. |
 | `authorization_errors` | class | Your refusal's exception classes. They are answered as `forbidden`. |
 | `authorization_problems` | class | What the boot check should report, such as a missing rule. Default: nothing. |
 
@@ -616,7 +616,7 @@ module ApplicationAction::ModelAuthorization
 
   class_methods do
     def permitted?(user) = user.present?
-    def permitted_attribute_names_for(user, record) = record.class.writable_attributes(user)
+    def permitted_attribute_names_for(user, record) = (record.is_a?(Class) ? record : record.class).writable_attributes(user)
     def authorization_errors = [NotAllowed]
   end
 
@@ -856,7 +856,8 @@ names are required.
 
 First it checks the action the way the boot check will: the model, the
 policy and its rule (when the base class has an adapter), and the fields. On
-a problem it writes nothing and prints the fix.
+a problem it writes nothing, prints the fix and exits 1. If the catalogue
+step fails after that, it puts back every file it wrote or changed.
 
 A new read lets agents run it (`connections :allowed`). A new change or
 destructive action asks first (`connections :confirm`). If you set

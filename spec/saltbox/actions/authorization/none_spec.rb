@@ -57,45 +57,19 @@ RSpec.describe Saltbox::Actions::Authorization::None do
   end
 
   describe "the README's plain-model adapter" do
-    before do
-      stub_const("ModelAuthorization", Module.new {
-        extend ActiveSupport::Concern
-
-        const_set(:NotAllowed, Class.new(StandardError))
-
-        class_methods do
-          def permitted?(user) = user.present?
-
-          def permitted_attribute_names_for(user, record) = record.class.writable_attributes(user)
-
-          def authorization_errors = [ModelAuthorization::NotAllowed]
-        end
-
-        def authorize(record, rule = nil)
-          @authorized = true
-          raise ModelAuthorization::NotAllowed unless account.can?(rule || self.class.policy_query, record)
-          record
-        end
-
-        def policy_scope(scope)
-          @scoped = true
-          scope.visible_to(account)
-        end
-
-        def skip_authorization = @authorized = true
-
-        def skip_policy_scope = @scoped = true
-
-        def verify_authorized = @authorized || raise(Saltbox::Actions::AuthorizationNotPerformedError, "#{self.class.name} never called authorize")
-
-        def verify_policy_scoped = @scoped || raise(Saltbox::Actions::PolicyScopingNotPerformedError, "#{self.class.name} never called policy_scope")
-
-        def permitted_attribute_names(record) = self.class.permitted_attribute_names_for(account, record)
-
-        def scoped_records(model) = model.visible_to(account)
-      })
-      stub_const("ModelAction", Class.new(Saltbox::Actions::Base) { include ModelAuthorization })
+    # The adapter's module, read from the README's code block as written.
+    def self.readme_adapter
+      readme = File.read(File.expand_path("../../../../README.md", __dir__))
+      block = readme[%r{```ruby\n# app/actions/application_action/model_authorization.rb\n(.*?)```}m, 1]
+      block[/\Amodule ApplicationAction::ModelAuthorization\n.*?^end\n/m]
     end
+
+    before do
+      TOPLEVEL_BINDING.eval(self.class.readme_adapter, "README.md")
+      stub_const("ModelAction", Class.new(Saltbox::Actions::Base) { include ApplicationAction::ModelAuthorization })
+    end
+
+    after { ApplicationAction.send(:remove_const, :ModelAuthorization) }
 
     # A person who may update only what they can see, and only as an editor.
     let(:person_class) { Struct.new(:id, :org_id, :editor) { def can?(rule, _record) = rule != :update? || editor } }
@@ -119,6 +93,24 @@ RSpec.describe Saltbox::Actions::Authorization::None do
         connections :allowed
         def perform = render(json: {titles: policy_scope(Gathering).order(:id).pluck(:title)})
       end
+    end
+
+    let(:create) do
+      action("Gathering::CreateAction", base: ModelAction) do
+        connections :confirm
+        def perform
+          @gathering = policy_scope(Gathering).new(permitted_attributes(Gathering))
+          authorize @gathering
+          @gathering.save!
+          render json: {title: @gathering.title}, status: :created
+        end
+      end
+    end
+
+    it "creates with the model's fields, given the model class" do
+      result = invoke.call(create, {title: "New", capacity: 12}, as_screen(person))
+      expect(result.status).to eq(201)
+      expect(Gathering.last.attributes.slice("title", "capacity", "org_id")).to eq("title" => "New", "capacity" => 12, "org_id" => 1)
     end
 
     it "takes the model's fields, checks the person's rule and answers a refusal as forbidden" do

@@ -25,7 +25,8 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     err = StringIO.new
     $stdout = out
     $stderr = err
-    described_class.start([*args, "--no-catalogue", "--test-framework=rspec"], destination_root: destination.to_s)
+    expect { described_class.start([*args, "--no-catalogue", "--test-framework=rspec"], destination_root: destination.to_s) }
+      .to raise_error(SystemExit) { expect(it.status).to eq(1) }
     out.string + err.string
   ensure
     $stdout = STDOUT
@@ -91,6 +92,24 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
       "EventPolicy#archive? is missing: add it, or authorize another query")
     expect(output).not_to include("Write the action's description")
     expect(Dir.children(destination)).to be_empty
+  end
+
+  it "puts back every file it wrote or changed when the catalogue step fails" do
+    locale = destination.join("config/locales/actions.en.yml")
+    catalogue = destination.join("config/actions.json")
+    FileUtils.mkdir_p(locale.dirname)
+    locale.write("en:\n  actions:\n    event/show:\n      description: Shows one.\n")
+    catalogue.write("[]\n")
+    generator = described_class.new(["Event::Update"], {"test_framework" => "rspec"}, destination_root: destination.to_s)
+    allow(generator).to receive(:rails_command).with("actions:catalogue").and_return(false)
+    $stdout = StringIO.new
+    expect { generator.invoke_all }.to raise_error(Thor::Error, /actions:catalogue failed, so nothing was written/)
+    expect(destination.join("app/actions/event/update_action.rb")).not_to exist
+    expect(destination.join("spec/actions/event/update_action_spec.rb")).not_to exist
+    expect(locale.read).to eq("en:\n  actions:\n    event/show:\n      description: Shows one.\n")
+    expect(catalogue.read).to eq("[]\n")
+  ensure
+    $stdout = STDOUT
   end
 
   it "asks for no policy when the base class has no authorization adapter" do
