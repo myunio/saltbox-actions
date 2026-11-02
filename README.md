@@ -140,17 +140,23 @@ Before an action runs, its input is cast and then checked against its JSON
 Schema. The cast works like Active Record's, with each input's Active Model
 type, so form params work as they are:
 
-- `"12"` becomes `12` for an integer, and `"on"` or `"1"` becomes `true` for a
-  boolean.
+- `"12"` becomes `12` for an integer. `"1"`, `"true"` or `"on"` becomes `true`
+  for a boolean, and `"0"`, `"false"` or `"off"` becomes `false`.
 - An empty field (`""`) becomes `nil` for a number, a date, a boolean or an
   enum. A string keeps `""`.
 - A form's local date-time, `"2026-11-02T18:30"`, becomes a time in the app's
-  time zone.
+  time zone. A fraction of a second is kept.
 - An id may be an integer or a string.
 - A decimal may be a number or a string of digits. A string keeps every digit.
 
 A value that is not of its type is refused, with an error on that field.
-Unlike Active Record, `"lots"` never becomes `0`.
+This is stricter than Active Record: `"lots"` never becomes `0`, `"yes"`
+never becomes `true`, and 30 February never becomes 2 March. A number too
+large for its column is refused too.
+
+Lists must arrive as arrays. Rails' `fields_for` and nested attributes send
+an indexed hash (`{"0" => {...}, "1" => {...}}`), which is not cast yet.
+Turn it into an array in your controller before you call the action.
 
 ### Names come from the class
 

@@ -7,7 +7,7 @@ module Saltbox
     # action runs. It first casts what an HTML form sends, with each input's
     # Active Model type (Casting), then refuses, naming each field:
     # - a field the schema does not list;
-    # - a value of the wrong type;
+    # - a value of the wrong type, or a number its type cannot hold;
     # - a missing required field.
     class Arguments
       # @param schema [Hash] a closed JSON Schema object
@@ -40,7 +40,11 @@ module Saltbox
         # default satisfies a required argument.
         arguments = defaults(properties).merge(arguments)
         failures = schemer.validate(arguments).to_a
-        raise Error::Invalid.new(failures.pluck("error").join("; "), errors: field_errors(failures)) if failures.any?
+        errors = field_errors(failures)
+        out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
+        out_of_range.each { (errors[it] ||= []) << "is out of range" }
+        messages = failures.pluck("error") + out_of_range.map { "value at `/#{it}` is out of range" }
+        raise Error::Invalid.new(messages.join("; "), errors:) if errors.any?
         arguments
       end
 

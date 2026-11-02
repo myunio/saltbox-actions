@@ -63,6 +63,8 @@ module Saltbox
         case type
         when :hash then nil
         when :array then [of.is_a?(Hash) ? of.to_h { |name, item| [name.to_s, type_for_argument(item)] } : type_for_argument(of || :string)]
+        # An integer argument is stored nowhere, so it may be as large as a bigint.
+        when :integer then ActiveModel::Type.lookup(:integer, limit: 8)
         else ActiveModel::Type.lookup(type)
         end
       end

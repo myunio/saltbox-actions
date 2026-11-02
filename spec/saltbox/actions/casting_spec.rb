@@ -42,6 +42,32 @@ RSpec.describe Saltbox::Actions::Casting do
     expect(event.reload).to have_attributes(capacity: 40, price: BigDecimal(10), featured: false)
   end
 
+  it "refuses a local date-time that is not on the calendar, rather than rolling it over" do
+    expect { update.call({"doors_open_at" => "2026-02-30T12:30"}) }.to have_field_errors(:doors_open_at)
+    expect { update.call({"doors_open_at" => "2026-11-02T24:30"}) }.to have_field_errors(:doors_open_at)
+  end
+
+  it "keeps a local date-time's fraction of a second, as Active Record does" do
+    update.call({"doors_open_at" => "2026-11-02T18:30:12.123456"})
+    expect(event.reload.doors_open_at).to eq(Time.zone.parse("2026-11-02 18:30:12.123456"))
+  end
+
+  it "refuses an integer its column cannot store, from a form or as a JSON number" do
+    expect { update.call({"capacity" => "9223372036854775808"}) }.to have_field_errors(:capacity)
+    expect { update.call({capacity: 2**63}, as_mcp(manager)) }.to have_field_errors(:capacity)
+    expect(event.reload.capacity).to eq(40)
+  end
+
+  it "refuses a float that is not finite, which JSON cannot carry" do
+    schema = {"type" => "object", "properties" => {"ratio" => {"type" => "number"}}, "required" => [], "additionalProperties" => false}
+    checker = Saltbox::Actions::Arguments.new(schema, types: {"ratio" => ActiveModel::Type::Float.new})
+    expect(checker.validate!("ratio" => "1.5")).to eq("ratio" => 1.5)
+    %w[1e999 NaN Infinity].each do |value|
+      expect { checker.validate!("ratio" => value) }.to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to eq(["ratio"]) }
+    end
+    expect { checker.validate!("ratio" => Float::INFINITY) }.to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to eq(["ratio"]) }
+  end
+
   it "casts declared arguments, including the items of a list, and drops a form's blank list item" do
     action = Class.new(ApplicationAction) do
       def self.name = "Event::ImportAction"

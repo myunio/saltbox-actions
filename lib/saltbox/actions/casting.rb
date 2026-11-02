@@ -9,14 +9,17 @@ module Saltbox
     # - "1", "true" and "on" become true for a boolean, and "0", "false" and
     #   "off" false;
     # - a form's local date-time, "2026-11-02T10:30", becomes a time in the
-    #   app's time zone.
+    #   app's time zone, keeping any fraction of a second.
     # A decimal keeps its string, so no digit is lost. Any other value stays
     # as it was sent, so the schema refuses it by name: unlike Active Record,
-    # "lots" never becomes 0.
+    # "lots" never becomes 0, "yes" never becomes true, and 30 February never
+    # becomes 2 March. Casting.invalid? then finds the numbers the schema
+    # passes but the type cannot hold.
     module Casting
       INTEGER = /\A\s*[+-]?\d+\s*\z/
       FLOAT = /\A\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*\z/
       BOOLEANS = %w[1 0 t f T F true false TRUE FALSE on off ON OFF].freeze
+      LOCAL_TIME = /\A(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\z/
 
       # @param value [Object] one input as sent
       # @param type [ActiveModel::Type::Value, Array, Hash, nil] the input's type;
@@ -50,10 +53,27 @@ module Saltbox
         end
       end
 
-      # @return [String] an ISO 8601 time with its offset, as the schema takes
+      # @return [String] an ISO 8601 time with its offset, as the schema takes,
+      #   or the value as sent when it is not a real local date and time
       def self.local_time(value, type)
-        return value if value.match?(/(Z|[+-]\d{2}:?\d{2})\z/i)
-        type.cast(value)&.iso8601 || value
+        year, month, day, hour, minute, second, fraction = value.match(LOCAL_TIME)&.captures
+        return value unless year && Date.valid_date?(year.to_i, month.to_i, day.to_i) &&
+          hour.to_i < 24 && minute.to_i < 60 && second.to_i < 60
+        type.cast(value)&.iso8601([fraction.to_s.length, type.precision || 6].min) || value
+      end
+
+      # @param value [Object] one input, after Casting.cast
+      # @param type [ActiveModel::Type::Value, Array, Hash, nil]
+      # @return [Boolean] whether it holds an integer the type cannot store, or
+      #   a float that is not finite, which JSON cannot carry
+      def self.invalid?(value, type)
+        case value
+        when Array then type.is_a?(Array) && value.any? { invalid?(it, type.first) }
+        when Hash then type.is_a?(Hash) && value.any? { |name, item| invalid?(item, type[name.to_s]) }
+        when Integer then type.is_a?(ActiveModel::Type::Value) && type.type == :integer && !type.serializable?(value)
+        when Float then !value.finite?
+        else false
+        end
       end
 
       private_class_method :cast_list, :cast_string, :local_time
