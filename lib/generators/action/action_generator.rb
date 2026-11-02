@@ -8,7 +8,9 @@ module Saltbox
       # `rails g action Event::Update` writes Event::UpdateAction in
       # app/actions/event/update_action.rb and its locale entry, then hands
       # the spec to the test framework (rspec:action with RSpec), the way
-      # `rails g model` does. The name is the model, then the action words:
+      # `rails g model` does. It checks the new action against the boot
+      # checks first, and on a problem writes nothing and prints the fix.
+      # The name is the model, then the action words:
       # - Event::Update or event/update writes Event::UpdateAction;
       # - Event::Type::Create writes Event::Type::CreateAction;
       # - Event::Archive --kind change writes Event::ArchiveAction.
@@ -28,14 +30,27 @@ module Saltbox
         class_option :catalogue, type: :boolean, default: true,
           desc: "Rewrite the committed catalogue (config/actions.json) with the new action"
 
-        hook_for :test_framework
+        # A refused check or a failed catalogue step exits 1, so scripts see it.
+        #
+        # @return [Boolean]
+        def self.exit_on_failure? = true
 
+        # Checks the name, then the action the templates would write, as the
+        # rails actions:check will: its model, its policy and rule when the base class
+        # has an authorization adapter, and its fields. Runs before any file
+        # is written.
+        #
         # @return [void]
-        def check_name
+        # @raise [Thor::Error] naming each problem and its fix
+        def check
           raise Thor::Error, "Name the model and the action: Event::Update, Event::Type::Create" if class_path.empty?
-          raise Thor::Error, "#{model_name} is not a model" unless model.is_a?(Class) && model < ActiveRecord::Base
-          raise Thor::Error, "#{verb} is spelled #{rails_spelling} in actions" if rails_spelling
+          raise Thor::Error, "#{model_name} is not a model: generate the model first, or name another" unless model.is_a?(Class) && model < ActiveRecord::Base
+          raise Thor::Error, "#{verb} is spelled #{rails_spelling} in actions: bin/rails g action #{model_name}::#{action_words(rails_spelling)}" if rails_spelling
           raise Thor::Error, "#{verb} is not a verb in the table: pass --kind read, change or destructive" unless table_verb? || options[:kind]
+          problems = Registry.problems(probe)
+          return remember_files if problems.empty?
+          raise Thor::Error, "#{action_class_name} would not pass rails actions:check, so nothing was written:\n" \
+            "#{problems.map { "  - #{it}" }.join("\n")}"
         end
 
         # @return [void]
@@ -52,9 +67,21 @@ module Saltbox
           append_to_file path, "    #{action_path}:\n      description:\n#{fields}"
         end
 
+        hook_for :test_framework do |generator|
+          invoke generator, [name], id: takes_id?
+        end
+
         # @return [void]
+        # Rewrites the catalogue with the new action. If that fails, every
+        # file this generator wrote or changed is put back as it was.
+        #
+        # @return [void]
+        # @raise [Thor::Error] when the catalogue step fails
         def write_catalogue
-          rails_command "actions:catalogue" if behavior == :invoke && options[:catalogue] && !options[:pretend]
+          return unless behavior == :invoke && options[:catalogue] && !options[:pretend]
+          return if rails_command("actions:catalogue")
+          restore_files
+          raise Thor::Error, "bin/rails actions:catalogue failed, so nothing was written: fix the error above, then run the generator again"
         end
 
         # @return [void]
@@ -67,6 +94,36 @@ module Saltbox
         end
 
         private
+
+        # The files the generator may write or change: the action, the locale
+        # file, the test framework's file and the catalogue.
+        def touched_paths
+          [File.join(Actions.config.action_paths.first.path.to_s, "#{action_path}_action.rb"),
+            "config/locales/actions.en.yml",
+            File.join("spec/actions", "#{action_path}_action_spec.rb"),
+            File.join("test/actions", "#{action_path}_action_test.rb"),
+            Actions.config.catalogue_path.to_s]
+        end
+
+        # Notes each file's contents (nil when it does not exist) before any is written.
+        def remember_files
+          @remembered = touched_paths.to_h do |path|
+            full = File.expand_path(path, destination_root)
+            [full, File.exist?(full) ? File.binread(full) : nil]
+          end
+        end
+
+        # Puts each file back as remember_files found it.
+        def restore_files
+          @remembered.each do |full, contents|
+            if contents
+              File.binwrite(full, contents)
+            elsif File.exist?(full)
+              File.delete(full)
+            end
+          end
+          say_status :restore, "removed what this generator wrote", :red
+        end
 
         def action_path = [*class_path, file_name].join("/")
 
@@ -90,7 +147,17 @@ module Saltbox
 
         def takes_id? = table_verb? ? Naming::VERBS.dig(verb, :id) : options[:id]
 
-        def connections = (kind == "destructive") ? :confirm : :allowed
+        # Agents ask before a new change or destructive action unless the
+        # app sets Configuration#default_connections, which then applies.
+        #
+        # @return [Symbol, nil] the connections to write, nil to leave it to the app's default
+        def connections
+          default = Actions.config.default_connections
+          return if default && !(kind == "destructive" && default == :allowed)
+          (kind == "read") ? :allowed : :confirm
+        end
+
+        def action_words(spelling) = [spelling, *words.drop(1)].map(&:camelize).join
 
         def record = "@#{model.model_name.singular}"
 
@@ -100,12 +167,23 @@ module Saltbox
 
         def field_names = writes_fields? ? probe.writable_fields.keys : []
 
-        # An anonymous action class with the new action's name, used to read
-        # its fields before its file exists.
+        # An anonymous action class with the new action's name and the
+        # declarations the template writes, used to check it and read its
+        # fields before its file exists.
         def probe
           @probe ||= begin
             class_name = action_class_name
-            Class.new(base_class.constantize) { define_singleton_method(:name) { class_name } }
+            declared_kind = kind.to_sym unless table_verb?
+            id = !table_verb? && takes_id?
+            rule = :"#{verb}?" if words.size > 1 || !table_verb?
+            rule_for_connections = connections
+            Class.new(base_class.constantize) do
+              define_singleton_method(:name) { class_name }
+              kind declared_kind if declared_kind
+              argument :id if id
+              connections rule_for_connections if rule_for_connections
+              authorize rule if rule
+            end
           end
         end
       end

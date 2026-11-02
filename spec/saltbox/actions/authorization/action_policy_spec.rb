@@ -70,12 +70,12 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
   end
 
   it "fails an action that never calls authorize or policy_scope" do
-    unchecked = action("Policies::ListAction") do
+    unchecked = action("Policies::ExportAction") do
       connections :allowed
       def perform = render(json: {})
     end
     expect { invoke.call(unchecked, {}, as_screen(manager)) }.to raise_error(Saltbox::Actions::AuthorizationNotPerformedError)
-    unscoped = action("Policies::ListAction") do
+    unscoped = action("Policies::ExportAction") do
       connections :allowed
       def perform
         authorize Event

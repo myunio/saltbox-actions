@@ -4,6 +4,7 @@
 /coverage/
 /spec/rails_app/log/
 /spec/rails_app/tmp/
-/spec/rails_app/db/*.sqlite3*
+/spec/rails_app/db/*.sqlite3
+/spec/rails_app/db/*.sqlite3-*
 *.gem
 .rspec_status

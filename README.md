@@ -106,7 +106,7 @@ RubyGems yet, so install it from GitHub and pin a commit:
 # Gemfile
 gem "saltbox-actions", github: "myunio/saltbox-actions", ref: "<commit sha>"
 gem "jbuilder"   # action views
-gem "pundit"     # or gem "action_policy"
+gem "pundit"     # optional: or gem "action_policy", or neither
 ```
 
 Add these too, but only for the parts you use:
@@ -117,7 +117,8 @@ Add these too, but only for the parts you use:
 | `ruby_llm` | Tools for an in-app chat assistant |
 | `paper_trail` | The audit trail helper and the `change_audit_trail` matcher |
 
-Then make a base class for your actions and pick your authorization library:
+Then make a base class for your actions. If you use Pundit or ActionPolicy,
+include its adapter:
 
 ```ruby
 # app/actions/application_action.rb
@@ -125,6 +126,9 @@ class ApplicationAction < Saltbox::Actions::Base
   include Saltbox::Actions::Authorization::Pundit   # or ::ActionPolicy
 end
 ```
+
+With no adapter, every action is allowed and `rails actions:check` asks for no
+policy. To use your own rules, see [Authorization](#authorization).
 
 To hear about the records each change writes (see `on_changes` under
 Configuration), include change tracking in your models:
@@ -146,6 +150,22 @@ An action lives in `app/actions/`, one per file, named
 action. It loads records through `policy_scope`, calls `authorize`, does the
 work, then calls `render` or `head`. If `perform` skips `authorize` or
 `policy_scope`, the action fails, just as Pundit's `verify_authorized` would.
+A list action needs only `policy_scope`, as a controller's `index` does with
+`verify_policy_scoped`. Whether the person may list at all (`index?`) is
+asked before `perform` runs.
+
+```ruby
+# app/actions/event/list_action.rb
+class Event::ListAction < ApplicationAction
+  connections :allowed
+  argument :page, :integer, minimum: 1, default: 1
+
+  def perform
+    @events = policy_scope(Event).order(:starts_on).offset((params[:page] - 1) * 25).limit(25)
+    render :index        # app/views/events/index.json.jbuilder
+  end
+end
+```
 
 `render :show` draws a Jbuilder view from the model's view folder, such as
 `app/views/events/show.json.jbuilder`. Instance variables you set in
@@ -513,7 +533,7 @@ namespace :api do
 end
 
 # app/controllers/api/v1/actions_controller.rb
-class Api::V1::ActionsController < ApplicationController
+class Api::V1::ActionsController < ActionController::API
   include Saltbox::Actions::Controller
 
   private
@@ -524,6 +544,10 @@ class Api::V1::ActionsController < ApplicationController
   end
 end
 ```
+
+It inherits `ActionController::API`, not your `ApplicationController`, so
+your session sign-in, forgery protection and Pundit's `verify_authorized` do
+not run on it. The action checks its own authorization.
 
 `GET /api/v1/actions` lists the actions this caller may run.
 `POST /api/v1/actions/update_event` runs one, with a body of
@@ -591,6 +615,72 @@ needs a person or a tenant, set it:
 ```ruby
 config.schema_principal { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
 ```
+
+With neither, every action is allowed: `authorize` and `policy_scope` pass
+everything through, and create and update actions take only the arguments
+they declare.
+
+#### Writing your own adapter
+
+An adapter is a concern your base class includes. Define the methods your
+rules need; the rest keep the allow-everything defaults.
+
+| Method | Where | Answers |
+|---|---|---|
+| `authorize(record, rule = nil)` | action | Raises unless the person may; `rule` defaults to the action's (`self.class.policy_query`, such as `:update?`). Returns the record. |
+| `policy_scope(scope)` | action | The records the person may see. |
+| `skip_authorization`, `skip_policy_scope` | action | Marks the check done, for an action that needs none. |
+| `verify_authorized`, `verify_policy_scoped` | action | Raise when `perform` skipped the check. Run after `perform`. |
+| `permitted_attribute_names(record)` | action | The fields the person may set. `record` is a record, or the model class for a create (`permitted_attributes(Event)`). |
+| `scoped_records(model)` | action | The records the person may pick for a `belongs_to` field. |
+| `permitted?(account)` | class | Whether the person may run the action at all, before any record loads. Decides the actions list too. |
+| `permitted_attribute_names_for(account, record)` | class | The fields a create or update takes, for the input schema. The account is the caller's; where there is no caller it is `schema_principal`'s, or `nil`, and `record` a record or a model class. |
+| `authorization_errors` | class | Your refusal's exception classes. They are answered as `forbidden`. |
+| `authorization_problems` | class | What `rails actions:check` should report, such as a missing rule. Default: nothing. |
+
+Here the models answer for themselves: `Event.visible_to(user)` is a scope,
+`user.can?(:update?, event)` decides each rule, and
+`Event.writable_attributes(user)` lists the fields a person may set.
+
+```ruby
+# app/actions/application_action/model_authorization.rb
+module ApplicationAction::ModelAuthorization
+  extend ActiveSupport::Concern
+
+  class NotAllowed < StandardError; end
+
+  class_methods do
+    def permitted?(user) = user.present?
+    def permitted_attribute_names_for(user, record) = (record.is_a?(Class) ? record : record.class).writable_attributes(user)
+    def authorization_errors = [NotAllowed]
+  end
+
+  def authorize(record, rule = nil)
+    @authorized = true
+    raise NotAllowed unless account.can?(rule || self.class.policy_query, record)
+    record
+  end
+
+  def policy_scope(scope)
+    @scoped = true
+    scope.visible_to(account)
+  end
+
+  def skip_authorization = @authorized = true
+  def skip_policy_scope = @scoped = true
+  def verify_authorized = @authorized || raise(Saltbox::Actions::AuthorizationNotPerformedError, "#{self.class.name} never called authorize")
+  def verify_policy_scoped = @scoped || raise(Saltbox::Actions::PolicyScopingNotPerformedError, "#{self.class.name} never called policy_scope")
+  def permitted_attribute_names(record) = self.class.permitted_attribute_names_for(account, record)
+  def scoped_records(model) = model.visible_to(account)
+end
+
+# app/actions/application_action.rb
+class ApplicationAction < Saltbox::Actions::Base
+  include ModelAuthorization
+end
+```
+
+Files under `app/actions/application_action/` hold shared code, not actions.
 
 ### Change tracking
 
@@ -686,7 +776,8 @@ end
 - `change_audit_trail.on(event).by(user).with(agent: "Test agent")` (needs PaperTrail);
 - `be_runnable_by(caller)` and `be_listed_for(caller)`.
 
-**Shared examples:**
+**Shared examples:** `unpermitted_account` is optional. Leave it out when
+everyone who can sign in may run the action.
 
 ```ruby
 RSpec.describe Event::UpdateAction do
@@ -800,6 +891,16 @@ test framework. Minitest apps get `test/actions/event/update_action_test.rb`;
 RSpec apps get `spec/actions/event/update_action_spec.rb`. Fill in the
 record helpers with your app's fixtures or records. No factory gem or role
 names are required.
+
+First it checks the action the way `rails actions:check` will: the model, the
+policy and its rule (when the base class has an adapter), and the fields. On
+a problem it writes nothing, prints the fix and exits 1. If the catalogue
+step fails after that, it puts back every file it wrote or changed.
+
+A new read lets agents run it (`connections :allowed`). A new change or
+destructive action asks first (`connections :confirm`). If you set
+`default_connections`, a new action uses that instead, except that a
+destructive one still asks. Change the line in the action to suit.
 
 To change the templates, copy them to `lib/templates/action/action.rb.tt`
 and `lib/templates/test_unit/action/action_test.rb.tt` (Minitest) or

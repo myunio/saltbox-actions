@@ -31,6 +31,8 @@ class ActionGeneratorTest < ActiveSupport::TestCase
   end
 
   test "forwards custom verb id options through the Rails hook" do
+    # The generator checks the policy rule first; the dummy policy has none for archive.
+    EventPolicy.define_method(:archive?) { create? }
     [true, false].each do |takes_id|
       Dir.mktmpdir("action-generator") do |destination|
         capture_io do
@@ -43,6 +45,8 @@ class ActionGeneratorTest < ActiveSupport::TestCase
         assert_equal takes_id, source.include?("id: visible_record.id.to_s")
       end
     end
+  ensure
+    EventPolicy.remove_method(:archive?)
   end
 
   test "writes a factory-free no-id test and a nested custom verb test" do

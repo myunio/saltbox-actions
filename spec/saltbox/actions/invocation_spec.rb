@@ -93,6 +93,27 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect { described_class.call(name: action, caller: as_screen(manager)) }.to raise_error(Pundit::AuthorizationNotPerformedError)
   end
 
+  it "takes policy_scope as a list action's authorization, but still needs it" do
+    listed = Class.new(ApplicationAction) do
+      def self.name = "Event::ListAction"
+      connections :allowed
+      def perform
+        @events = policy_scope(Event)
+        render :index
+      end
+    end
+    expect(described_class.call(name: listed, caller: as_screen(manager)).status).to eq(200)
+    unscoped = Class.new(ApplicationAction) do
+      def self.name = "Event::ListAction"
+      connections :allowed
+      def perform
+        @events = Event.all
+        render :index
+      end
+    end
+    expect { described_class.call(name: unscoped, caller: as_screen(manager)) }.to raise_error(Pundit::PolicyScopingNotPerformedError)
+  end
+
   it "refuses a read of an input the action does not declare" do
     action = Class.new(ApplicationAction) do
       def self.name = "Event::PeekAction"

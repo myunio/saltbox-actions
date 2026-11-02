@@ -193,7 +193,7 @@ module Saltbox
       end
 
       # An action with a declared name answers to no verb table: it declares
-      # its kind, and its policy is checked only when it declares a model.
+      # its kind, and its model is checked only when it declares one.
       #
       # @param action [Class]
       # @param declared_only [Boolean]
@@ -203,11 +203,7 @@ module Saltbox
         problems << "declare kind :read, :change or :destructive" unless action.declared_kind
         problems.concat(connection_problems(action))
         return problems if declared_only
-        if action.model && action.declared_query.nil?
-          problems << "#{action.model.name} is its model: name the policy rule, authorize :show? or another"
-        elsif action.model
-          problems.concat(model_problems(action))
-        end
+        problems.concat(model_problems(action)) if action.model
         problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
       end
 
@@ -220,26 +216,20 @@ module Saltbox
       end
 
       # @param action [Class]
-      # @return [Array<String>] what is wrong with the action's model, policy and fields, and the fix
+      # @return [Array<String>] what is wrong with the action's model, its
+      #   authorization (see Authorization#authorization_problems) and fields, and the fix
       def self.model_problems(action)
         return [] if action.name.deconstantize.empty? && action.model.nil?
         model = action.model
         return ["#{action.name.deconstantize} is not a model: declare model, or move the action"] unless model.is_a?(Class) && model < ActiveRecord::Base
         problems = []
         problems << "no area maps #{model.name}: add it to the app's areas" if Actions.config.require_area && !action.area
-        if action.more_than_verb? && action.declared_query.nil?
-          problems << "#{action.action_words.join(" ")} says more than #{action.verb}: name the policy query, authorize :#{action.verb}? or another"
-        end
-        policy = action.policy_class
-        if policy.nil?
-          problems << "#{model.name} has no #{action.policy_label} policy"
-        elsif !action.policy_rule?(action.policy_query)
-          problems << "#{policy}##{action.policy_query} is missing: add it, or authorize another query"
-        end
+        authorization = action.authorization_problems
+        problems.concat(authorization)
         # The fields and summary are read from the table, which a database
         # not yet migrated lacks: that is the one fix to name.
         return problems << "#{model.name}'s table #{model.table_name} does not exist: run bin/rails db:prepare first" unless model.table_exists?
-        problems.concat(schema_problems(action))
+        problems.concat(schema_problems(action)) if authorization.empty?
         problems.concat(summary_problems(action))
       end
 
@@ -256,7 +246,7 @@ module Saltbox
       rescue ActiveRecord::ConnectionNotEstablished, ActiveRecord::NoDatabaseError
         raise
       rescue => error
-        ["building its input schema asked #{action.policy_class || "its policy"}#permitted_attributes, which raised #{error.class}: #{error.message}. " \
+        ["building its input schema asked #{action.policy_class ? "#{action.policy_class}#permitted_attributes" : "permitted_attribute_names_for"}, which raised #{error.class}: #{error.message}. " \
           "If the policy needs a person or a tenant, set config.schema_principal, which actions:check and the catalogue build schemas for"]
       end
 
