@@ -119,6 +119,17 @@ class ApplicationAction < Saltbox::Actions::Base
 end
 ```
 
+To hear about the records each change writes (see `on_changes` under
+Configuration), include change tracking in your models:
+
+```ruby
+# app/models/application_record.rb
+class ApplicationRecord < ActiveRecord::Base
+  primary_abstract_class
+  include Saltbox::Actions::ChangeTracking
+end
+```
+
 ## Core concepts
 
 ### Actions
@@ -283,8 +294,10 @@ see gives `not_found`, so its existence never shows. With `enforce_confirm`
 on, a `:confirm` action the app has not approved gives
 `confirmation_required` before it runs.
 
-A change runs in its own database transaction. If it fails, its writes are
-undone.
+A change runs in its own database transaction, on its model's database. If
+it fails, its writes on that database are undone. Writes to another
+database in the same action are not: give them a transaction of their own.
+There is no transaction across databases.
 
 Every surface sends errors in the same shape:
 
@@ -544,10 +557,49 @@ ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
 the model's fields.
 
+### Change tracking
+
+`Saltbox::Actions::ChangeTracking` notes each record an action creates,
+updates or destroys through Active Record callbacks. Each record is noted
+once, as its polymorphic name (the base class under STI), its id and
+`create`, `update` or `destroy`. A write that a savepoint inside the action
+rolls back is not noted.
+
+It notes only what runs those callbacks. These are not noted:
+
+- writes that skip callbacks: `update_all`, `delete_all`, `insert_all`,
+  `upsert_all`, `update_column(s)` and raw SQL;
+- `touch`, unless PaperTrail writes a version for it;
+- writes made in `before_commit` or `after_commit` callbacks, which run
+  after `on_changes`.
+
+Note such a write yourself, inside the action:
+
+```ruby
+Event.where(id: ids).update_all(status: "cancelled")
+ids.each { Saltbox::Actions::Invocation.note("Event", it, "update") }
+```
+
+`on_changes` runs before commit. If the caller's own transaction later
+rolls back, the changes it heard of are undone; do anything outside the
+database in `after_change`.
+
+Using another audit gem, such as Audited or Logidze? Skip the concern and
+note each entry it writes yourself:
+
+```ruby
+Audited::Audit.after_create do
+  Saltbox::Actions::Invocation.note(auditable_type, auditable_id, action)
+end
+```
+
+Outside an action, `note` does nothing. In a second database, pass that
+model's transaction: `transaction: Entry.current_transaction`.
+
 ### PaperTrail
 
-With PaperTrail, every version an action writes is noted as a change, and
-each version can record the agent and surface:
+With PaperTrail, every version an action writes is also noted as a change,
+and each version can record the agent and surface:
 
 ```ruby
 # config/initializers/actions.rb
@@ -595,7 +647,7 @@ end
 - `have_field_errors(:title)`;
 - `be_invalid_against_schema`, for input the schema refuses;
 - `match_output_schema`, against the schema from `returns`;
-- `announce_changes(event => :update)`;
+- `announce_changes(event => :update)` (needs change tracking or PaperTrail);
 - `change_audit_trail.on(event).by(user).with(agent: "Test agent")` (needs PaperTrail);
 - `be_runnable_by(caller)` and `be_listed_for(caller)`.
 
@@ -732,7 +784,7 @@ Saltbox::Actions.configure do |config|
   # Run each call inside your own context: tenant, time zone, a fresh user.
   config.around_invocation { |caller, run| Current.set(user: caller.account) { run.call(caller) } }
 
-  # Hear about every changed record, inside the transaction.
+  # Hear about every changed record, inside the transaction (see Change tracking).
   config.on_changes { |changes, invocation| EventLog.record(changes, invocation.caller) }
 
   # Run something once the change has committed. Never runs on rollback.

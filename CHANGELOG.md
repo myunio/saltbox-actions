@@ -14,6 +14,12 @@
   An impossible date, an integer its column cannot store and a float that is not finite are
   refused by field. Indexed `fields_for` params are not cast yet.
 - Ids and foreign keys take an integer or a string; decimal columns take a number or a string of digits.
+- `Saltbox::Actions::ChangeTracking`, included in `ApplicationRecord`, notes records created,
+  updated or destroyed through callbacks, for `on_changes` and `announce_changes`, without
+  PaperTrail. PaperTrail still notes its versions.
+- A write rolled back by a savepoint inside an action is no longer announced as a change.
+- A change runs in its model's own transaction, so a model in a second database rolls back.
+  Writes on any other connection are not covered.
 
 - `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
   `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
