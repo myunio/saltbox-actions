@@ -165,17 +165,28 @@ RSpec.describe "Namespaced policies" do
     let(:counting_any) do
       proc do
         def perform
+          events = policy_scope(Event)
           authorize Event, :index?
-          render json: {count: policy_scope(Event).count}
+          render json: {count: events.count}
         end
       end
     end
 
-    def define_modelless(name, parent = base)
+    let(:authorizing_any) do
+      proc do
+        def perform
+          skip_policy_scope
+          authorize Event, :index?
+          render json: {}
+        end
+      end
+    end
+
+    def define_modelless(name, parent = base, perform: counting_any)
       define(name, parent) {
         action_name name.underscore.tr("/", "_")
         kind :read
-      }.tap { it.class_eval(&counting_any) }
+      }.tap { it.class_eval(&perform) }
     end
 
     it "asks the policies in every module around a model-less action" do
@@ -192,6 +203,8 @@ RSpec.describe "Namespaced policies" do
     it "fails closed for a model-less action whose namespace has no policy, naming the one it asked" do
       tally = define_modelless("Admin::CountEventsAction")
       expect { invoke.call(tally, {}, as_api(manager)) }.to raise_error(missing_policy, missing_named["Admin::EventPolicy"])
+      check = define_modelless("Admin::CheckEventsAction", perform: authorizing_any)
+      expect { invoke.call(check, {}, as_api(manager)) }.to raise_error(missing_policy, missing_named["Admin::EventPolicy"])
       named_like_a_model = define_modelless("Events::TallyAction")
       expect(named_like_a_model).to have_attributes(model: nil, policy_namespace: [:events])
       expect { invoke.call(named_like_a_model, {}, as_api(manager)) }.to raise_error(missing_policy, missing_named["Events::EventPolicy"])
@@ -329,7 +342,7 @@ RSpec.describe "Namespaced policies" do
       let(:admin_policy) { admin_event_policy }
       let(:public_policy) { EventPolicy }
       let(:missing_policy) { Pundit::NotDefinedError }
-      let(:missing_named) { ->(policy) { /unable to find policy `#{policy}`/ } }
+      let(:missing_named) { ->(policy) { /unable to find (policy|scope) `#{policy}(::Scope)?`/ } }
       let(:label) { "Pundit" }
 
       it_behaves_like "the modules around an action"
@@ -443,7 +456,7 @@ RSpec.describe "Namespaced policies" do
       let(:base) { PolicyAction }
       let(:public_policy) { EventPolicy }
       let(:missing_policy) { ActionPolicy::NotFound }
-      let(:missing_named) { ->(policy) { /in #{policy.deconstantize}\z/ } }
+      let(:missing_named) { ->(policy) { /\ACouldn't find #{policy} for Event\z/ } }
       let(:label) { "ActionPolicy" }
 
       it_behaves_like "the modules around an action"

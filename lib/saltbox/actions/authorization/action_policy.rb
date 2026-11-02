@@ -26,14 +26,14 @@ module Saltbox
           # In a policy namespace the policy is found there by name only
           # (namespaced_policy), for authorize!, allowed_to?, authorized_scope
           # and fields alike. A policy the action's own code passes as with:
-          # is used as given.
+          # is used as given. A miss raises for authorized_scope too, which
+          # would otherwise fall back to the action as its target and not
+          # name the policy.
           #
-          # @raise [ActionPolicy::NotFound] when the namespace has no policy for the record
-          def policy_for(record:, with: nil, allow_nil: false, **)
+          # @raise [ActionPolicy::NotFound] when the namespace has no policy for the record, naming it
+          def policy_for(record:, with: nil, **)
             return super if with || self.class.policy_namespace.empty?
-            with = self.class.namespaced_policy(record)
-            return if with.nil? && allow_nil
-            with || raise(::ActionPolicy::NotFound.new(record, "Couldn't find a policy for #{record.inspect} in #{self.class.policy_namespace.join("/").camelize}"))
+            with = self.class.namespaced_policy(record) || raise(self.class.namespaced_policy_not_found(record))
             super
           end
 
@@ -67,7 +67,7 @@ module Saltbox
           # @return [Boolean]
           def permitted?(account)
             return true unless model
-            policy = policy_class || raise(::ActionPolicy::NotFound.new(model, "Couldn't find #{expected_policy_name} for #{model}"))
+            policy = policy_class || raise(namespaced_policy_not_found(model))
             policy.new(model, **authorization_context_for(account)).apply(policy_query!)
           end
 
@@ -108,6 +108,19 @@ module Saltbox
 
           # @return [Array<Class<Exception>>]
           def authorization_errors = [::ActionPolicy::Unauthorized]
+
+          # @api private
+          # @param record [Object] a record, a model, a relation or a symbol
+          # @return [ActionPolicy::NotFound] naming the policy to add: Couldn't find Admin::EventPolicy for Event
+          def namespaced_policy_not_found(record)
+            model = case record
+            when ActiveRecord::Relation then record.klass
+            when Class, Symbol then record
+            else record.class
+            end
+            missing = model.is_a?(Class) ? expected_policy_name(model) : "a policy in #{policy_namespace.join("/").camelize}"
+            ::ActionPolicy::NotFound.new(record, "Couldn't find #{missing} for #{model.is_a?(Class) ? model.name : model.inspect}")
+          end
 
           # @api private
           # A record's, a model's or a relation's policy, or nil. In a policy

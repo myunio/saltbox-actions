@@ -44,7 +44,10 @@
   until it exists. A module named like a model counts too: `Events::TallyAction` with no model
   asks `Events::EventPolicy`. Declare `policy_namespace false` to ask the models' own policies.
   An action with no model at the top level is unchanged. `rails actions:check` cannot name the
-  policy, since only `perform` says which model it authorizes; the error names it.
+  policy, since only `perform` says which model it authorizes; the error names it. With
+  ActionPolicy, `policy_scope` in a namespace without the policy raises
+  "Couldn't find Admin::ProjectPolicy for Project", instead of falling back to the action as its
+  authorization target.
 - `Admin::Billing::Invoices::ListAction` finds `Billing::Invoice`: a model lookup drops outer
   modules from the left before trying the top-level model. Such an action was named `list` with no
   policy check; it is `list_admin_billing_invoices` and asks `Admin::Billing::InvoicePolicy`.
