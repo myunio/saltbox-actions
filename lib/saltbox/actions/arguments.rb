@@ -69,7 +69,7 @@ module Saltbox
         errors = field_errors(failures)
         out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
         out_of_range.each { (errors[it] ||= []) << "is out of range" }
-        messages = failures.pluck("error") + out_of_range.map { "value at `/#{it}` is out of range" }
+        messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it}` is out of range" }
         raise Error::Invalid.new(messages.join("; "), errors:) if errors.any?
         arguments
       end
@@ -98,7 +98,23 @@ module Saltbox
 
       def message(name, error)
         return "#{@name} takes no id; declare attribute :id" if name == "id" && @name && !@schema.fetch("properties").key?("id")
+        return "is not an input; #{takes}" if unknown?(error)
         error["error"]
+      end
+
+      # The whole message for one failure: json_schemer's, or for a field
+      # the schema does not list, which fields it does.
+      def sentence(error)
+        return error["error"] unless unknown?(error)
+        name = error["data_pointer"].delete_prefix("/").gsub("~1", "/").gsub("~0", "~")
+        "#{@name || "The action"} does not take #{name}. It #{takes}."
+      end
+
+      def unknown?(error) = error["schema_pointer"] == "/additionalProperties"
+
+      def takes
+        inputs = @schema.fetch("properties").keys
+        inputs.any? ? "takes #{inputs.join(", ")}" : "takes no input"
       end
 
       def schemer

@@ -45,7 +45,9 @@ module Saltbox
         elsif !json.equal?(NO_JSON)
           json.as_json
         else
-          JSON.parse(Actions.config.renderer_class.render(template: template_path(template), formats: [:json], assigns: view_assigns, locals:))
+          renderer = Actions.config.renderer_class
+          load_routes(renderer)
+          JSON.parse(renderer.render(template: template_path(template), formats: [:json], assigns: view_assigns, locals:))
         end
         @_result = Result.new(status: Rack::Utils.status_code(status), body:, meta:)
       end
@@ -64,6 +66,12 @@ module Saltbox
       def result = @_result || Result.no_content
 
       private
+
+      # In development and test, Rails 8 draws the routes on first use. A
+      # view's *_url helper draws them only after the renderer has read
+      # default_url_options, so a fresh console, runner or job would link to
+      # example.org once. Asking for the routes draws them first.
+      def load_routes(renderer) = renderer.respond_to?(:_routes) && renderer._routes.routes
 
       def template_path(template)
         raise ArgumentError, "render needs a template, or json:" if template.nil?
