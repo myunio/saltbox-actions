@@ -16,7 +16,7 @@ require "saltbox/actions/controller"
 require_relative "rails_app/engines/billing/lib/billing"
 
 Combustion.path = "spec/rails_app"
-Combustion.initialize! :active_record, :action_controller, :action_view, database_reset: false, load_schema: false, database_migrate: false do
+Combustion.initialize! :active_record, :action_controller, :action_view, :active_job, database_reset: false, load_schema: false, database_migrate: false do
   config.active_record.logger = nil
   config.eager_load = true
 end

@@ -1,4 +1,4 @@
-RSpec.describe Event::ListAction do
+RSpec.describe Events::ListAction do
   let(:permitted_account) { reader }
   let(:unpermitted_account) { stranger }
   let(:arguments) { {} }

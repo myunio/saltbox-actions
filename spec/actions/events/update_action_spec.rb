@@ -1,4 +1,4 @@
-RSpec.describe Event::UpdateAction do
+RSpec.describe Events::UpdateAction do
   let(:permitted_account) { manager }
   let(:unpermitted_account) { reader }
   let(:event) { Event.create!(org_id: 1, title: "AGM") }

@@ -6,7 +6,7 @@ RSpec.describe Saltbox::Actions::RubyLLMTool do
   it "gives the chat the tools its person may run, each with the front door's schema" do
     tools = described_class.for(as_assistant(manager))
     expect(tools.map(&:name)).to eq(%w[show_event whoami find_action run_read_action run_change_action])
-    expect(tools.first.parameters_schema).to eq(Event::ShowAction.input_schema)
+    expect(tools.first.parameters_schema).to eq(Events::ShowAction.input_schema)
   end
 
   def record_data(text)

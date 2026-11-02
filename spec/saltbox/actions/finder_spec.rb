@@ -4,7 +4,7 @@ RSpec.describe Saltbox::Actions::Finder do
   def found(request, among: finder) = among.find(request).map(&:action_name)
 
   it "ranks by title, name and description, matching other forms of a word and ignoring filler words" do
-    expect(finder.find("removing events").first).to eq(Event::DeleteAction)
+    expect(finder.find("removing events").first).to eq(Events::DeleteAction)
     expect(finder.find("the and of")).to be_empty
     expect(described_class.stem("boxes")).to eq("box")
     expect(described_class.stem("types")).to eq("type")
@@ -60,7 +60,7 @@ RSpec.describe Saltbox::Actions::Finder do
   # A small app's catalogue makes every word's rarity much the same; a match
   # in the description alone must still count there.
   context "with a five-action catalogue" do
-    let(:five) { described_class.new([Event::ListAction, Event::CreateAction, Event::CancelAction, Reports::CountEventsAction, WhoamiAction]) }
+    let(:five) { described_class.new([Events::ListAction, Events::CreateAction, Events::CancelAction, Reports::CountEventsAction, WhoamiAction]) }
 
     {
       "say why the meeting was called off" => "cancel_event", "how many have a status" => "count_events",
@@ -77,7 +77,7 @@ RSpec.describe Saltbox::Actions::Finder do
   end
 
   it "searches only the actions it is given and returns no more than the number asked for" do
-    expect(described_class.new([Event::ShowAction]).find("event")).to eq([Event::ShowAction])
+    expect(described_class.new([Events::ShowAction]).find("event")).to eq([Events::ShowAction])
     expect(finder.find("event", limit: 2).size).to eq(2)
   end
 end

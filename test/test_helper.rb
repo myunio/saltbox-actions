@@ -12,7 +12,7 @@ require "saltbox/actions/controller"
 require_relative "../spec/rails_app/engines/billing/lib/billing"
 
 Combustion.path = "spec/rails_app"
-Combustion.initialize! :active_record, :action_controller, :action_view do
+Combustion.initialize! :active_record, :action_controller, :action_view, :active_job do
   config.active_record.logger = nil
   config.eager_load = false
 end

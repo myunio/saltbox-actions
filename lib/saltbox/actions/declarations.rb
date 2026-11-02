@@ -1,33 +1,44 @@
 module Saltbox
   module Actions
     # The settings an action declares at the top of its class, for what its
-    # class name cannot give. Naming reads everything else from the name.
-    # - `connections` (required, unless Configuration#default_connections is set):
-    #   whether agents and scripts may run it.
+    # class name and its verb cannot give. Naming reads everything else from
+    # the name; Inputs declares its input.
+    # - `connections`: whether agents and scripts may run it, when its verb's
+    #   default is not right.
     # - `action_name`, `title`, `description` (Naming): for an app whose names are already public.
-    # - `kind`: read, change or destructive, for a verb not in Naming::VERBS.
+    # - `kind`: read, change or destructive, for a verb not in the verb table.
+    # - `idempotent`: whether calling it again with the same input changes nothing more,
+    #   when its verb's default is not right.
+    # - `policy_rule`: the policy rule, when the verb's own is not the right one.
     # - `permission`: the permission keys a person needs to see and run it.
-    # - `authorize`: the policy rule, when the verb's own is not the right one.
-    # - `argument`: an input that is not a field the policy permits.
-    # - `idempotent`: calling it again with the same input changes nothing more.
-    # - `mcp_core`: list the action as an MCP tool of its own.
+    # - `featured`: list the action as an MCP tool of its own.
     # - `feature`: the feature flag the action needs.
     # - `summary`: the fields a list sends agents, and the CLI's columns.
     # - `cli`: the CLI's whole command.
     # - `returns`: the JSON Schema of the body it renders.
+    #
+    # What decides who may run an action (connections, policy_rule,
+    # permission, feature) and how agents treat it (idempotent, featured) is
+    # inherited, as class_attribute is: a subclass runs under its parent's
+    # rules until it declares its own. What names it (action_name, title,
+    # description, cli, kind, summary, returns) belongs to its own class.
     module Declarations
       extend ActiveSupport::Concern
 
       CONNECTIONS = %i[allowed confirm never].freeze
-      TYPES = %i[string integer decimal boolean date time array hash].freeze
-      # The JSON Schema keywords an argument may add, by their Ruby names.
-      KEYWORDS = {format: "format", minimum: "minimum", maximum: "maximum", min_length: "minLength",
-                  max_length: "maxLength", pattern: "pattern", default: "default"}.freeze
+
+      included do
+        class_attribute :_connections, :_declared_query, :_idempotent, :_featured, :_feature, :_permissions,
+          instance_accessor: false, instance_predicate: false
+      end
 
       class_methods do
         # Whether a caller other than a person on the app's screens may run the
         # action: the CLI, an AI agent over MCP, a script on the API, the chat
-        # assistant, or a browser assistant on the page. Every action declares it.
+        # assistant, or a browser assistant on the page. Its verb gives the
+        # default: :confirm for a destructive action, :allowed for the rest,
+        # unless define_verb gave the verb its own. An action declares it only
+        # where it departs from that.
         # - :allowed: they may run it.
         # - :confirm: an agent is told to ask the person first. The chat
         #   assistant never runs it. With Configuration#enforce_confirm on,
@@ -35,14 +46,21 @@ module Saltbox
         # - :never: only the person, on a screen.
         #
         # @param rule [Symbol, nil] :allowed, :confirm or :never
-        # @return [Symbol, nil]
+        # @return [Symbol, nil] nil only for an action whose kind is unknown
         def connections(rule = nil)
-          return @connections || Actions.config.default_connections unless rule
+          unless rule
+            return _connections if _connections
+            return verb_rule[:connections] if verb_rule&.key?(:connections)
+            return kind && ((kind == :destructive) ? :confirm : :allowed)
+          end
           raise ArgumentError, "connections is :allowed, :confirm or :never, not #{rule.inspect}" unless CONNECTIONS.include?(rule)
-          @connections = rule
+          self._connections = rule
         end
 
-        # Declares the kind of an action whose verb is not in VERBS.
+        # @return [Symbol, nil] the rule declared with `connections`, in this class or a parent
+        def declared_connections = _connections
+
+        # Declares the kind of an action whose verb is not in the verb table.
         #
         # @param value [Symbol] :read, :change or :destructive
         # @return [Symbol]
@@ -55,72 +73,39 @@ module Saltbox
         # @return [Symbol, nil] the kind declared with `kind`
         def declared_kind = @declared_kind
 
-        # Declares the policy rule authorize asks. An action named with more
-        # than a verb, or with a verb outside VERBS, must declare one:
-        # Event::ShowAttendeesAction asks view_attendees?.
+        # Declares the policy rule the action asks. An action named with more
+        # than a verb, or with a verb outside the verb table, must declare one:
+        # Events::ShowAttendeesAction asks view_attendees?.
         #
-        # @param query [Symbol]
+        # @param rule [Symbol]
         # @return [Symbol]
-        def authorize(query) = @declared_query = query
+        def policy_rule(rule) = self._declared_query = rule
 
-        # @return [Symbol, nil] the rule declared with `authorize`
-        def declared_query = @declared_query
+        # @return [Symbol, nil] the rule declared with `policy_rule`
+        def declared_query = _declared_query
 
-        # Declares an input that is not a field the policy permits. `argument
-        # :id`, with no type, declares the id of the one record the action
-        # works on, for a verb outside VERBS.
+        # Declares whether calling the action again with the same input
+        # changes nothing more than the first call did, when its verb's
+        # default is not right.
         #
-        # @param name [Symbol]
-        # @param type [Symbol, nil] one of TYPES
-        # @param required [Boolean]
-        # @param nullable [Boolean] whether null clears the value; otherwise null counts as left out
-        # @param enum [Array, nil] the allowed values
-        # @param of [Symbol, Hash, nil] for an :array, what it holds: a type, or each item's fields and their types
-        # @param description [String, nil] the input's description, in place of the locale file's
-        # @param keywords [Hash] JSON Schema keywords from KEYWORDS: minimum:, max_length:, default:…;
-        #   a default is also the value #perform reads when the caller leaves the input out
-        # @return [Hash] {schema:, required:, type:}: the input's JSON Schema, whether callers must send it,
-        #   and the Active Model type that casts what a form sends
-        # @raise [ArgumentError] when an input other than id has no type, or its type is not in TYPES,
-        #   or for a keyword not in KEYWORDS
-        #
-        # @example A list of records, each with typed fields
-        #   argument :payments, :array, of: {amount: :decimal, paid_on: :date, meta: :hash}
-        # @example A described input with limits
-        #   argument :page, :integer, minimum: 1, description: "Page number, from 1"
-        def argument(name, type = nil, required: false, nullable: false, enum: nil, of: nil, description: nil, **keywords)
-          name = name.to_s
-          @inputs = nil
-          return arguments[name] = {schema: Schema::ID, required: true} if name == "id" && type.nil?
-          raise ArgumentError, "#{name} takes a type: one of #{TYPES.join(", ")}" unless TYPES.include?(type)
-          unknown = keywords.keys - KEYWORDS.keys
-          raise ArgumentError, "#{name} takes no #{unknown.join(", ")}: use one of #{KEYWORDS.keys.join(", ")}" if unknown.any?
-          schema = Schema.for_argument(type, nullable:, enum:, of:)
-          schema = {"type" => schema["type"], "description" => description.squish}.merge(schema) if description
-          keywords.each { |key, value| schema[KEYWORDS.fetch(key)] = value.as_json }
-          arguments[name] = {schema:, required:, type: Schema.type_for_argument(type, of:)}
+        # @param value [Boolean]
+        # @return [Boolean]
+        def idempotent(value = true) = self._idempotent = value
+
+        # @return [Boolean] the declared value; otherwise the verb's, or true for any other read
+        def idempotent?
+          return _idempotent unless _idempotent.nil?
+          verb_rule ? verb_rule.fetch(:idempotent) : kind == :read
         end
-
-        # @return [Hash{String => Hash}] declared inputs by name, including the parent class's
-        def arguments = @arguments ||= (superclass.respond_to?(:arguments) ? superclass.arguments.dup : {})
-
-        # Declares that calling the action again with the same input changes
-        # nothing more than the first call did.
-        #
-        # @return [void]
-        def idempotent = @idempotent = true
-
-        # @return [Boolean] true for a read, except an export, which starts a new export on every call; otherwise only when declared
-        def idempotent? = (kind == :read && verb != "export") || @idempotent || false
 
         # Lists the action as an MCP tool of its own. Other actions are reached
         # through find_action. Keep these to about fifteen.
         #
         # @return [void]
-        def mcp_core = @mcp_core = true
+        def featured = self._featured = true
 
         # @return [Boolean] whether the action is an MCP tool of its own
-        def mcp_core? = @mcp_core || false
+        def featured? = _featured || false
 
         # The feature flag the action needs. While the flag is off for the
         # caller, every caller gets not_found and the actions list leaves the
@@ -129,9 +114,9 @@ module Saltbox
         # @param key [String, nil]
         # @return [String, nil]
         def feature(key = nil)
-          return @feature unless key
+          return _feature unless key
           Actions.config.validate_feature.call(key)
-          @feature = key
+          self._feature = key
         end
 
         # Declares a record's summary: the fields a list action sends agents
@@ -159,7 +144,7 @@ module Saltbox
         end
 
         # @return [Boolean] whether agents get summaries in place of the view: an action whose class
-        #   name's verb is list (Event::ListAction, or a renamed Reports::ListUpcomingAction that
+        #   name's verb is list (Events::ListAction, or a renamed Reports::ListUpcomingAction that
         #   declares its model), with a summary
         def summarizes_list? = verb == "list" && !model.nil? && !summary.nil?
 
@@ -172,12 +157,13 @@ module Saltbox
         #
         # @param command [String] such as "invoices send"
         # @param aliases [Array<String>] other commands for the same action
-        # @param args [Array<String, Symbol>] declared arguments, taken by position
+        # @param args [Array<String, Symbol>] declared attributes, taken by position
         # @return [Hash]
-        # @raise [ArgumentError] for an args entry that is not a declared argument
+        # @raise [ArgumentError] for an args entry that is not a declared attribute, or the id
+        #   of an action that works on one record
         def cli(command, aliases: [], args: [])
-          unknown = args.map(&:to_s) - arguments.keys
-          raise ArgumentError, "cli args #{unknown.join(", ")} are not arguments of #{action_name}" if unknown.any?
+          unknown = args.map(&:to_s) - declared_attributes.keys - (takes_id? ? ["id"] : [])
+          raise ArgumentError, "cli args #{unknown.join(", ")} are not attributes of #{action_name}" if unknown.any?
           @declared_cli = {command: command.split, aliases: aliases.map(&:split), args: args.map(&:to_s)}
         end
 
@@ -199,8 +185,8 @@ module Saltbox
         #   permission "events.manage", any_of("comments.update", "comments.delete")
         def permission(*requirements)
           raise ArgumentError, "permission needs a key or :everyone" if requirements.empty?
-          return @permissions = [] if requirements == [:everyone]
-          @permissions = requirements.map { it.is_a?(Array) ? it : it.to_s }
+          return self._permissions = [] if requirements == [:everyone]
+          self._permissions = requirements.map { it.is_a?(Array) ? it : it.to_s }
         end
 
         # @param keys [Array<String, Symbol>] two or more keys
@@ -211,7 +197,7 @@ module Saltbox
         end
 
         # @return [Array<String, Array<String>>, nil] the declared requirements, [] for everyone, nil when undeclared
-        def permissions = @permissions
+        def permissions = _permissions
 
         # @return [Array<String>, nil] every key the declaration names
         def permission_keys = permissions&.flatten&.uniq

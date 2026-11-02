@@ -89,7 +89,7 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
     missing = action("Policies::ArchiveAction") do
       kind :change
       connections :allowed
-      authorize :archive?
+      policy_rule :archive?
     end
     expect(Saltbox::Actions::Registry.problems(missing)).to eq([])
     expect(Saltbox::Actions::Registry.problems(show)).to eq([])

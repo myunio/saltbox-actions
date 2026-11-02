@@ -18,43 +18,49 @@ the same checks, and gets the same errors.
 
 ## A quick look
 
-Here is an action that renames an event in a made-up events app:
+Here is an action that changes an event in a made-up events app:
 
 ```ruby
-# app/actions/event/update_action.rb
-class Event::UpdateAction < ApplicationAction
-  connections :allowed   # agents and scripts may run it
-  idempotent
-
+# app/actions/events/update_action.rb
+class Events::UpdateAction < ApplicationAction
   def perform
-    @event = policy_scope(Event).find(params[:id])
-    authorize @event
-    @event.update!(permitted_attributes(@event))
-    render :show         # app/views/events/show.json.jbuilder
+    event.update!(permitted_attributes(event))
+    render :show   # app/views/events/show.json.jbuilder
   end
 end
 ```
 
-The class name gives most of the settings. `Event::UpdateAction` works on
-`Event`, asks the policy's `update?` rule, and is named `update_event`. Its
-input is an `id` plus the fields your policy permits, typed from the model's
-columns.
+Actions are named like controllers. `Events::UpdateAction` works on `Event`,
+asks the policy's `update?` rule, and is named `update_event`. Its verb,
+`update`, says the rest: it changes one record, named by an `id`, and agents
+may run it. Its input is that `id` plus the fields your policy permits, typed
+from the model's columns. `event` is the record, already found and
+authorized.
 
-Call it from a controller:
+An action is an Active Model object. Input that is not a model field is an
+attribute, and its checks are validations:
 
 ```ruby
-class EventsController < ApplicationController
-  def update
-    result = ApplicationAction::Invocation.call(
-      name: "update_event",
-      caller: ApplicationAction::Caller.screen(current_user),
-      arguments: params.permit(:id, :title, :starts_on).to_h
-    )
-    render json: result.as_json, status: result.status
-  rescue Saltbox::Actions::Error => error
-    render json: error.as_json, status: error.status
+# app/actions/events/cancel_action.rb
+class Events::CancelAction < ApplicationAction
+  attribute :reason, :string
+  validates :reason, presence: true
+
+  def perform
+    event.update!(status: "cancelled", notes: reason)
+    render :show
   end
 end
+```
+
+Agents read a JSON Schema of the input, made from these lines: `reason` is a
+string, and it is required.
+
+Call an action from a controller, a job or the console:
+
+```ruby
+caller = ApplicationAction::Caller.screen(current_user)
+result = Events::UpdateAction.perform_now(caller:, id: params[:id], title: params[:title])
 ```
 
 Serve it to AI agents over MCP, from a Rack endpoint you mount at `/mcp`:
@@ -75,8 +81,8 @@ end
 And test it, as an agent would call it:
 
 ```ruby
-# spec/actions/event/update_action_spec.rb
-RSpec.describe Event::UpdateAction do
+# spec/actions/events/update_action_spec.rb
+RSpec.describe Events::UpdateAction do
   let(:manager) { create(:user, :manager) }
   let(:event) { create(:event, title: "AGM") }
 
@@ -94,8 +100,8 @@ needs the database.
 
 Booting never touches the database. When an app boots with eager loading
 (production, CI), it checks only what each action declares, such as its
-name, kind and connections. If one leaves out a setting it needs, the boot
-stops and the error names the fix.
+name and kind. If one leaves out a setting it needs, the boot stops and the
+error names the fix.
 
 ## Install
 
@@ -145,24 +151,19 @@ end
 
 ### Actions
 
-An action lives in `app/actions/`, one per file, named
-`<model>/<words>_action.rb`. Its `perform` method works like a controller
-action. It loads records through `policy_scope`, calls `authorize`, does the
-work, then calls `render` or `head`. If `perform` skips `authorize` or
-`policy_scope`, the action fails, just as Pundit's `verify_authorized` would.
-A list action needs only `policy_scope`, as a controller's `index` does with
-`verify_policy_scoped`. Whether the person may list at all (`index?`) is
-asked before `perform` runs.
+An action lives in `app/actions/`, one per file, in its resource's folder,
+the way a controller's views do: `Events::UpdateAction` is in
+`app/actions/events/update_action.rb`. Its `perform` method works like a
+controller action: it does the work, then calls `render` or `head`.
 
 ```ruby
-# app/actions/event/list_action.rb
-class Event::ListAction < ApplicationAction
-  connections :allowed
-  argument :page, :integer, minimum: 1, default: 1
+# app/actions/events/list_action.rb
+class Events::ListAction < ApplicationAction
+  paginated
 
   def perform
-    @events = policy_scope(Event).order(:starts_on).offset((params[:page] - 1) * 25).limit(25)
-    render :index        # app/views/events/index.json.jbuilder
+    @events = policy_scope(Event).order(:starts_on).offset((page - 1) * page_size).limit(page_size)
+    render :index   # app/views/events/index.json.jbuilder
   end
 end
 ```
@@ -172,16 +173,119 @@ end
 `perform` reach the view, as they do from a controller. You can also send a
 body with no view: `render json: {count: 3}`.
 
+`perform` must call `authorize` and `policy_scope`, or the action fails, as
+Pundit's `verify_authorized` would. A list action needs only `policy_scope`,
+as a controller's `index` does. Whether the person may list at all
+(`index?`) is asked before `perform` runs.
+
+### The record
+
+An action whose verb works on one record (`show`, `update`, `delete`, and
+the others marked "one record" below) loads it before `perform`, the way
+CanCanCan's `load_and_authorize_resource` does for a controller:
+
+1. it finds the record by the `id` sent, through the person's
+   `policy_scope`;
+2. it calls `authorize` on it, with the action's rule;
+3. it sets `@event` for the view, and the reader `event` returns it.
+
+So a show action is short:
+
+```ruby
+class Events::ShowAction < ApplicationAction
+  def perform
+    render :show
+  end
+end
+```
+
+The reader is named after the model: `event` for `Event`, `event_type` for
+`Event::Type`, and `invoice` for an isolated engine's `Billing::Invoice`.
+When the record is found another way, define `find_<record>`. It gets the
+person's scope to search, and `authorize` still runs on what it returns. A
+`nil` is answered as `not_found`:
+
+```ruby
+private
+
+def find_event(events)
+  events.includes(:venue).find_by!(slug: id)
+end
+```
+
+An attribute may not take the reader's name, and neither may a method every
+action has: an `Account` or a `Result` model gives a reader that would
+replace `account` or `result`. `rails actions:check` refuses both, so name
+such an action's model another way (`model`), or declare `kind` and
+`attribute :id` and look the record up in `perform`.
+
 ### Input
 
-Before an action runs, its input is cast and then checked against its JSON
-Schema. The cast works like Active Record's, with each input's Active Model
-type, so form params work as they are:
+An action's input has two parts.
+
+**Model fields.** A `create` or `update` takes the fields your policy
+permits the person, typed from the model's columns (see
+[Authorization](#authorization)). A `belongs_to` is sent under its
+association's name (`parent`, not `parent_id`) and is looked up through the
+person's scope. `perform` reads them with `permitted_attributes(record)`.
+With no authorization adapter, list them with `accepts` (see below).
+
+**Attributes.** Any other input is an Active Model attribute. `perform`
+reads it as a method: `reason`, not `params[:reason]`. A typo is a
+`NoMethodError` in your spec, not a `nil` in production.
+
+```ruby
+attribute :reason, :string
+attribute :starts_on, :date, description: "The new first day"
+attribute :copies, :integer, default: 1
+attribute :payments, :array, of: {amount: :decimal, paid_on: :date}
+```
+
+The types are `:string`, `:integer`, `:decimal`, `:boolean`, `:date`,
+`:datetime`, `:time` (a time of day, `"HH:MM"`), `:array` and `:hash`.
+`nullable: true` lets `null` clear a value; otherwise `null` counts as left
+out, since agents often send it for a field they skip.
+
+Validations are the action's checks. They run on every call, after the
+schema check and before the action runs. A failure is refused as
+`validation_failed`, with errors by field, in the person's language. The
+ones that always run also shape the JSON Schema agents read:
+
+| Validation | In the schema |
+|---|---|
+| `presence: true` | the field is `required` |
+| `inclusion: {in: %w[draft published]}` | `enum` |
+| `length: {minimum: 2, maximum: 40}` | `minLength`, `maxLength` (`minItems`, `maxItems` on an array) |
+| `numericality: {greater_than_or_equal_to: 1}` | `minimum` (and `maximum`, `exclusiveMinimum`, `exclusiveMaximum`) |
+
+A validation with `if:`, `unless:` or `on:` runs only sometimes, so it is
+left out of the schema; it still runs.
+
+Validations check attributes only. A model field is checked by the model's
+own validations when `perform` saves it, and its errors come back by field
+the same way. `rails actions:check` refuses a validation of a name that is
+not an attribute.
+
+A default may be a lambda, as in Active Model. Such an attribute is never
+required in the schema, since the default fills it after the schema check;
+its validations still run on the default.
+
+`paginated` declares the paging inputs a list takes, as attributes: `page`,
+from 1, and `page_size`, from 1 to `max_per_page`. Page the records with
+your own paging library:
+
+```ruby
+paginated per_page: 50, max_per_page: 200
+```
+
+Before the schema check, form values are read the way Active Record reads
+them, so form params work as they are:
 
 - `"12"` becomes `12` for an integer. `"1"`, `"true"` or `"on"` becomes `true`
   for a boolean, and `"0"`, `"false"` or `"off"` becomes `false`.
 - An empty field (`""`) becomes `nil` for a number, a date, a boolean or an
-  enum. A string keeps `""`.
+  enum column. A string keeps `""`; a string limited with `inclusion` takes
+  it only with `allow_blank: true`, as a select's empty choice needs.
 - A form's local date-time, `"2026-11-02T18:30"`, becomes a time in the app's
   time zone. A fraction of a second is kept.
 - An id may be an integer or a string.
@@ -190,50 +294,74 @@ type, so form params work as they are:
 A value that is not of its type is refused, with an error on that field.
 This is stricter than Active Record: `"lots"` never becomes `0`, `"yes"`
 never becomes `true`, and 30 February never becomes 2 March. A number too
-large for its column is refused too.
+large for its column is refused too. Each attribute is then cast once, by
+its type: a `:date` attribute is a `Date`, a `:decimal` a `BigDecimal`.
 
 Lists must arrive as arrays. Rails' `fields_for` and nested attributes send
 an indexed hash (`{"0" => {...}, "1" => {...}}`), which is not cast yet.
 Turn it into an array in your controller before you call the action.
 
-### Names come from the class
+### Names and verbs
 
-The first word after the model is the **verb**. These verbs are built in:
+The first word of the class name is the **verb**. The verb gives the action
+its kind, whether it works on one record, whether running it again changes
+anything more, and whether agents may run it:
 
-| Verb | Kind | Takes an `id` | Policy rule |
-|---|---|---|---|
-| `list` | read | no | `index?` |
-| `show` | read | yes | `show?` |
-| `export` | read | no | `export?` |
-| `create` | change | no | `create?` |
-| `update` | change | yes | `update?` |
-| `cancel` | change | yes | `cancel?` |
-| `reinstate` | change | yes | `reinstate?` |
-| `publish` | change | yes | `publish?` |
-| `delete` | destructive | yes | `destroy?` |
+| Verb | Kind | One record | Safe to repeat | Agents | Policy rule |
+|---|---|---|---|---|---|
+| `list` | read | no | yes | allowed | `index?` |
+| `show` | read | yes | yes | allowed | `show?` |
+| `export` | read | no | no | allowed | `export?` |
+| `create` | change | no | no | allowed | `create?` |
+| `update` | change | yes | yes | allowed | `update?` |
+| `cancel` | change | yes | no | allowed | `cancel?` |
+| `reinstate` | change | yes | no | allowed | `reinstate?` |
+| `publish` | change | yes | no | allowed | `publish?` |
+| `delete` | destructive | yes | yes | confirm | `destroy?` |
 
-So `Event::ListAction` is named `list_events`, and `Event::ShowNotesAction`
-is named `show_event_notes`. Rails spellings such as `DestroyAction` or
-`IndexAction` stop the boot, because the names are public: agents and
-scripts call them.
+So `Events::ListAction` is named `list_events`, and
+`Events::ShowNotesAction` is named `show_event_notes`. The model is the
+namespace, singular, as `wrap_parameters` finds a controller's model:
+`Events` gives `Event`, and `Admin::Events` gives `Admin::Event`, or else
+`Event`. Rails spellings such as `DestroyAction` or `IndexAction` stop the
+boot, because the names are public: agents and scripts call them. So does
+an action inside its model's own namespace, such as `Event::UpdateAction`.
 
 The **kind** decides what a token needs. A read needs the `api:read` scope.
 A change or a destructive action needs `api:write`.
 
-A verb outside the table, or a name with more than a verb, declares what it
-needs:
+Add your app's own verbs once, in your base class, the way you add
+inflections:
 
 ```ruby
-class Event::ArchiveAction < ApplicationAction
+# app/actions/application_action.rb
+class ApplicationAction < Saltbox::Actions::Base
+  include Saltbox::Actions::Authorization::Pundit
+
+  define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
+  define_verb :void, kind: :destructive, on: :member, connections: :never
+end
+```
+
+`on: :member` is the routes' word for a verb that works on one record.
+`connections:` is the verb's own rule for agents; left out, it follows the
+kind.
+
+A verb used by one action can declare its kind there instead, and
+`attribute :id` when it works on one record. A name with more than a verb
+names its policy rule:
+
+```ruby
+class Events::RescheduleAction < ApplicationAction
   kind :change
-  argument :id
-  authorize :archive?
-  connections :confirm
+  attribute :id
+  policy_rule :update?
+
+  attribute :starts_on, :date
+  validates :starts_on, presence: true
 
   def perform
-    @event = policy_scope(Event).find(params[:id])
-    authorize @event
-    @event.update!(status: "archived")
+    event.update!(starts_on:)
     render :show
   end
 end
@@ -261,7 +389,7 @@ ApplicationAction::Caller.new(account: token.user, surface: "api", agent: "Billi
 
 ### Connections
 
-Every action declares `connections`. It says whether anything other than the
+An action's `connections` rule says whether anything other than the
 person's own click may run it:
 
 - `:allowed`: agents, scripts and assistants may run it.
@@ -269,7 +397,19 @@ person's own click may run it:
   never runs it.
 - `:never`: only the person, on a screen.
 
-A browser assistant (`webmcp`) never runs a destructive action.
+The verb gives the rule: `:confirm` for a destructive action, `:allowed` for
+the rest, unless `define_verb` gave the verb its own. Declare it only where
+an action departs from that:
+
+```ruby
+class Events::CancelAction < ApplicationAction
+  connections :confirm
+end
+```
+
+A destructive action is never `:allowed`. A browser assistant (`webmcp`)
+never runs a destructive action. The committed catalogue lists every
+action's rule, so a change to one shows up in review.
 
 By default, nothing on the server checks that an agent asked before a
 `:confirm` action. The agent is only told to. To make the server check, turn
@@ -296,7 +436,7 @@ Some actions can reach what a stricter action guards: a create that can also
 publish, say. Check the stricter rule inside `perform`:
 
 ```ruby
-actor.confirm!(Event::PublishAction) if params[:status] == "published"
+actor.confirm!(Events::PublishAction) if status == "published"
 ```
 
 `confirm!` refuses with `human_required` when that action's `connections`
@@ -315,11 +455,11 @@ refuses in the same order every time, so the same call gets the same answer:
 4. The token lacks the scope: `insufficient_scope`.
 5. The person's role or permissions do not allow it: `forbidden`.
 
-Then the input is checked against the action's JSON Schema. A bad field gives
-`validation_failed`, with errors by field name. A record the person cannot
-see gives `not_found`, so its existence never shows. With `enforce_confirm`
-on, a `:confirm` action the app has not approved gives
-`confirmation_required` before it runs.
+Then the input is checked against the action's JSON Schema, then against
+its validations. A bad field gives `validation_failed`, with errors by field
+name. With `enforce_confirm` on, a `:confirm` action the app has not
+approved gives `confirmation_required` before it runs. Last, a record the
+person cannot see gives `not_found`, so its existence never shows.
 
 A change runs in its own database transaction, on its model's database. If
 it fails, its writes on that database are undone. Writes to another
@@ -376,35 +516,56 @@ end
 
 ### Declarations
 
-Put these at the top of an action class when the name cannot give them.
+Put these at the top of an action class when the name and the verb cannot
+give them.
 
 | Declaration | What it does |
 |---|---|
-| `connections :allowed` | Required. Who besides the person may run it (see above). |
+| `attribute :reason, :string` | An input that is not a model field (see Input). |
+| `validates :reason, presence: true` | A check on an attribute. The ones that always run shape the schema. |
+| `accepts :title, :starts_on` | The model fields it takes, when no authorization adapter supplies them. |
+| `paginated` | The paging inputs `page` and `page_size`, as attributes. |
+| `connections :confirm` | Who besides the person may run it, when the verb's rule is not right. |
 | `kind :read` | The kind, for a verb outside the table. `:read`, `:change` or `:destructive`. |
-| `authorize :archive?` | The policy rule, when it is not the verb's own. |
-| `argument :reason, :string` | An input that is not a field the policy permits. |
-| `idempotent` | Running it twice with the same input changes nothing more. |
-| `mcp_core` | Lists it as an MCP tool of its own (see below). |
+| `policy_rule :archive?` | The policy rule, when it is not the verb's own. |
+| `idempotent` | Running it twice with the same input changes nothing more, when the verb does not say so. `idempotent false` says it does. |
+| `featured` | Lists it as an MCP tool of its own (see MCP). The catalogue marks it `"featured": true`. |
 | `feature "key"` | A feature flag. While it is off, callers get `not_found`. |
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
 | `returns(schema)` | The JSON Schema of the body it renders. |
-| `title "..."`, `description "..."` | Text for agents. By default these come from `config/locales/actions.en.yml`. |
-| `model Customer` | The model, when the namespace is not one. `Admin::Customer::ExportAction` with `model Customer` is named `export_customers`. |
+| `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
+| `model Customer` | The model, when the namespace does not give it. `Admin::Customers::ExportAction` with `model Customer` is named `export_customers`. |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too. |
 | `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
 | `cli "events count"` | The command for a command-line client you build on the catalogue. |
 
-`argument` takes a type: `:string`, `:integer`, `:decimal`, `:boolean`,
-`:date`, `:time`, `:array` or `:hash`. It also takes `required:`,
-`nullable:`, `enum:`, `of:` (what an array holds), `description:`, and the
-JSON Schema keywords `format`, `minimum`, `maximum`, `min_length`,
-`max_length`, `pattern` and `default`:
+In the base class, `define_verb` adds verbs (see Names and verbs) and
+`summary Event, ...` sets a model's summary for every action.
+
+### Running an action from your code
+
+`perform_now` runs an action through the same checks every surface uses,
+and returns its result. `perform_later` runs it as an Active Job, as the
+same caller:
 
 ```ruby
-argument :page, :integer, minimum: 1, default: 1, description: "Page number, from 1"
-argument :payments, :array, of: {amount: :decimal, paid_on: :date}
+caller = ApplicationAction::Caller.screen(current_user)
+result = Events::UpdateAction.perform_now(caller:, id: event.id, title: "AGM")
+Events::ExportAction.perform_later(caller:, format: "csv")
 ```
+
+`perform_later` checks everything again when the job runs, so a person who
+lost access in between is refused. A refusal is logged and the job is
+dropped, not retried. The caller travels with the job, so its person, its
+connection and its `access` must be things Active Job can serialize, such
+as records. A `Data` object such as the `ConnectionAccess` below is not:
+run that caller's actions with `perform_now`, or keep its access in a
+record.
+
+A subclass of an action keeps its parent's `connections`, `policy_rule`,
+`permission`, `feature`, `featured`, `idempotent`, `attribute :id` and
+`accepts`, as `class_attribute` does, until it declares its own. Its name,
+title, description and `cli` are its own.
 
 ### Lists for agents
 
@@ -434,7 +595,7 @@ agent inside another. The `meta:` beside it is your own plain data, such as
 paging: hashes, arrays, text, numbers, true or false, dates, times and nil.
 Anything else in it, such as a record or a set of them, stops the call too.
 
-`Event::ListAction` needs no change. It sets `@events` and calls
+`Events::ListAction` needs no change. It sets `@events` and calls
 `render :index, meta: {page: 2}`. Screens get views. Every other caller (the
 API, MCP, WebMCP and the assistant) gets summaries:
 
@@ -458,17 +619,40 @@ fields a list returns.
 
 ### Titles and descriptions
 
-Agents choose tools by their descriptions, so write one for every action:
+Agents choose tools by their descriptions, so write one for every action.
+It goes in the class, beside the code it describes:
+
+```ruby
+class Events::CancelAction < ApplicationAction
+  description <<~TEXT
+    Use this when the person wants to call an event off.
+    Returns the cancelled event.
+  TEXT
+end
+```
+
+Describe each field once per resource, in the locale file. Every action of
+the resource shares them:
 
 ```yaml
 # config/locales/actions.en.yml
 en:
   actions:
-    event/update:
-      description: Changes an event's title, date or capacity.
+    events:
       fields:
         title: The event's name.
+        starts_on: The first day, YYYY-MM-DD.
 ```
+
+A field is described by the first of these that has it: the action's own
+entry (`actions.events/update.fields.title`), the resource's
+(`actions.events.fields.title`), the attribute's `description:`, then
+`actions.shared.fields.title`.
+
+A locale entry for a title or description (`actions.events/cancel.description`)
+wins over the class's, as Action Mailer's `default_i18n_subject` does, so an
+app can serve agents in more than one language. A title you do not write is
+built from the name: "Update event", "List events".
 
 ### Engines
 
@@ -492,7 +676,7 @@ Its actions then show up in the actions list, the API and MCP like the
 app's own, in development and production alike.
 
 `namespace:` is the word in their public names, in place of the engine's
-module. `Billing::Invoice::ListAction` is named `list_billing_invoices`,
+module. `Billing::Invoices::ListAction` is named `list_billing_invoices`,
 with the CLI command `billing-invoices list`. Pick a different word, such
 as `namespace: "pay"`, and the names change without renaming any class.
 Without `namespace:`, names come from the class, and the CLI command
@@ -561,7 +745,7 @@ example at the top.
 
 Agents see a short list of tools, not one per action:
 
-- each action declared `mcp_core`, as a tool of its own (keep these to about
+- each action declared `featured`, as a tool of its own (keep these to about
   fifteen);
 - `find_action`, to search all the others; with no query, it lists every
   action the agent can run, 50 at a time (`page` and `page_size`, at most
@@ -630,19 +814,24 @@ What it does not do:
   `connections :confirm` with `enforce_confirm` (see Connections), so an
   agent cannot run a risky action without the person's yes;
 - mark text the agent reads anywhere else, such as a page or a file;
-- cover your own `mcp_core` tool descriptions. Those are your words, not
+- cover your own `featured` tools' descriptions. Those are your words, not
   records.
 
 ### Authorization
 
 `Saltbox::Actions::Authorization::Pundit` asks your Pundit policies.
-`Event::UpdateAction` asks `EventPolicy#update?`, and its input takes the
+`Events::UpdateAction` asks `EventPolicy#update?`, and its input takes the
 fields from the policy's `permitted_attributes`.
 
 `Saltbox::Actions::Authorization::ActionPolicy` does the same with
 ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
 the model's fields.
+
+The policy is the one list of the fields a person may set. A create or
+update takes the model's columns that it permits, and an action whose
+policy has `permitted_attributes` may not also list fields with `accepts`:
+`rails actions:check` says so.
 
 Each caller's input schema lists the fields the policy permits that caller.
 The policy is asked with the real person, inside `around_invocation`, so a
@@ -673,8 +862,22 @@ config.schema_principal { |run| ActsAsTenant.without_tenant { run.call(User.new(
 ```
 
 With neither, every action is allowed: `authorize` and `policy_scope` pass
-everything through, and create and update actions take only the arguments
-they declare.
+everything through. An action lists the model fields it takes with
+`accepts`, and every caller may send them:
+
+```ruby
+class Events::UpdateAction < ApplicationAction
+  accepts :title, :starts_on, :capacity, :parent
+
+  def perform
+    event.update!(permitted_attributes(event))
+    render :show
+  end
+end
+```
+
+`accepts` works the same under an adapter whose policy has no
+`permitted_attributes`.
 
 #### Writing your own adapter
 
@@ -688,6 +891,7 @@ rules need; the rest keep the allow-everything defaults.
 | `skip_authorization`, `skip_policy_scope` | action | Marks the check done, for an action that needs none. |
 | `verify_authorized`, `verify_policy_scoped` | action | Raise when `perform` skipped the check. Run after `perform`. |
 | `permitted_attribute_names(record)` | action | The fields the person may set. `record` is a record, or the model class for a create (`permitted_attributes(Event)`). |
+| `supplies_fields?` | class | Whether the adapter says which fields a person may set. When true, a create or update takes the fields below, and `accepts` is refused. Default: false. |
 | `scoped_records(model)` | action | The records the person may pick for a `belongs_to` field. |
 | `permitted?(account)` | class | Whether the person may run the action at all, before any record loads. Decides the actions list too. |
 | `permitted_attribute_names_for(account, record)` | class | The fields a create or update takes, for the input schema. The account is the caller's; where there is no caller it is `schema_principal`'s, or `nil`, and `record` a record or a model class. |
@@ -707,6 +911,7 @@ module ApplicationAction::ModelAuthorization
 
   class_methods do
     def permitted?(user) = user.present?
+    def supplies_fields? = true
     def permitted_attribute_names_for(user, record) = (record.is_a?(Class) ? record : record.class).writable_attributes(user)
     def authorization_errors = [NotAllowed]
   end
@@ -836,7 +1041,7 @@ end
 everyone who can sign in may run the action.
 
 ```ruby
-RSpec.describe Event::UpdateAction do
+RSpec.describe Events::UpdateAction do
   let(:permitted_account) { create(:user, :manager) }
   let(:unpermitted_account) { create(:user) }
   let(:event) { create(:event) }
@@ -872,10 +1077,10 @@ Include it in each action test and set `self.action_class`. Use your app's
 own fixtures or records for the person and event:
 
 ```ruby
-class Event::UpdateActionTest < ActiveSupport::TestCase
+class Events::UpdateActionTest < ActiveSupport::TestCase
   include Saltbox::Actions::TestHelper
 
-  self.action_class = Event::UpdateAction
+  self.action_class = Events::UpdateAction
 
   test "renames the event" do
     event = events(:agm)
@@ -936,27 +1141,30 @@ details. A missing refusal, wrong code or missing field fails the test.
 ### Generators
 
 ```sh
-bin/rails g action Event::Update                  # a verb from the table
-bin/rails g action Event::Archive --kind change   # any other verb
-bin/rails actions:catalogue                       # rewrite config/actions.json
-bin/rails actions:check                           # check every action (in CI)
+bin/rails g action Events::Update                  # a verb from the table
+bin/rails g action Events::Archive --kind change   # any other verb
+bin/rails actions:catalogue                        # rewrite config/actions.json
+bin/rails actions:check                            # check every action (in CI)
 ```
 
-The generator writes the action, its locale entry and a test for the app's
-test framework. Minitest apps get `test/actions/event/update_action_test.rb`;
-RSpec apps get `spec/actions/event/update_action_spec.rb`. Fill in the
-record helpers with your app's fixtures or records. No factory gem or role
-names are required.
+The generator writes the action and a test for the app's test framework.
+Minitest apps get `test/actions/events/update_action_test.rb`; RSpec apps get
+`spec/actions/events/update_action_spec.rb`. Fill in the record helpers with
+your app's fixtures or records. No factory gem or role names are required.
+A singular name, `Event::Update`, writes the same files.
 
 First it checks the action the way `rails actions:check` will: the model, the
 policy and its rule (when the base class has an adapter), and the fields. On
 a problem it writes nothing, prints the fix and exits 1. If the catalogue
 step fails after that, it puts back every file it wrote or changed.
 
-A new read lets agents run it (`connections :allowed`). A new change or
-destructive action asks first (`connections :confirm`). If you set
-`default_connections`, a new action uses that instead, except that a
-destructive one still asks. Change the line in the action to suit.
+A verb from the table needs no declarations: the verb gives its kind, its
+record and its rule for agents. Any other verb gets `kind`, `attribute :id`
+when it works on one record, and its `policy_rule`. With no adapter that
+supplies fields, a create or update lists the model's columns with
+`accepts`; remove the ones people may not set. The generator then names
+the fields that still need a description, to write under
+`actions.<resource>.fields` in the locale file.
 
 To change the templates, copy them to `lib/templates/action/action.rb.tt`
 and `lib/templates/test_unit/action/action_test.rb.tt` (Minitest) or
@@ -999,7 +1207,7 @@ end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
-`action_paths` (the folders actions load from), `catalogue_path`, `default_connections`, `enforce_confirm`
+`action_paths` (the folders actions load from), `catalogue_path`, `enforce_confirm`
 with `confirm` (see Connections), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits

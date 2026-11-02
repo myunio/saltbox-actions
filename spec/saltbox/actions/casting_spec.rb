@@ -13,7 +13,7 @@ RSpec.describe Saltbox::Actions::Casting do
   it "clears a number or a date sent as an empty field, and keeps an empty string as a string" do
     update.call({"capacity" => "", "price" => "", "starts_on" => "", "doors_open_at" => ""})
     expect(event.reload).to have_attributes(capacity: nil, price: nil, starts_on: nil, doors_open_at: nil)
-    expect(Saltbox::Actions::Arguments.for(Event::CreateAction).validate!(title: "")).to eq("title" => "")
+    expect(Saltbox::Actions::Arguments.for(Events::CreateAction).validate!(title: "")).to eq("title" => "")
   end
 
   it "treats an empty field that cannot be null as left out" do
@@ -68,19 +68,21 @@ RSpec.describe Saltbox::Actions::Casting do
     expect { checker.validate!("ratio" => Float::INFINITY) }.to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to eq(["ratio"]) }
   end
 
-  it "casts declared arguments, including the items of a list, and drops a form's blank list item" do
+  it "casts attributes from a form, including the items of a list, and drops a form's blank list item" do
     action = Class.new(ApplicationAction) do
-      def self.name = "Event::ImportAction"
+      def self.name = "Events::ImportAction"
       kind :change
-      connections :allowed
-      argument :rows, :array, of: {capacity: :integer, paid: :boolean}
-      argument :ids, :array, of: :integer
-      argument :page, :integer
-      argument :amount, :decimal
+      attribute :rows, :array, of: {capacity: :integer, paid: :boolean, on: :date}
+      attribute :ids, :array, of: :integer
+      attribute :page, :integer
+      attribute :amount, :decimal
     end
-    input = {"rows" => [{"capacity" => "3", "paid" => "1"}], "ids" => ["", "4", "5"], "page" => "2", "amount" => "1.50"}
-    expect(Saltbox::Actions::Arguments.for(action).validate!(input))
-      .to eq("rows" => [{"capacity" => 3, "paid" => true}], "ids" => [4, 5], "page" => 2, "amount" => "1.50")
+    input = {"rows" => [{"capacity" => "3", "paid" => "1", "on" => "2026-11-02"}], "ids" => ["", "4", "5"], "page" => "2", "amount" => "1.50"}
+    checked = Saltbox::Actions::Arguments.for(action).validate!(input)
+    expect(checked).to eq("rows" => [{"capacity" => 3, "paid" => true, "on" => "2026-11-02"}], "ids" => [4, 5], "page" => 2, "amount" => "1.50")
+    built = action.new(actor: as_screen(manager), params: Saltbox::Actions::Params.new(checked, action:))
+    expect([built.rows, built.ids, built.page, built.amount])
+      .to eq([[{"capacity" => 3, "paid" => true, "on" => Date.new(2026, 11, 2)}], [4, 5], 2, BigDecimal("1.50")])
     expect { Saltbox::Actions::Arguments.for(action).validate!("page" => "two", "amount" => "1.5.0") }
       .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to contain_exactly("page", "amount") }
   end

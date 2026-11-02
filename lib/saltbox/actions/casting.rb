@@ -4,7 +4,7 @@ module Saltbox
     # schema checks, with the Active Model type of each input, as Active
     # Record does when it is given params:
     # - an empty field ("") becomes what the type makes of it: nil for a
-    #   number, date, boolean or enum, and "" for a string;
+    #   number, date, boolean or enum column, and "" for a string;
     # - "12" becomes 12 for an integer, and "1.5" 1.5 for a float;
     # - "1", "true" and "on" become true for a boolean, and "0", "false" and
     #   "off" false;
@@ -22,13 +22,13 @@ module Saltbox
       LOCAL_TIME = /\A(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\z/
 
       # @param value [Object] one input as sent
-      # @param type [ActiveModel::Type::Value, Array, Hash, nil] the input's type;
-      #   [type] for a list, {field => type} for a record in a list, nil to leave it as sent
+      # @param type [ActiveModel::Type::Value, Inputs::List, Hash, nil] the input's type;
+      #   {field => type} for a record in a list, nil to leave it as sent
       # @return [Object] the value the schema checks
       def self.cast(value, type)
         case type
         when nil then value
-        when Array then value.is_a?(Array) ? cast_list(value, type.first) : value
+        when Inputs::List then value.is_a?(Array) ? cast_list(value, type.item) : value
         when Hash then value.is_a?(Hash) ? value.to_h { |name, item| [name, cast(item, type[name.to_s])] } : value
         else value.is_a?(String) ? cast_string(value, type) : value
         end
@@ -63,12 +63,12 @@ module Saltbox
       end
 
       # @param value [Object] one input, after Casting.cast
-      # @param type [ActiveModel::Type::Value, Array, Hash, nil]
+      # @param type [ActiveModel::Type::Value, Inputs::List, Hash, nil]
       # @return [Boolean] whether it holds an integer the type cannot store, or
       #   a float that is not finite, which JSON cannot carry
       def self.invalid?(value, type)
         case value
-        when Array then type.is_a?(Array) && value.any? { invalid?(it, type.first) }
+        when Array then type.is_a?(Inputs::List) && value.any? { invalid?(it, type.item) }
         when Hash then type.is_a?(Hash) && value.any? { |name, item| invalid?(item, type[name.to_s]) }
         when Integer then type.is_a?(ActiveModel::Type::Value) && type.type == :integer && !type.serializable?(value)
         when Float then !value.finite?

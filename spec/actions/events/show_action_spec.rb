@@ -1,4 +1,4 @@
-RSpec.describe Event::ShowAction do
+RSpec.describe Events::ShowAction do
   let(:permitted_account) { reader }
   let(:unpermitted_account) { stranger }
   let(:event) { Event.create!(org_id: 1, title: "AGM") }

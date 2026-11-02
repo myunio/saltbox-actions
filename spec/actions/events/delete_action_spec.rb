@@ -1,4 +1,4 @@
-RSpec.describe Event::DeleteAction do
+RSpec.describe Events::DeleteAction do
   let(:permitted_account) { manager }
   let(:unpermitted_account) { reader }
   let(:event) { Event.create!(org_id: 1, title: "AGM") }

@@ -1,7 +1,9 @@
 RSpec.describe Saltbox::Actions::FrontDoor do
   let(:event) { Event.create!(org_id: 1, title: "Annual general meeting") }
 
-  it "offers mcp_core actions as tools of their own, then find_action and one run tool per kind the caller may run" do
+  it "offers featured actions as tools of their own, then find_action and one run tool per kind the caller may run" do
+    expect(Saltbox::Actions::Registry.catalogue(as_mcp(manager)).select { it["featured"] }.map { it["name"] }).to eq(%w[show_event whoami])
+    expect(Saltbox::Actions::Registry.catalogue(as_mcp(manager)).flat_map(&:keys)).not_to include("mcp_core")
     expect(described_class.tools(as_mcp(manager)).map(&:name)).to eq(%w[show_event whoami find_action run_read_action run_change_action run_destructive_action])
     expect(described_class.tools(as_read_only(manager)).map(&:name)).to eq(%w[show_event whoami find_action run_read_action])
     expect(described_class.tools(as_assistant(manager)).map(&:name)).not_to include("run_destructive_action")
@@ -28,7 +30,7 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     def listed(account, caller: as_mcp(account), **paging) = described_class.call("find_action", paging, caller:)[:actions]
 
     it "lists every action the caller can run, by area then name, without descriptions or arguments" do
-      expect(listed(manager).pluck(:name)).to eq(%w[cancel_event create_event delete_event list_events show_event update_event count_events whoami])
+      expect(listed(manager).pluck(:name)).to eq(%w[cancel_event create_event delete_event list_events postpone_event show_event update_event count_events whoami])
       expect(listed(manager)).to all(satisfy { |entry| !entry.key?(:description) && !entry.key?(:arguments) })
       expect(listed(manager)).to include({name: "delete_event", title: "Delete event", kind: "destructive", area: "events",
         run_with: "run_destructive_action", confirm_first: true}, {name: "whoami", title: "Whoami", kind: "read", run_with: "run_read_action", confirm_first: false})
@@ -46,7 +48,7 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     it "lists a page at a time, and following the hint's next page reaches every action once" do
       first = described_class.call("find_action", {"page_size" => 3}, caller: as_mcp(manager))
       expect(first[:actions].pluck(:name)).to eq(%w[cancel_event create_event delete_event])
-      expect(first[:meta]).to eq(page: 1, page_size: 3, total: 8, next_page: 2)
+      expect(first[:meta]).to eq(page: 1, page_size: 3, total: 9, next_page: 2)
       expect(first[:hint]).to include("Call find_action with page: 2, page_size: 3 for more.")
 
       pages = [first]
@@ -66,7 +68,7 @@ RSpec.describe Saltbox::Actions::FrontDoor do
 
     it "gives a plain list, by name, in an app with no areas" do
       allow(Saltbox::Actions.config).to receive(:area_for).and_return(->(_model) {})
-      expect(listed(manager).pluck(:name)).to eq(%w[cancel_event count_events create_event delete_event list_events show_event update_event whoami])
+      expect(listed(manager).pluck(:name)).to eq(%w[cancel_event count_events create_event delete_event list_events postpone_event show_event update_event whoami])
       expect(listed(manager)).to all(satisfy { |entry| !entry.key?(:area) })
     end
 

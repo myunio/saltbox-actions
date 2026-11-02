@@ -9,19 +9,22 @@ module Reports
       Returns the count.
     TEXT
     kind :read
-    connections :allowed
     permission "events.view", any_of("events.manage", "events.delete")
-    argument :status, :string, enum: %w[draft published cancelled], description: "Only events with this status"
-    argument :page, :integer, minimum: 1, description: "Page number, from 1"
-    cli "events count", aliases: ["events tally"], args: %w[status]
     summary :count
     returns({type: "object", properties: {count: {type: "integer"}}, required: ["count"]})
+
+    attribute :status, :string, description: "Only events with this status"
+    attribute :page, :integer, description: "Page number, from 1"
+    validates :status, inclusion: {in: %w[draft published cancelled]}, allow_nil: true
+    validates :page, numericality: {greater_than_or_equal_to: 1}, allow_nil: true
+
+    cli "events count", aliases: ["events tally"], args: %w[status]
 
     def perform
       skip_authorization
       events = policy_scope(Event)
-      events = events.where(status: params[:status]) if params[:status]
-      render json: {count: events.count}, meta: {page: params[:page] || 1}
+      events = events.where(status:) if status
+      render json: {count: events.count}, meta: {page: page || 1}
     end
   end
 end

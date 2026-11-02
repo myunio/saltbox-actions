@@ -10,93 +10,131 @@ RSpec.describe Saltbox::Actions::Registry do
 
   it "loads every action under app/actions, sorted, with unique names" do
     expect(described_class.actions.map(&:action_name)).to eq(%w[cancel_event count_events create_event delete_event list_billing_invoices list_events
-      show_event show_event_notes update_event whoami])
+      postpone_event show_event show_event_notes update_event whoami])
   end
 
   it "finds the actions as the base class's subclasses when the folder holds other files too" do
     with_settings(every_file_an_action: false) do
       described_class.reset!
-      expect(described_class.actions).to include(Event::UpdateAction, Reports::CountEventsAction, WhoamiAction)
+      expect(described_class.actions).to include(Events::UpdateAction, Reports::CountEventsAction, WhoamiAction)
     ensure
       described_class.reset!
     end
   end
 
   it "refuses a Rails verb, naming the one to use" do
-    expect(problems(action("Event::DestroyAction") { connections :confirm })).to eq(["destroy is spelled delete in actions: rename it Event::DeleteAction"])
+    expect(problems(action("Events::DestroyAction"))).to eq(["destroy is spelled delete in actions: rename it Events::DeleteAction"])
   end
 
   it "refuses a kind on a verb whose kind is known, and an unknown verb with none" do
-    expect(problems(action("Event::DeleteAction") {
-      connections :confirm
-      kind :change
-    })).to include(/its kind is destructive: remove kind/)
-    expect(problems(action("Event::ArchiveAction") {
-      connections :allowed
-      authorize :update?
-    })).to include(/declare kind/)
+    expect(problems(action("Events::DeleteAction") { kind :change })).to include(/its kind is destructive: remove kind/)
+    expect(problems(action("Events::ArchiveAction") { policy_rule :update? })).to include(/declare kind .* or add it with define_verb/)
   end
 
-  it "refuses an action without connections, and a destructive one agents may run without asking" do
-    expect(problems(action("Event::ShowAction"))).to include("declare connections :allowed, :confirm or :never")
-    expect(problems(action("Event::DeleteAction") { connections :allowed })).to include(/never connections :allowed/)
+  it "takes the connections rule from the verb, and refuses a destructive action agents may run without asking" do
+    expect(problems(action("Events::ShowAction"))).to be_empty
+    expect(problems(action("Events::DeleteAction") { connections :allowed })).to include(/never connections :allowed/)
+  end
+
+  it "refuses an action inside its model's namespace, naming the plural one" do
+    expect(problems(action("Event::ShowAction")))
+      .to eq(["Event is a model: name its actions like controllers, in the plural namespace: Events::ShowAction in events/show_action.rb"])
+  end
+
+  it "refuses an attribute named like the member record's reader" do
+    expect(problems(action("Events::ShowAction") { attribute :event, :string }))
+      .to include("attribute event has the name of the reader for the event it works on: rename the attribute")
+  end
+
+  it "refuses a model whose record reader would replace a method every action has" do
+    stub_const("Result", Class.new(ActiveRecord::Base) { self.table_name = "events" })
+    expect(problems(action("Results::ShowAction")))
+      .to include(a_string_starting_with("Saltbox::Actions::Rendering#result is a method every action has"))
+  end
+
+  it "takes the record's id as a cli argument of an action that declares attribute :id" do
+    archive = action("Events::ArchiveAction") do
+      kind :change
+      attribute :id
+      policy_rule :update?
+      cli "events archive", args: [:id]
+    end
+    expect(archive.declared_cli).to include(args: ["id"])
+  end
+
+  it "refuses a validation of a model field, which is not an attribute of the action" do
+    expect(problems(action("Events::UpdateAction") { validates :title, presence: true }))
+      .to include("validates title, which is not an attribute: the model's own validations check its fields, or declare it with attribute")
+  end
+
+  it "refuses validations whose schema would promise what they refuse" do
+    expect(problems(action("Events::ExportAction") {
+      attribute :format, :string
+      validates :format, inclusion: {in: %i[csv json]}
+      attribute :archived, :boolean
+      validates :archived, presence: true
+    })).to include("format is a string, and its inclusion lists symbols, so every value is refused: list strings",
+      "archived is a boolean, and presence refuses false: validate inclusion: {in: [true, false]}")
+  end
+
+  it "refuses accepts under a policy that says which fields a person may set, and on an action with no model" do
+    expect(problems(action("Events::UpdateAction") { accepts :title }))
+      .to include("EventPolicy#permitted_attributes says which fields a person may set: remove accepts, so the policy is the one list")
+    expect(problems(action("SummariseAction") {
+      kind :read
+      accepts :title
+    })).to include("accepts names fields of the action's model, and it has none: declare model, or remove accepts")
   end
 
   it "refuses a longer name that names no policy rule, and a rule the policy lacks" do
-    expect(problems(action("Event::ShowTotalsAction") { connections :allowed })).to eq(["show totals says more than show: name the policy query, authorize :show? or another"])
-    expect(problems(action("Event::ArchiveAction") {
+    expect(problems(action("Events::ShowTotalsAction"))).to eq(["show totals says more than show: name the policy rule, policy_rule :show? or another"])
+    expect(problems(action("Events::ArchiveAction") {
       kind :change
-      connections :allowed
-      authorize :archive?
+      policy_rule :archive?
     }))
-      .to include("EventPolicy#archive? is missing: add it, or authorize another query")
+      .to include("EventPolicy#archive? is missing: add it, or name another with policy_rule")
   end
 
   it "refuses an action under a name that is not a model, or whose model has no area" do
-    expect(problems(action("Reports::ShowAction") { connections :allowed })).to eq(["Reports is not a model: declare model, or move the action"])
+    expect(problems(action("Reports::ShowAction"))).to eq(["Reports names no model (Report is not one): declare model, or move the action"])
     stub_const("Venue", Class.new(ApplicationRecord) { self.table_name = "events" })
     stub_const("VenuePolicy", Class.new(EventPolicy))
-    expect(problems(action("Venue::ShowAction") { connections :allowed })).to include("no area maps Venue: add it to the app's areas")
+    expect(problems(action("Venues::ShowAction"))).to include("no area maps Venue: add it to the app's areas")
   end
 
   it "names a namespace that is not a model before sorting by name, which needs the model" do
-    stub_const("Admin::Customer", Module.new)
-    stray = action("Admin::Customer::ExportAction") { connections :allowed }
-    allow(described_class).to receive(:descendants).and_return([stray, Event::ListAction])
+    stub_const("Admin::Customers", Module.new)
+    stray = action("Admin::Customers::ExportAction")
+    allow(described_class).to receive(:descendants).and_return([stray, Events::ListAction])
     with_settings(every_file_an_action: false) do
       described_class.reset!
-      expect { described_class.actions }.to raise_error(ArgumentError, "Admin::Customer::ExportAction: Admin::Customer is not a model: declare model, or move the action")
+      expect { described_class.actions }.to raise_error(ArgumentError, "Admin::Customers::ExportAction: Admin::Customers names no model (Admin::Customer is not one): declare model, or move the action")
     ensure
       described_class.reset!
     end
   end
 
   it "names both classes when two actions share a name" do
-    admin = action("Admin::Event::ListAction") {
-      model Event
-      connections :allowed
-    }
-    expect { described_class.validate!([admin, Event::ListAction]) }
-      .to raise_error(ArgumentError, /Action names must be unique: list_events \(Admin::Event::ListAction, Event::ListAction\)\. To fix: declare action_name/)
+    admin = action("Admin::Events::ListAction")
+    expect { described_class.validate!([admin, Events::ListAction]) }
+      .to raise_error(ArgumentError, /Action names must be unique: list_events \(Admin::Events::ListAction, Events::ListAction\)\. To fix: declare action_name/)
   end
 
   it "refuses two actions with one CLI command, or an alias that is another's command" do
-    tally = action("Event::TallyAction") {
+    tally = action("Events::TallyAction") {
       kind :read
-      authorize :index?
-      connections :allowed
+      policy_rule :index?
       cli "events tally", aliases: ["events list"]
     }
-    expect { described_class.validate!([tally, Event::ListAction]) }
-      .to raise_error(ArgumentError, /CLI commands must be unique: events list \(Event::ListAction, Event::TallyAction\)\. To fix: declare cli/)
+    expect { described_class.validate!([tally, Events::ListAction]) }
+      .to raise_error(ArgumentError, /CLI commands must be unique: events list \(Events::ListAction, Events::TallyAction\)\. To fix: declare cli/)
   end
 
   it "runs the app's own checks beside the gem's" do
     Saltbox::Actions.config.check_action { |klass| klass.description ? [] : ["write a description"] }
-    expect(problems(action("Event::PeekAction") {
+    expect(problems(action("Events::PeekAction") {
       kind :read
-      connections :allowed
-      authorize :show?
+      policy_rule :show?
     })).to eq(["write a description"])
   ensure
     Saltbox::Actions.config.action_checks.pop

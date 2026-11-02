@@ -1,7 +1,7 @@
 module Saltbox
   module Actions
     # The tools agents see, free of any protocol, shared by the MCP adapter
-    # and the assistant tools: the `mcp_core` actions as tools of their own,
+    # and the assistant tools: the `featured` actions as tools of their own,
     # find_action to search the rest, and one run tool per kind.
     module FrontDoor
       # A tool as MCP clients and assistants see it: its name, title,
@@ -23,7 +23,7 @@ module Saltbox
       }.freeze
 
       # The tools this caller gets, in order:
-      # - each action they may run that is declared `mcp_core`, as a tool of its own;
+      # - each action they may run that is declared `featured`, as a tool of its own;
       # - find_action, to search the other actions;
       # - one run tool (run_read_action, run_change_action or run_destructive_action)
       #   for each kind of action they may run.
@@ -34,7 +34,7 @@ module Saltbox
         # Inside the caller's set-up, which a policy may need to build each schema.
         Actions.within(caller) do |fresh|
           runnable = Registry.actions.select { |action| action.runnable_for?(fresh) }
-          direct = runnable.select(&:mcp_core?).map do |action|
+          direct = runnable.select(&:featured?).map do |action|
             Tool.new(name: action.action_name, title: action.title, description: [action.description, action.summary_note].compact.join(" ").presence,
               input_schema: action.input_schema(fresh), annotations: annotations(action.kind, idempotent: action.idempotent?))
           end
@@ -62,7 +62,7 @@ module Saltbox
           return response(Invocation.call(name: name, caller: caller, arguments: action_arguments, expected_kind: kind))
         end
         action = Registry.fetch(tool_name)
-        raise Error::UnknownAction, tool_name unless action.mcp_core?
+        raise Error::UnknownAction, tool_name unless action.featured?
         response(Invocation.call(name: action, caller: caller, arguments: arguments))
       end
 

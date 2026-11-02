@@ -2,7 +2,7 @@ module Saltbox
   module Actions
     # A refusal every surface reports the same way: a code, an HTTP status and
     # a message written for a person or a model. Field errors are keyed by
-    # argument name. Anything else an action raises is a bug and becomes a 500.
+    # input name. Anything else an action raises is a bug and becomes a 500.
     #
     # Each subclass sets its HTTP status and default message. Its code is its
     # class name in snake_case (Forbidden gives forbidden), unless a code is
@@ -13,7 +13,7 @@ module Saltbox
       # Codes whose name differs in the :type error format (Configuration#error_format).
       TYPES = {"validation_failed" => "validation_error"}.freeze
 
-      # @return [Hash{String=>Array<String>}, nil] field errors by argument name
+      # @return [Hash{String=>Array<String>}, nil] field errors by input name
       attr_reader :errors
       # @return [Hash, nil] facts about the refusal a caller can act on, such as the area it needs
       attr_reader :details
@@ -21,7 +21,7 @@ module Saltbox
       # @param message [String, nil] what went wrong and what to do
       # @param code [Symbol, String, nil] the error code callers see; the class's code when nil
       # @param status [Symbol, Integer, nil] the HTTP status; the class's default_status when nil
-      # @param errors [Hash, nil] field errors keyed by argument name
+      # @param errors [Hash, nil] field errors keyed by input name
       # @param details [Hash, nil] facts about the refusal a caller can act on
       #
       # @example
@@ -125,6 +125,16 @@ module Saltbox
 
         # @return [String] the code for invalid input
         def self.code = "validation_failed"
+
+        # The refusal for an action's or a record's validation errors: the
+        # messages, in the person's language, and the errors by field.
+        #
+        # @param errors [ActiveModel::Errors]
+        # @param fallback [String, nil] the message when there are none to list
+        # @return [Invalid]
+        def self.for(errors, fallback: nil)
+          new(errors.full_messages.to_sentence.presence || fallback, errors: errors.to_hash(true).transform_keys(&:to_s).presence)
+        end
       end
     end
 

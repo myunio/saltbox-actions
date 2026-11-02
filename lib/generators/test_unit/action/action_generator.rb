@@ -21,8 +21,8 @@ module TestUnit
       def takes_id?
         action_class_name.constantize.takes_id?
       rescue NameError
-        entry = Saltbox::Actions::Naming::VERBS[file_name.split("_").first]
-        entry ? entry[:id] : options[:id]
+        entry = Saltbox::Actions.config.base.verbs[file_name.split("_").first]
+        entry ? entry[:member] : options[:id]
       end
     end
   end

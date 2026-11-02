@@ -97,7 +97,7 @@ module Saltbox
       end
 
       def message(name, error)
-        return "#{@name} takes no id; declare argument :id" if name == "id" && @name && !@schema.fetch("properties").key?("id")
+        return "#{@name} takes no id; declare attribute :id" if name == "id" && @name && !@schema.fetch("properties").key?("id")
         error["error"]
       end
 

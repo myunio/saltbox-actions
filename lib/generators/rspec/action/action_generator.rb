@@ -3,7 +3,7 @@ require "rails/generators/named_base"
 
 module Rspec
   module Generators
-    # Writes spec/actions/<model>/<words>_action_spec.rb for `rails g action`,
+    # Writes spec/actions/<resources>/<words>_action_spec.rb for `rails g action`,
     # which reaches it through hook_for :test_framework. The spec runs the
     # action for a person on a screen, and for one that works on a record,
     # checks a record the person cannot see is not found. It assumes no
@@ -27,9 +27,9 @@ module Rspec
 
       def verb = words.first
 
-      def model_name = class_path.map(&:camelize).join("::")
+      def resource_name = class_path.map(&:camelize).join("::")
 
-      def model = model_name.constantize
+      def model = Saltbox::Actions::Naming.model_for(resource_name)
 
       # @return [String] "an event", "an account"
       def a_record
@@ -37,14 +37,14 @@ module Rspec
         "#{noun.match?(/\A[aeiou]/) ? "an" : "a"} #{noun}"
       end
 
-      def action_class_name = "#{model_name}::#{words.map(&:camelize).join}Action"
+      def action_class_name = "#{resource_name}::#{words.map(&:camelize).join}Action"
 
       # What `rails g action` says, then the action's class, then the verb table.
       def takes_id?
         return options[:id] unless options[:id].nil?
         action_class_name.constantize.takes_id?
       rescue NameError
-        Saltbox::Actions::Naming::VERBS.dig(verb, :id) == true
+        Saltbox::Actions.config.base.verbs.dig(verb, :member) == true
       end
     end
   end

@@ -19,31 +19,31 @@ RSpec.describe "Declared names" do
       "cli" => {"command" => %w[events count], "aliases" => [%w[events tally]], "args" => %w[status]}, "summary" => %w[count])
   end
 
-  it "describes each argument in its declaration, with JSON Schema keywords after the description" do
+  it "describes each attribute in its declaration, after what its validations give" do
     expect(action.input_schema.fetch("properties")).to eq(
-      "status" => {"type" => "string", "description" => "Only events with this status", "enum" => %w[draft published cancelled]},
-      "page" => {"type" => "integer", "description" => "Page number, from 1", "minimum" => 1}
+      "status" => {"type" => "string", "enum" => %w[draft published cancelled], "description" => "Only events with this status"},
+      "page" => {"type" => "integer", "minimum" => 1, "description" => "Page number, from 1"}
     )
-    expect { named("Reports::BadAction") { argument :page, :integer, smallest: 1 } }.to raise_error(ArgumentError, /page takes no smallest/)
     unknown_cli_args = lambda do
       named("Reports::BadAction") do
         action_name "bad"
         cli "reports bad", args: %w[nope]
       end
     end
-    expect(&unknown_cli_args).to raise_error(ArgumentError, /cli args nope are not arguments/)
+    expect(&unknown_cli_args).to raise_error(ArgumentError, /cli args nope are not attributes/)
   end
 
-  it "holds a named action to its own boot checks: a declared kind and connections, and its model's policy if it names one" do
+  it "holds a named action to its own boot checks: a declared kind, and its model's policy if it names one" do
     problems = ->(action) { Saltbox::Actions::Registry.problems(action) }
     bare = named("Reports::BareAction") { action_name "bare" }
-    expect(problems.call(bare)).to eq(["declare kind :read, :change or :destructive", "declare connections :allowed, :confirm or :never"])
+    expect(problems.call(bare)).to eq(["declare kind :read, :change or :destructive"])
 
     read = named("Reports::ReadAction") do
       action_name "read_it"
       kind :read
     end
-    with_settings(default_connections: :allowed) { expect(problems.call(read)).to be_empty }
+    expect(problems.call(read)).to be_empty
+    expect(read.connections).to eq(:allowed)
 
     tally = named("Reports::TallyAction") do
       action_name "tally"
@@ -51,9 +51,9 @@ RSpec.describe "Declared names" do
       connections :allowed
       model Event
     end
-    expect(problems.call(tally)).to eq(["Event is its model: name the policy rule, authorize :show? or another"])
-    tally.authorize :tally?
-    expect(problems.call(tally)).to eq(["EventPolicy#tally? is missing: add it, or authorize another query"])
+    expect(problems.call(tally)).to eq(["Event is its model: name the policy rule, policy_rule :show? or another"])
+    tally.policy_rule :tally?
+    expect(problems.call(tally)).to eq(["EventPolicy#tally? is missing: add it, or name another with policy_rule"])
   end
 
   it "needs at least one requirement, and two keys or more for any_of" do

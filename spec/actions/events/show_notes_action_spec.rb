@@ -1,4 +1,4 @@
-RSpec.describe Event::ShowNotesAction do
+RSpec.describe Events::ShowNotesAction do
   let(:permitted_account) { Account.new(id: 9, permissions: %w[events.view events.notes]) }
   let(:unpermitted_account) { reader }
   let(:event) { Event.create!(org_id: 1, title: "AGM", notes: "Quorum is 12") }
