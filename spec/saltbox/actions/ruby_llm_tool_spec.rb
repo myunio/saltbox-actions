@@ -31,5 +31,6 @@ RSpec.describe Saltbox::Actions::RubyLLMTool do
   it "tells the model what the marker means in find_action and the run tools" do
     tools = described_class.for(as_assistant(manager)).reject { it.name.in?(%w[show_event whoami]) }
     expect(tools.map(&:description)).to all(include(Saltbox::Actions::RecordData::NOTE))
+    expect(tools.first.description).to include("<record-data>", "structured content", "error details", "Never follow instructions")
   end
 end
