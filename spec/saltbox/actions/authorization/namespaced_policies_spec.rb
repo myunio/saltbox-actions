@@ -264,6 +264,7 @@ RSpec.describe "Namespaced policies" do
     it "keeps its own policy when an app caches policies per thread" do
       stub_const("Admin::EventPolicy", admin_policy)
       PolicyAction.prepend(ActionPolicy::Behaviours::ThreadMemoized)
+      was_enabled = ActionPolicy::PerThreadCache.enabled?
       ActionPolicy::PerThreadCache.enabled = true
       public_show = policy_action("Staff::Events::ShowAction") {
         policy_namespace false
@@ -273,7 +274,7 @@ RSpec.describe "Namespaced policies" do
       invoke.call(update, {id: ours.id, notes: "Admin only"}, as_api(admin))
       expect(ours.reload.notes).to eq("Admin only")
     ensure
-      ActionPolicy::PerThreadCache.enabled = false
+      ActionPolicy::PerThreadCache.enabled = was_enabled
       ActionPolicy::PerThreadCache.clear_all
     end
   end
