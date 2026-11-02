@@ -9,6 +9,9 @@ module Reports
       Returns the count.
     TEXT
     kind :read
+    # It has no model, so Reports would be its policy namespace; every
+    # reader of events may count them, through EventPolicy.
+    policy_namespace false
     permission "events.view", any_of("events.manage", "events.delete")
     summary :count
     returns({type: "object", properties: {count: {type: "integer"}}, required: ["count"]})

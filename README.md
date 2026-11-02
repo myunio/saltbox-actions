@@ -1325,6 +1325,14 @@ same way and never falls back to `EventPolicy`. To use another namespace,
 declare it: `policy_namespace :staff`, or `policy_namespace false` for the
 model's own policy.
 
+An action with no model, such as one with a declared name, authorizes
+whatever its `perform` names, so every module it is in counts.
+`Admin::CountProjectsAction`'s `authorize Project` and `policy_scope(Project)`
+ask `Admin::ProjectPolicy`, and a top-level `CountProjectsAction`'s ask
+`ProjectPolicy`. Until `Admin::ProjectPolicy` exists, the action fails and
+the error names it. `rails actions:check` cannot name it: only `perform`
+says which model the action authorizes.
+
 A declaration holds for the class that makes it, and for its subclasses in
 its modules and below them. A subclass adds the modules its name has beyond
 the declaring class's, after it. So it never inherits a way out of them:

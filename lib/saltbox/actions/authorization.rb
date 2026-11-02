@@ -47,7 +47,9 @@ module Saltbox
           # namespace (Naming#outer_namespace), so Admin::Projects::ListAction
           # asks Admin::ProjectPolicy, everywhere: before any record loads,
           # in authorize and policy_scope, for its fields and for the records
-          # a reference may pick. A missing namespaced policy is never
+          # a reference may pick. An action with no model has every module
+          # it is in, so Admin::CountProjectsAction's authorize Project asks
+          # Admin::ProjectPolicy. A missing namespaced policy is never
           # replaced by the model's own: the action fails, and
           # rails actions:check names the policy to add.
           #
@@ -67,7 +69,7 @@ module Saltbox
           #
           # @param value [Symbol, String, Module, false, nil] declares it: :admin, Admin, or false
           # @return [Array<Symbol>] such as [:admin]; [] for the model's own policy
-          # @raise [ArgumentError] for a value that names no module, such as ""
+          # @raise [ArgumentError] for a value that names no module, such as "", true or []
           def policy_namespace(value = nil)
             return @declared_policy_namespace = namespace_words(value) unless value.nil?
             declarer = ancestors.find { it.instance_variable_defined?(:@declared_policy_namespace) }
@@ -141,7 +143,11 @@ module Saltbox
 
           def namespace_words(value)
             return [] if value == false
-            words = (value.is_a?(Module) ? value.name.to_s.underscore : value.to_s).split("/", -1)
+            words = case value
+            when Module then value.name.to_s.underscore.split("/", -1)
+            when Symbol, String then value.to_s.split("/", -1)
+            else []
+            end
             return words.map(&:to_sym) if words.any? && words.none?(&:blank?)
             raise ArgumentError, "#{name}: policy_namespace #{value.inspect} names no module: " \
               "declare a symbol such as :admin, a module, or false for the model's own policy"

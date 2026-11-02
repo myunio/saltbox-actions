@@ -17,7 +17,7 @@
   `policy_class` the model or record defines; Pundit's `policy` helper asks the namespace too.
   `policy_namespace :staff` declares another namespace, `policy_namespace false` the model's own
   policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method, and a
-  value that names no module, such as `""`, raises `ArgumentError`. A declaration holds for
+  value that names no module, such as `""`, `true`, `1` or `[]`, raises `ArgumentError`. A declaration holds for
   subclasses in its modules and below them; a subclass adds the modules its name has beyond the
   declaring class's, so `policy_namespace :staff` in a base class makes
   `Admin::Projects::ListAction` ask `Staff::Admin::ProjectPolicy`, the same in
@@ -38,6 +38,13 @@
   `rails actions:check` names each missing policy, and says when the outer module names a model
   (`Events` names `Event`), so the action may be nested: declare `policy_namespace false` only if
   everyone the model's own policy allows may run it.
+- An action with no model counts every module it is in, as it has no model's modules to leave
+  out. `Admin::CountProjectsAction`, with a declared name, asked `ProjectPolicy` in its own
+  `authorize Project` and `policy_scope(Project)`; it asks `Admin::ProjectPolicy`, failing closed
+  until it exists. A module named like a model counts too: `Events::TallyAction` with no model
+  asks `Events::EventPolicy`. Declare `policy_namespace false` to ask the models' own policies.
+  An action with no model at the top level is unchanged. `rails actions:check` cannot name the
+  policy, since only `perform` says which model it authorizes; the error names it.
 - `Admin::Billing::Invoices::ListAction` finds `Billing::Invoice`: a model lookup drops outer
   modules from the left before trying the top-level model. Such an action was named `list` with no
   policy check; it is `list_admin_billing_invoices` and asks `Admin::Billing::InvoicePolicy`.

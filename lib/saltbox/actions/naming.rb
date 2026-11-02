@@ -137,7 +137,9 @@ module Saltbox
         # the model's own modules are left out, so Projects::ListAction and
         # Billing::Invoices::ListAction on Billing::Invoice have none.
         # Reports::ExportAction on Customer has ["reports"], and
-        # Events::Attendees::ListAction on Attendee has ["events"]. They are
+        # Events::Attendees::ListAction on Attendee has ["events"]. An action
+        # with no model has every module it is in: ["admin"] for
+        # Admin::CountProjectsAction, [] for a top-level one. They are
         # part of the action's name (list_admin_projects), and its policy is
         # looked up in them (Authorization::Policies#policy_namespace).
         #
@@ -243,9 +245,10 @@ module Saltbox
 
         # The outer namespace among these modules of the action's name: the
         # resource namespace, when it is the last of them, and the model's
-        # own modules are left out.
+        # own modules are left out. An action with no model has neither, so
+        # all of them count.
         def outer_modules(modules)
-          return [] unless model.is_a?(Class)
+          return modules.map(&:underscore) unless model.is_a?(Class)
           modules = modules.dup
           modules.pop if modules.last&.singularize == model.name.demodulize
           (modules - model.name.deconstantize.split("::")).map(&:underscore)

@@ -160,10 +160,67 @@ RSpec.describe "Namespaced policies" do
       expect(define("Admin::Events::ExportAllAction", staff_base).policy_namespace).to eq([:staff])
     end
 
+    # An action with no model authorizes whatever its perform names, so
+    # every module it is in is its policy namespace.
+    let(:counting_any) do
+      proc do
+        def perform
+          authorize Event, :index?
+          render json: {count: policy_scope(Event).count}
+        end
+      end
+    end
+
+    def define_modelless(name, parent = base)
+      define(name, parent) {
+        action_name name.underscore.tr("/", "_")
+        kind :read
+      }.tap { it.class_eval(&counting_any) }
+    end
+
+    it "asks the policies in every module around a model-less action" do
+      stub_const("Admin::EventPolicy", admin_policy)
+      tally = define_modelless("Admin::CountEventsAction")
+      expect(tally).to have_attributes(model: nil, policy_namespace: [:admin])
+      expect { invoke.call(tally, {}, as_api(manager)) }.to be_refused.with(:forbidden)
+      expect(count(tally, admin)).to eq(2)
+      top = define_modelless("CountAllEventsAction")
+      expect(top.policy_namespace).to eq([])
+      expect(count(top, manager)).to eq(1)
+    end
+
+    it "fails closed for a model-less action whose namespace has no policy, naming the one it asked" do
+      tally = define_modelless("Admin::CountEventsAction")
+      expect { invoke.call(tally, {}, as_api(manager)) }.to raise_error(missing_policy, missing_named["Admin::EventPolicy"])
+      named_like_a_model = define_modelless("Events::TallyAction")
+      expect(named_like_a_model).to have_attributes(model: nil, policy_namespace: [:events])
+      expect { invoke.call(named_like_a_model, {}, as_api(manager)) }.to raise_error(missing_policy, missing_named["Events::EventPolicy"])
+    end
+
+    it "leaves a model-less action out of rails actions:check's policy checks, since its perform names the model" do
+      expect(Saltbox::Actions::Registry.problems(define_modelless("Admin::CountEventsAction"))).to eq([])
+    end
+
+    it "puts a base class's declared namespace before a model-less action's modules, and holds false below it" do
+      stub_const("Staff::Admin::EventPolicy", admin_policy)
+      staff = define("StaffAction") { policy_namespace :staff }
+      tally = define_modelless("Admin::CountEventsAction", staff)
+      expect(tally.policy_namespace).to eq(%i[staff admin])
+      expect { invoke.call(tally, {}, as_api(manager)) }.to be_refused.with(:forbidden)
+      admin_base = define("Admin::ApplicationAction") { policy_namespace :admin }
+      expect(define_modelless("Admin::Reports::CountEventsAction", admin_base).policy_namespace).to eq(%i[admin reports])
+      public_base = define("Admin::ApplicationAction") { policy_namespace false }
+      expect(count(define_modelless("Admin::CountEventsAction", public_base), manager)).to eq(1)
+    end
+
     it "refuses a policy_namespace that names no module" do
       ["", "/", "/admin", "admin//staff", :""].each do |blank|
         expect { define("Admin::Events::ExportAllAction") { policy_namespace blank } }
           .to raise_error(ArgumentError, /policy_namespace #{Regexp.escape(blank.inspect)} names no module: declare a symbol such as :admin, a module, or false/)
+      end
+      [true, 1, 1.5, [], [:admin], {}].each do |other|
+        expect { define("Admin::Events::ExportAllAction") { policy_namespace other } }
+          .to raise_error(ArgumentError, /policy_namespace #{Regexp.escape(other.inspect)} names no module: declare a symbol such as :admin, a module, or false/)
       end
     end
   end
@@ -272,6 +329,7 @@ RSpec.describe "Namespaced policies" do
       let(:admin_policy) { admin_event_policy }
       let(:public_policy) { EventPolicy }
       let(:missing_policy) { Pundit::NotDefinedError }
+      let(:missing_named) { ->(policy) { /unable to find policy `#{policy}`/ } }
       let(:label) { "Pundit" }
 
       it_behaves_like "the modules around an action"
@@ -385,6 +443,7 @@ RSpec.describe "Namespaced policies" do
       let(:base) { PolicyAction }
       let(:public_policy) { EventPolicy }
       let(:missing_policy) { ActionPolicy::NotFound }
+      let(:missing_named) { ->(policy) { /in #{policy.deconstantize}\z/ } }
       let(:label) { "ActionPolicy" }
 
       it_behaves_like "the modules around an action"
