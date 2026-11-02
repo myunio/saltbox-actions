@@ -83,6 +83,13 @@ module Saltbox
         self.default_message = "Only a person can do this, in %{app}."
       end
 
+      # An agent asked for a :confirm action, Configuration#enforce_confirm is
+      # on, and the app's Configuration#confirm hook did not approve it.
+      class ConfirmationRequired < Error
+        self.default_status = :forbidden
+        self.default_message = "The person must approve this in %{app} before it runs."
+      end
+
       # A read-only connection asked for a change, or a connection's access
       # does not reach the action.
       class InsufficientScope < Error

@@ -12,6 +12,8 @@ module Saltbox
       attr_reader :action
       # @return [Caller] who runs it, as the app refreshed them
       attr_reader :caller
+      # @return [Hash, nil] its input, once checked
+      attr_reader :arguments
 
       # @param name [String, Class] the action's name, or the action class
       # @param caller [Caller]
@@ -71,12 +73,14 @@ module Saltbox
         Actions.within(@caller) do |fresh|
           @caller = fresh
           @invocation_id = SecureRandom.uuid_v7
-          Current.set(invocation_id: @invocation_id) do
+          Current.set(invocation: self, invocation_id: @invocation_id) do
             refuse!
             if expected_kind && @action.kind != expected_kind
               raise Error::Invalid, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
             end
-            run(@action.validate_arguments(arguments, @caller))
+            @arguments = @action.validate_arguments(arguments, @caller)
+            confirm!(@action)
+            run(@arguments)
           end
         end
       rescue Error
@@ -84,6 +88,23 @@ module Saltbox
       rescue => error
         mapped = translate(error)
         mapped ? raise(mapped) : raise
+      end
+
+      # Refuses a :confirm action the app's Configuration#confirm hook does
+      # not approve, when Configuration#enforce_confirm is on and an agent
+      # calls. An action approved once in this invocation is not asked again.
+      # Caller#confirm! calls it for an action named inside another.
+      #
+      # @param action [Class]
+      # @return [void]
+      # @raise [Error::ConfirmationRequired, Error]
+      def confirm!(action)
+        return unless Actions.config.enforce_confirm && @caller.agent? && action.connections == :confirm
+        @confirmed ||= Set.new
+        return if @confirmed.include?(action)
+        approved = Actions.config.confirm.call(self, action)
+        raise Error::ConfirmationRequired.new(details: {"action" => action.action_name}) unless approved == true
+        @confirmed << action
       end
 
       private
@@ -95,6 +116,8 @@ module Saltbox
       # - the token lacks the scope: insufficient_scope;
       # - the person's role is not allowed the action, or they lack a permission
       #   it declares (unless Configuration#enforce_permissions is off): forbidden.
+      # After the input is checked, #confirm! refuses a :confirm action the app
+      # has not approved: confirmation_required.
       def refuse!
         raise Error::NotFound unless @action.enabled_for?(@caller)
         raise Error::HumanRequired unless @caller.agent_allowed?(@action)

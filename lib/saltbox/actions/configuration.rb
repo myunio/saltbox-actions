@@ -45,6 +45,10 @@ module Saltbox
       # @return [Boolean] whether Invocation refuses a person who lacks an action's
       #   declared permissions; when false they only decide the actions list
       attr_accessor :enforce_permissions
+      # @return [Boolean] whether Invocation refuses an agent a :confirm action
+      #   unless the #confirm hook approves it; when false, agents on the API,
+      #   MCP and a browser page run :confirm actions with nothing checked
+      attr_accessor :enforce_confirm
       # @return [Boolean] whether every file under actions_path is an action ending _action.rb;
       #   when false, the actions are the base class's subclasses there, beside other files
       attr_accessor :every_file_an_action
@@ -67,6 +71,7 @@ module Saltbox
         @max_array_items = 100
         @default_connections = nil
         @enforce_permissions = true
+        @enforce_confirm = false
         @every_file_an_action = true
         @error_format = :code
         @result_format = :body
@@ -75,6 +80,7 @@ module Saltbox
         @around_run = ->(_invocation, run) { run.call }
         @on_changes = ->(_changes, _invocation) {}
         @after_change = ->(_invocation, _result) {}
+        @confirm = ->(_invocation, _action) { false }
         @on_access_refused = ->(_caller, _action) { Error::InsufficientScope.new }
         @feature_enabled = ->(_key, _caller) { true }
         @validate_feature = ->(_key) {}
@@ -135,6 +141,19 @@ module Saltbox
       # @yieldparam action [Class]
       # @yieldreturn [Error]
       def on_access_refused(&block) = block ? @on_access_refused = block : @on_access_refused
+
+      # Approves a :confirm action for an agent, when #enforce_confirm is on:
+      # the place to ask the person through the app's own channel. Return
+      # true to run it; anything else refuses with confirmation_required.
+      # Raise an Error to refuse in your own words. Called after every other
+      # check and the input's, outside the change's transaction; called from
+      # Caller#confirm! inside it.
+      #
+      # @yieldparam invocation [Invocation] the call: its action, caller and arguments
+      # @yieldparam action [Class] the :confirm action to approve; the
+      #   invocation's own, or the one Caller#confirm! names
+      # @yieldreturn [Boolean]
+      def confirm(&block) = block ? @confirm = block : @confirm
 
       # Whether a feature flag an action declares is on for this caller.
       #
