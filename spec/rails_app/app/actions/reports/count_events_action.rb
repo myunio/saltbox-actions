@@ -13,7 +13,8 @@ module Reports
     permission "events.view", any_of("events.manage", "events.delete")
     argument :status, :string, enum: %w[draft published cancelled], description: "Only events with this status"
     argument :page, :integer, minimum: 1, description: "Page number, from 1"
-    cli "events count", aliases: ["events tally"], args: %w[status], columns: %w[count]
+    cli "events count", aliases: ["events tally"], args: %w[status]
+    summary :count
     returns({type: "object", properties: {count: {type: "integer"}}, required: ["count"]})
 
     def perform
