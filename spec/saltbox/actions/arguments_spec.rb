@@ -1,5 +1,5 @@
 RSpec.describe Saltbox::Actions::Arguments do
-  let(:checker) { described_class.for(Event::CreateAction) }
+  let(:checker) { described_class.for(Events::CreateAction) }
 
   it "refuses an argument the action does not take, naming it" do
     expect { checker.validate!(title: "AGM", colour: "red") }
@@ -20,8 +20,8 @@ RSpec.describe Saltbox::Actions::Arguments do
   end
 
   it "tells the developer to declare an id on an action that takes none" do
-    expect { described_class.for(Event::ListAction).validate!(id: "1") }
-      .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors["id"]).to eq(["list_events takes no id; declare argument :id"]) }
+    expect { described_class.for(Events::ListAction).validate!(id: "1") }
+      .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors["id"]).to eq(["list_events takes no id; declare attribute :id"]) }
   end
 
   it "fills in a declared default for an argument left out or sent as null" do

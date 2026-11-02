@@ -2,7 +2,8 @@ module Saltbox
   module Actions
     # Gives actions the same `render` and `head` methods a Rails controller
     # has. `render :show` uses the model's view folder: events/show for Event,
-    # event/types/show for Event::Type. A template anywhere else is named by
+    # event/types/show for Event::Type. A member action's record is already
+    # its view's instance variable (@event; see Base#member_record). A template anywhere else is named by
     # its full path. Instance variables set in #perform, and any locals, reach
     # the template just as they do from a controller. Views are rendered with
     # the configured controller's renderer (Configuration#renderer), the Rails
@@ -17,9 +18,9 @@ module Saltbox
     # always hands over its records, so nothing reaches an agent around the
     # summary.
     module Rendering
-      # Instance variables the base class and its adapters set for themselves;
-      # views never see them. Any starting @_ are left out too.
-      PROTECTED_IVARS = %i[@actor @params @pundit].freeze
+      # Instance variables the base class, Active Model and the adapters set
+      # for themselves; views never see them. Any starting @_ are left out too.
+      PROTECTED_IVARS = %i[@actor @params @pundit @attributes @errors @validation_context @context_for_validation].freeze
       # Tells render json: false or json: nil from no json: at all.
       NO_JSON = Object.new.freeze
       # Tells render collection: nil from no collection: at all.

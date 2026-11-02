@@ -3,7 +3,7 @@ require "action_policy"
 module Saltbox
   module Actions
     module Authorization
-      # Authorizes actions with ActionPolicy. Event::UpdateAction asks
+      # Authorizes actions with ActionPolicy. Events::UpdateAction asks
       # EventPolicy's update? rule (aliases and default rules apply), and
       # #perform must call authorize and policy_scope (authorized_scope).
       # The policy's authorization context is the caller's account as
@@ -11,21 +11,9 @@ module Saltbox
       #
       # ActionPolicy has no permitted_attributes. A policy that defines one,
       # returning the field names the person may set, gives create and update
-      # actions their fields; otherwise they take only declared arguments.
+      # actions their fields; otherwise an action names them with `accepts`.
       module ActionPolicy
         extend ActiveSupport::Concern
-
-        # ActionPolicy's class-level authorize declares a context key; an
-        # action's declares its rule. With through:, it is ActionPolicy's.
-        module RuleDeclaration
-          # @param rule [Symbol] the policy rule, or with through: a context key
-          # @param through [Symbol, nil] the method giving that context value
-          # @return [Symbol]
-          def authorize(rule, through: nil, **)
-            return super if through
-            @declared_query = rule
-          end
-        end
 
         # Included after ActionPolicy's own modules, so it wins over them.
         module Namespace
@@ -38,7 +26,6 @@ module Saltbox
           include ::ActionPolicy::Behaviour
           include Namespace
           include Policies
-          extend RuleDeclaration
 
           authorize :user, through: :account
         end
@@ -79,6 +66,9 @@ module Saltbox
           # @return [String]
           def policy_label = "ActionPolicy"
 
+          # @return [Boolean] whether the model's policy defines permitted_attributes
+          def supplies_fields? = !!policy_class&.method_defined?(:permitted_attributes)
+
           # @param principal [Object]
           # @param record [ActiveRecord::Base]
           # @return [Array<String>]
@@ -92,8 +82,7 @@ module Saltbox
         end
 
         # ActionPolicy's authorize!. With no rule given, it asks the action's
-        # own: the one declared with the class-level `authorize`, otherwise
-        # the one for its verb.
+        # own: the one declared with `policy_rule`, otherwise the one for its verb.
         #
         # @param record [Object]
         # @param rule [Symbol, nil]

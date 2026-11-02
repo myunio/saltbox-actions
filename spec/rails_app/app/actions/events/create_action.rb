@@ -1,5 +1,4 @@
-class Event::CreateAction < ApplicationAction
-  connections :allowed
+class Events::CreateAction < ApplicationAction
   summary :id, :title, :starts_on
 
   def perform

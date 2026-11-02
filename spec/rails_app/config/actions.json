@@ -85,17 +85,17 @@
       "properties": {
         "status": {
           "type": "string",
-          "description": "Only events with this status",
           "enum": [
             "draft",
             "published",
             "cancelled"
-          ]
+          ],
+          "description": "Only events with this status"
         },
         "page": {
           "type": "integer",
-          "description": "Page number, from 1",
-          "minimum": 1
+          "minimum": 1,
+          "description": "Page number, from 1"
         }
       },
       "required": [],
@@ -180,7 +180,8 @@
             "draft",
             "published",
             "cancelled"
-          ]
+          ],
+          "description": "Draft, published or cancelled."
         },
         "parent": {
           "type": [
@@ -208,7 +209,7 @@
     "description": "Removes an event for good.",
     "area": "events",
     "kind": "destructive",
-    "idempotent": false,
+    "idempotent": true,
     "scope": "api:write",
     "connections": "confirm",
     "mcp_core": false,
@@ -306,6 +307,12 @@
           "type": "integer",
           "minimum": 1,
           "default": 1
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 25
         }
       },
       "required": [],
@@ -365,6 +372,58 @@
       "required": [
         "data"
       ]
+    }
+  },
+  {
+    "name": "postpone_event",
+    "title": "Postpone event",
+    "description": "Use this when the person wants an event moved to a later day. Returns the event.",
+    "area": "events",
+    "kind": "change",
+    "idempotent": true,
+    "scope": "api:write",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "postpone"
+      ],
+      "args": [
+        "id"
+      ]
+    },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "The record's id."
+        },
+        "starts_on": {
+          "type": "string",
+          "format": "date",
+          "description": "The new first day"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "id",
+        "starts_on"
+      ],
+      "additionalProperties": false
     }
   },
   {
@@ -488,7 +547,8 @@
         },
         "title": {
           "type": "string",
-          "maxLength": 120
+          "maxLength": 120,
+          "description": "The event's name."
         },
         "starts_on": {
           "type": [
@@ -527,7 +587,8 @@
             "draft",
             "published",
             "cancelled"
-          ]
+          ],
+          "description": "Draft, published or cancelled."
         },
         "parent": {
           "type": [

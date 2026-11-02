@@ -12,7 +12,7 @@ RSpec.describe "Booting without a database" do
   it "boots with eager loading on, running the boot checks without touching the database" do
     output, status = boot
     expect(status).to be_success, output
-    expect(output).to include("Booted with 10 actions")
+    expect(output).to include("Booted with 11 actions")
   end
 
   it "says rails actions:check needs the database when it cannot connect" do
@@ -24,7 +24,7 @@ RSpec.describe "Booting without a database" do
   it "says to prepare a database that has no tables yet, instead of blaming the policy" do
     output, status = Dir.mktmpdir { |folder| boot("check", database: "#{folder}/empty.sqlite3") }
     expect(status).not_to be_success
-    expect(output).to include("Event::CreateAction: Event's table events does not exist: run bin/rails db:prepare first")
+    expect(output).to include("Events::CreateAction: Event's table events does not exist: run bin/rails db:prepare first")
     expect(output).not_to include("schema_principal")
   end
 end

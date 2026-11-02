@@ -1,17 +1,10 @@
 class <%= action_class_name %> < <%= base_class %>
-<% unless table_verb? -%>
-  kind :<%= kind %>
-<% if takes_id? -%>
-  argument :id
+<% declarations.each do |declaration| -%>
+  <%= declaration %>
 <% end -%>
-<% end -%>
-<% if connections -%>
-  connections :<%= connections %>
-<% end -%>
-<% if words.size > 1 || !table_verb? -%>
-  authorize :<%= verb %>?
-<% end -%>
+<% if declarations.any? -%>
 
+<% end -%>
   def perform
 <% case verb -%>
 <% when "list" -%>
@@ -22,25 +15,18 @@ class <%= action_class_name %> < <%= base_class %>
     <%= records %> = policy_scope(<%= model_name %>)
     render :index
 <% when "create" -%>
-    <%= record %> = policy_scope(<%= model_name %>).new(permitted_attributes(<%= model_name %>))
-    authorize <%= record %>
-    <%= record %>.save!
+    @<%= record %> = policy_scope(<%= model_name %>).new(permitted_attributes(<%= model_name %>))
+    authorize @<%= record %>
+    @<%= record %>.save!
     render :show, status: :created
 <% when "update" -%>
-    <%= record %> = policy_scope(<%= model_name %>).find(params[:id])
-    authorize <%= record %>
     <%= record %>.update!(permitted_attributes(<%= record %>))
     render :show
 <% when "delete" -%>
-    <%= record %> = policy_scope(<%= model_name %>).find(params[:id])
-    authorize <%= record %>
     <%= record %>.destroy!
     head :no_content
 <% else -%>
-<% if takes_id? -%>
-    <%= record %> = policy_scope(<%= model_name %>).find(params[:id])
-    authorize <%= record %>
-<% else -%>
+<% unless takes_id? -%>
     authorize <%= model_name %>
     skip_policy_scope
 <% end -%>

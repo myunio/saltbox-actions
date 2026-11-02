@@ -12,6 +12,7 @@ class EventPolicy
   def create? = user.can?("events.manage")
   def update? = create?
   def cancel? = create?
+  def postpone? = create?
   def destroy? = user.can?("events.delete")
   def view_notes? = user.can?("events.notes")
 

@@ -168,17 +168,21 @@ module Saltbox
           return ["#{verb} is spelled #{spelling} in actions: rename it #{renamed}"]
         end
         if action.table_verb?
-          problems << "#{verb} is a verb in the table, so its kind is #{Naming::VERBS.dig(verb, :kind)}: remove kind" if action.declared_kind
-          if action.arguments.key?("id")
-            problems << (Naming::VERBS.dig(verb, :id) ? "#{verb} already takes an id: remove argument :id" : "#{verb} takes no id: name the record in another argument")
+          rule = action.verb_rule
+          problems << "#{verb} is a verb in the table, so its kind is #{rule[:kind]}: remove kind" if action.declared_kind
+          if action.declares_id?
+            problems << (rule[:member] ? "#{verb} already takes an id: remove attribute :id" : "#{verb} takes no id: name the record in another attribute")
           end
         elsif action.declared_kind.nil?
-          problems << "#{verb} is not a verb in the table: declare kind :read, :change or :destructive"
+          problems << "#{verb} is not a verb in the table: declare kind :read, :change or :destructive, or add it with define_verb"
         end
         problems.concat(connection_problems(action))
-        # Its name comes from its model, so this one is a boot check too.
+        # Its name comes from its model, so these are boot checks too.
+        singular = singular_namespace(action)
+        return problems << singular if singular
         unmodelled = not_a_model(action)
         problems << unmodelled if unmodelled
+        problems.concat(input_problems(action)) unless unmodelled
         return problems if declared_only
         problems.concat(model_problems(action)) unless unmodelled
         problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
@@ -187,9 +191,34 @@ module Saltbox
       # @param action [Class]
       # @return [Array<String>] what is wrong with its connections declaration
       def self.connection_problems(action)
-        return ["declare connections :allowed, :confirm or :never"] unless action.connections
         return ["a destructive action is never connections :allowed: use :confirm, or :never"] if action.kind == :destructive && action.connections == :allowed
         []
+      end
+
+      # Actions are named like controllers, in their resource's plural
+      # namespace, not inside the model's own constant.
+      #
+      # @param action [Class]
+      # @return [String, nil] the fix, for an action inside a model's namespace
+      def self.singular_namespace(action)
+        parent = action.name.deconstantize.presence&.safe_constantize
+        return unless parent.is_a?(Class) && parent < ActiveRecord::Base
+        plural = "#{parent.name.pluralize}::#{action.name.demodulize}"
+        "#{parent.name} is a model: name its actions like controllers, in the plural namespace: #{plural} in #{plural.underscore}.rb"
+      end
+
+      # @param action [Class]
+      # @return [Array<String>] what is wrong with the action's attributes and the fields it accepts
+      def self.input_problems(action)
+        problems = []
+        reader = action.record_name
+        if reader && action.declared_attributes.key?(reader)
+          problems << "attribute #{reader} has the name of the reader for the #{action.model.model_name.human.downcase} it works on: rename the attribute"
+        end
+        if action.accepted_fields.any? && !action.writes_fields?
+          problems << "accepts names fields of the action's model, and it has none: declare model, or remove accepts"
+        end
+        problems
       end
 
       # An action with a declared name answers to no verb table: it declares
@@ -202,6 +231,7 @@ module Saltbox
         problems = []
         problems << "declare kind :read, :change or :destructive" unless action.declared_kind
         problems.concat(connection_problems(action))
+        problems.concat(input_problems(action))
         return problems if declared_only
         problems.concat(model_problems(action)) if action.model
         problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
@@ -212,7 +242,7 @@ module Saltbox
       def self.not_a_model(action)
         model = action.model
         return if (action.name.deconstantize.empty? && model.nil?) || (model.is_a?(Class) && model < ActiveRecord::Base)
-        "#{action.name.deconstantize} is not a model: declare model, or move the action"
+        "#{action.name.deconstantize} names no model (#{action.name.deconstantize.classify} is not one): declare model, or move the action"
       end
 
       # @param action [Class]
@@ -221,7 +251,7 @@ module Saltbox
       def self.model_problems(action)
         return [] if action.name.deconstantize.empty? && action.model.nil?
         model = action.model
-        return ["#{action.name.deconstantize} is not a model: declare model, or move the action"] unless model.is_a?(Class) && model < ActiveRecord::Base
+        return ["#{action.name.deconstantize} names no model (#{action.name.deconstantize.classify} is not one): declare model, or move the action"] unless model.is_a?(Class) && model < ActiveRecord::Base
         problems = []
         problems << "no area maps #{model.name}: add it to the app's areas" if Actions.config.require_area && !action.area
         authorization = action.authorization_problems

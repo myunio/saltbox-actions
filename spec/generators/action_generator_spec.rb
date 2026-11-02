@@ -38,93 +38,105 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     stub_const("EventPolicy", Class.new(EventPolicy) { def archive? = create? })
   end
 
-  it "writes an update action asking before agents change, its locale entry with the policy's fields, and its spec" do
-    generate("Event::Update")
-    action = destination.join("app/actions/event/update_action.rb").read
-    expect(action).to include("class Event::UpdateAction < ApplicationAction", "connections :confirm", "@event.update!(permitted_attributes(@event))")
-    expect(destination.join("config/locales/actions.en.yml").read).to include("    event/update:\n      description:\n      fields:\n        title:\n")
-    spec = destination.join("spec/actions/event/update_action_spec.rb").read
-    expect(spec).to include("RSpec.describe Event::UpdateAction", "let(:arguments) { {id: event.id} }",
+  it "writes an update action that reads its member record, and its spec, from a plural or a singular resource" do
+    output = generate("Events::Update")
+    action = destination.join("app/actions/events/update_action.rb").read
+    expect(action).to eq(<<~RUBY)
+      class Events::UpdateAction < ApplicationAction
+        def perform
+          event.update!(permitted_attributes(event))
+          render :show
+        end
+      end
+    RUBY
+    spec = destination.join("spec/actions/events/update_action_spec.rb").read
+    expect(spec).to include("RSpec.describe Events::UpdateAction", "let(:arguments) { {id: event.id} }",
       %(it_behaves_like "refuses callers the action does not allow"), %(it_behaves_like "hides records the caller cannot see"))
     expect(spec).not_to include("unpermitted_account) {", "create(")
+    expect(output).to include("write its description in the class", "Describe starts_on, capacity", "under actions.events.fields")
+    generate("Event::Update", "--force")
+    expect(destination.join("app/actions/events/update_action.rb").read).to eq(action)
   end
 
-  it "lets agents run a read, and leaves connections to the app's default_connections when it sets one" do
-    expect(generate("Event::Show").then { destination.join("app/actions/event/show_action.rb").read }).to include("connections :allowed")
-    with_settings(default_connections: :allowed) do
-      generate("Event::Update", "--force")
-      expect(destination.join("app/actions/event/update_action.rb").read).not_to include("connections")
-      generate("Event::Delete", "--force")
-      expect(destination.join("app/actions/event/delete_action.rb").read).to include("connections :confirm")
-    end
+  it "declares no connections, leaving them to the verb" do
+    generate("Events::Delete")
+    action = destination.join("app/actions/events/delete_action.rb").read
+    expect(action).to include("event.destroy!", "head :no_content")
+    expect(action).not_to include("connections")
   end
 
   it "lists through the policy scope alone" do
-    generate("Event::List")
-    action = destination.join("app/actions/event/list_action.rb").read
+    generate("Events::List")
+    action = destination.join("app/actions/events/list_action.rb").read
     expect(action).to include("@events = policy_scope(Event)")
     expect(action).not_to include("authorize")
   end
 
   it "declares kind, id and the policy rule for a verb outside the table, and gives its spec the id" do
     with_archive_rule
-    generate("Event::Archive", "--kind", "destructive")
-    action = destination.join("app/actions/event/archive_action.rb").read
-    expect(action).to include("kind :destructive", "argument :id", "connections :confirm", "authorize :archive?")
-    expect(destination.join("spec/actions/event/archive_action_spec.rb").read).to include("let(:arguments) { {id: event.id} }")
+    generate("Events::Archive", "--kind", "destructive")
+    action = destination.join("app/actions/events/archive_action.rb").read
+    expect(action).to include("kind :destructive", "attribute :id", "policy_rule :archive?", "render :show")
+    expect(destination.join("spec/actions/events/archive_action_spec.rb").read).to include("let(:arguments) { {id: event.id} }")
+  end
+
+  it "knows a verb the app adds with define_verb" do
+    stub_const("EventPolicy", Class.new(EventPolicy) { def postpone? = create? })
+    generate("Events::Postpone")
+    expect(destination.join("app/actions/events/postpone_action.rb").read).not_to include("kind", "attribute :id", "policy_rule")
   end
 
   it "points a list action at its model's summary only when the model has none" do
-    expect(generate("Event::List")).not_to include("summary Event")
+    expect(generate("Events::List")).not_to include("summary Event")
     allow(ApplicationAction).to receive(:model_summaries).and_return({})
-    expect(generate("Event::List", "--force")).to include("Agents get each event's full view", "`summary Event, :id, ...` in ApplicationAction")
+    expect(generate("Events::List", "--force")).to include("Agents get each event's full view", "`summary Event, :id, ...` in ApplicationAction")
   end
 
   it "refuses a Rails verb, an unknown verb without a kind, and a name that is not a model" do
-    expect { described_class.new(["Event::Destroy"]).check }.to raise_error(Thor::Error, "destroy is spelled delete in actions: bin/rails g action Event::Delete")
-    expect { described_class.new(["Event::Archive"]).check }.to raise_error(Thor::Error, /pass --kind/)
-    expect { described_class.new(["Reports::Show"]).check }.to raise_error(Thor::Error, /Reports is not a model/)
+    expect { described_class.new(["Events::Destroy"]).check }.to raise_error(Thor::Error, "destroy is spelled delete in actions: bin/rails g action Events::Delete")
+    expect { described_class.new(["Events::Archive"]).check }.to raise_error(Thor::Error, /pass --kind .* or add it with define_verb/)
+    expect { described_class.new(["Reports::Show"]).check }.to raise_error(Thor::Error, /Reports names no model \(Report is not one\)/)
   end
 
   it "writes nothing when the action would fail the boot check, and prints the fix, not the next steps" do
-    output = generate_failing("Event::Archive", "--kind", "change")
-    expect(output).to include("Event::ArchiveAction would not pass rails actions:check, so nothing was written",
-      "EventPolicy#archive? is missing: add it, or authorize another query")
-    expect(output).not_to include("Write the action's description")
+    output = generate_failing("Events::Archive", "--kind", "change")
+    expect(output).to include("Events::ArchiveAction would not pass rails actions:check, so nothing was written",
+      "EventPolicy#archive? is missing: add it, or name another with policy_rule")
+    expect(output).not_to include("write its description")
     expect(Dir.children(destination)).to be_empty
   end
 
   it "puts back every file it wrote or changed when the catalogue step fails" do
-    locale = destination.join("config/locales/actions.en.yml")
     catalogue = destination.join("config/actions.json")
-    FileUtils.mkdir_p(locale.dirname)
-    locale.write("en:\n  actions:\n    event/show:\n      description: Shows one.\n")
+    FileUtils.mkdir_p(catalogue.dirname)
     catalogue.write("[]\n")
-    generator = described_class.new(["Event::Update"], {"test_framework" => "rspec"}, destination_root: destination.to_s)
+    generator = described_class.new(["Events::Update"], {"test_framework" => "rspec"}, destination_root: destination.to_s)
     allow(generator).to receive(:rails_command).with("actions:catalogue").and_return(false)
     $stdout = StringIO.new
     expect { generator.invoke_all }.to raise_error(Thor::Error, /actions:catalogue failed, so nothing was written/)
-    expect(destination.join("app/actions/event/update_action.rb")).not_to exist
-    expect(destination.join("spec/actions/event/update_action_spec.rb")).not_to exist
-    expect(locale.read).to eq("en:\n  actions:\n    event/show:\n      description: Shows one.\n")
+    expect(destination.join("app/actions/events/update_action.rb")).not_to exist
+    expect(destination.join("spec/actions/events/update_action_spec.rb")).not_to exist
     expect(catalogue.read).to eq("[]\n")
   ensure
     $stdout = STDOUT
   end
 
-  it "asks for no policy when the base class has no authorization adapter" do
+  it "asks for no policy when the base class has no authorization adapter, and lists an update's fields with accepts" do
     stub_const("OpenAction", Class.new(Saltbox::Actions::Base))
     with_settings(base_class: "OpenAction") do
-      generate("Event::Archive", "--kind", "change")
-      expect(destination.join("app/actions/event/archive_action.rb").read).to include("class Event::ArchiveAction < OpenAction")
+      generate("Events::Archive", "--kind", "change")
+      expect(destination.join("app/actions/events/archive_action.rb").read).to include("class Events::ArchiveAction < OpenAction")
+      generate("Events::Update")
+      expect(destination.join("app/actions/events/update_action.rb").read)
+        .to include("accepts :org_id, :title, :starts_on, :capacity, :price, :featured, :doors_open_at, :status, :notes, :parent")
     end
   end
 
   it "writes actions that pass the boot checks" do
     with_archive_rule
-    generate("Event::Archive", "--kind", "change")
-    source = destination.join("app/actions/event/archive_action.rb").read
-    klass = Class.new(ApplicationAction) { define_singleton_method(:name) { "Event::ArchiveAction" } }
+    generate("Events::Archive", "--kind", "change")
+    source = destination.join("app/actions/events/archive_action.rb").read
+    klass = Class.new(ApplicationAction) { define_singleton_method(:name) { "Events::ArchiveAction" } }
     klass.class_eval(source.lines[1..-2].join)
     expect(Saltbox::Actions::Registry.problems(klass)).to eq([])
   end

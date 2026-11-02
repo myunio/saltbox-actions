@@ -26,7 +26,7 @@ RSpec.describe "Schemas for the caller, on every surface", type: :request do
   after { Saltbox::Actions::Registry.reset! }
 
   it "uses neither the principal nor a record outside the caller's set-up" do
-    expect { Event::CreateAction.input_schema }.to raise_error("the schema principal was used at run time")
+    expect { Events::CreateAction.input_schema }.to raise_error("the schema principal was used at run time")
     expect { Event.new }.to raise_error("no tenant set")
   end
 

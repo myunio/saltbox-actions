@@ -1,4 +1,4 @@
-RSpec.describe Event::CancelAction do
+RSpec.describe Events::CancelAction do
   let(:permitted_account) { manager }
   let(:unpermitted_account) { reader }
   let(:event) { Event.create!(org_id: 1, title: "AGM") }

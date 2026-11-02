@@ -22,7 +22,7 @@ Here is an action that renames an event in a made-up events app:
 
 ```ruby
 # app/actions/event/update_action.rb
-class Event::UpdateAction < ApplicationAction
+class Events::UpdateAction < ApplicationAction
   connections :allowed   # agents and scripts may run it
   idempotent
 
@@ -35,7 +35,7 @@ class Event::UpdateAction < ApplicationAction
 end
 ```
 
-The class name gives most of the settings. `Event::UpdateAction` works on
+The class name gives most of the settings. `Events::UpdateAction` works on
 `Event`, asks the policy's `update?` rule, and is named `update_event`. Its
 input is an `id` plus the fields your policy permits, typed from the model's
 columns.
@@ -76,7 +76,7 @@ And test it, as an agent would call it:
 
 ```ruby
 # spec/actions/event/update_action_spec.rb
-RSpec.describe Event::UpdateAction do
+RSpec.describe Events::UpdateAction do
   let(:manager) { create(:user, :manager) }
   let(:event) { create(:event, title: "AGM") }
 
@@ -156,7 +156,7 @@ asked before `perform` runs.
 
 ```ruby
 # app/actions/event/list_action.rb
-class Event::ListAction < ApplicationAction
+class Events::ListAction < ApplicationAction
   connections :allowed
   argument :page, :integer, minimum: 1, default: 1
 
@@ -212,7 +212,7 @@ The first word after the model is the **verb**. These verbs are built in:
 | `publish` | change | yes | `publish?` |
 | `delete` | destructive | yes | `destroy?` |
 
-So `Event::ListAction` is named `list_events`, and `Event::ShowNotesAction`
+So `Events::ListAction` is named `list_events`, and `Events::ShowNotesAction`
 is named `show_event_notes`. Rails spellings such as `DestroyAction` or
 `IndexAction` stop the boot, because the names are public: agents and
 scripts call them.
@@ -224,7 +224,7 @@ A verb outside the table, or a name with more than a verb, declares what it
 needs:
 
 ```ruby
-class Event::ArchiveAction < ApplicationAction
+class Events::ArchiveAction < ApplicationAction
   kind :change
   argument :id
   authorize :archive?
@@ -296,7 +296,7 @@ Some actions can reach what a stricter action guards: a create that can also
 publish, say. Check the stricter rule inside `perform`:
 
 ```ruby
-actor.confirm!(Event::PublishAction) if params[:status] == "published"
+actor.confirm!(Events::PublishAction) if params[:status] == "published"
 ```
 
 `confirm!` refuses with `human_required` when that action's `connections`
@@ -434,7 +434,7 @@ agent inside another. The `meta:` beside it is your own plain data, such as
 paging: hashes, arrays, text, numbers, true or false, dates, times and nil.
 Anything else in it, such as a record or a set of them, stops the call too.
 
-`Event::ListAction` needs no change. It sets `@events` and calls
+`Events::ListAction` needs no change. It sets `@events` and calls
 `render :index, meta: {page: 2}`. Screens get views. Every other caller (the
 API, MCP, WebMCP and the assistant) gets summaries:
 
@@ -492,7 +492,7 @@ Its actions then show up in the actions list, the API and MCP like the
 app's own, in development and production alike.
 
 `namespace:` is the word in their public names, in place of the engine's
-module. `Billing::Invoice::ListAction` is named `list_billing_invoices`,
+module. `Billing::Invoices::ListAction` is named `list_billing_invoices`,
 with the CLI command `billing-invoices list`. Pick a different word, such
 as `namespace: "pay"`, and the names change without renaming any class.
 Without `namespace:`, names come from the class, and the CLI command
@@ -636,7 +636,7 @@ What it does not do:
 ### Authorization
 
 `Saltbox::Actions::Authorization::Pundit` asks your Pundit policies.
-`Event::UpdateAction` asks `EventPolicy#update?`, and its input takes the
+`Events::UpdateAction` asks `EventPolicy#update?`, and its input takes the
 fields from the policy's `permitted_attributes`.
 
 `Saltbox::Actions::Authorization::ActionPolicy` does the same with
@@ -707,6 +707,7 @@ module ApplicationAction::ModelAuthorization
 
   class_methods do
     def permitted?(user) = user.present?
+    def supplies_fields? = true
     def permitted_attribute_names_for(user, record) = (record.is_a?(Class) ? record : record.class).writable_attributes(user)
     def authorization_errors = [NotAllowed]
   end
@@ -836,7 +837,7 @@ end
 everyone who can sign in may run the action.
 
 ```ruby
-RSpec.describe Event::UpdateAction do
+RSpec.describe Events::UpdateAction do
   let(:permitted_account) { create(:user, :manager) }
   let(:unpermitted_account) { create(:user) }
   let(:event) { create(:event) }
@@ -872,10 +873,10 @@ Include it in each action test and set `self.action_class`. Use your app's
 own fixtures or records for the person and event:
 
 ```ruby
-class Event::UpdateActionTest < ActiveSupport::TestCase
+class Events::UpdateActionTest < ActiveSupport::TestCase
   include Saltbox::Actions::TestHelper
 
-  self.action_class = Event::UpdateAction
+  self.action_class = Events::UpdateAction
 
   test "renames the event" do
     event = events(:agm)

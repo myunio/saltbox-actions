@@ -1,7 +1,6 @@
 class WhoamiAction < ApplicationAction
   kind :read
-  connections :allowed
-  mcp_core
+  featured
 
   def perform
     skip_authorization

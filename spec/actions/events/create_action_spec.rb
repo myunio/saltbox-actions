@@ -1,4 +1,4 @@
-RSpec.describe Event::CreateAction do
+RSpec.describe Events::CreateAction do
   let(:permitted_account) { manager }
   let(:unpermitted_account) { reader }
   let(:arguments) { {title: "Picnic", starts_on: "2026-07-01"} }

@@ -4,7 +4,7 @@ require "tmpdir"
 class ActionsTest < ActiveSupport::TestCase
   include Saltbox::Actions::TestHelper
 
-  self.action_class = Event::UpdateAction
+  self.action_class = Events::UpdateAction
 
   setup do
     @manager = Account.new(id: 1, permissions: %w[events.view events.manage events.delete])
@@ -53,7 +53,7 @@ class ActionsTest < ActiveSupport::TestCase
     self.class.action_class = nil
     assert_raises(ArgumentError) { run(as: as_screen(@manager)) }
   ensure
-    self.class.action_class = Event::UpdateAction
+    self.class.action_class = Events::UpdateAction
   end
 
   test "checks refusal codes without hiding unexpected errors" do
@@ -61,7 +61,7 @@ class ActionsTest < ActiveSupport::TestCase
     error = assert_refused(:forbidden) { run(arguments, as: as_screen(@reader)) }
     assert_equal "forbidden", error.code
     assert_refused(:insufficient_scope) { run(arguments, as: as_read_only(@manager)) }
-    assert_refused(:human_required) { run(arguments, as: as_mcp(@manager), action: Event::ShowNotesAction) }
+    assert_refused(:human_required) { run(arguments, as: as_mcp(@manager), action: Events::ShowNotesAction) }
     assert_raises(Minitest::Assertion) { assert_refused(:not_found) { raise Saltbox::Actions::Error::Forbidden } }
     assert_raises(Minitest::Assertion) { assert_refused { :success } }
     failure = assert_raises(Minitest::Assertion) { assert_refused { raise "bug" } }
@@ -74,12 +74,12 @@ class ActionsTest < ActiveSupport::TestCase
       assert_equal 200, result.status
       next if helper == :as_screen
       assert_refused(:human_required) do
-        run({id: @event.id.to_s}, as: public_send(helper, @manager), action: Event::ShowNotesAction)
+        run({id: @event.id.to_s}, as: public_send(helper, @manager), action: Events::ShowNotesAction)
       end
     end
-    assert_equal 200, run({id: @event.id.to_s}, as: as_read_only(@manager), action: Event::ShowAction).status
+    assert_equal 200, run({id: @event.id.to_s}, as: as_read_only(@manager), action: Events::ShowAction).status
     assert_refused(:human_required) do
-      run({id: @event.id.to_s}, as: as_webmcp(@manager), action: Event::DeleteAction)
+      run({id: @event.id.to_s}, as: as_webmcp(@manager), action: Events::DeleteAction)
     end
   end
 
@@ -110,8 +110,8 @@ class ActionsTest < ActiveSupport::TestCase
     assert_listed_for as_api(@manager)
     assert_raises(Minitest::Assertion) { assert_runnable_by as_read_only(@manager) }
     assert_raises(Minitest::Assertion) { assert_listed_for as_api(@reader) }
-    assert_listed_for as_mcp(@manager), action: Event::DeleteAction
-    assert_raises(Minitest::Assertion) { assert_runnable_by as_assistant(@manager), action: Event::DeleteAction }
+    assert_listed_for as_mcp(@manager), action: Events::DeleteAction
+    assert_raises(Minitest::Assertion) { assert_runnable_by as_assistant(@manager), action: Events::DeleteAction }
   end
 
   test "checks audit attribution and change announcements" do

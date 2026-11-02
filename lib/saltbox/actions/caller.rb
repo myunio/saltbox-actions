@@ -81,7 +81,7 @@ module Saltbox
       # publish.
       #
       # @example
-      #   actor.confirm!(Event::PublishAction) if params[:state] == "published"
+      #   actor.confirm!(Events::PublishAction) if params[:state] == "published"
       #
       # @param action [Class]
       # @return [void]

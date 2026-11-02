@@ -59,10 +59,10 @@ RSpec.describe "Changes and transactions" do
       after_create_commit { Event.create!(org_id: 1, title: "After commit") }
     })
     action = Class.new(ApplicationAction) do
-      def self.name = "Event::BookAction"
+      def self.name = "Events::BookAction"
       kind :change
       connections :allowed
-      authorize :update?
+      policy_rule :update?
 
       def perform
         authorize policy_scope(Event).first
@@ -95,7 +95,7 @@ RSpec.describe "Changes and transactions" do
         def self.name = "Entry::AddAction"
         kind :change
         connections :allowed
-        authorize :update?
+        policy_rule :update?
 
         def perform
           authorize Event.first
@@ -107,10 +107,10 @@ RSpec.describe "Changes and transactions" do
 
     it "does not undo a write to that database from an action whose model is in the first" do
       action = Class.new(ApplicationAction) do
-        def self.name = "Event::ArchiveAction"
+        def self.name = "Events::ArchiveAction"
         kind :change
         connections :allowed
-        authorize :update?
+        policy_rule :update?
 
         def perform
           event = policy_scope(Event).first

@@ -3,7 +3,7 @@ require "pundit"
 module Saltbox
   module Actions
     module Authorization
-      # Authorizes actions with Pundit. Event::UpdateAction asks
+      # Authorizes actions with Pundit. Events::UpdateAction asks
       # EventPolicy#update?, and #perform must call authorize and
       # policy_scope, as Pundit's verify_authorized and verify_policy_scoped
       # check after a controller action. The person is the caller's account
@@ -39,6 +39,9 @@ module Saltbox
           # @return [String]
           def policy_label = "Pundit"
 
+          # @return [Boolean] whether the model's policy defines permitted_attributes
+          def supplies_fields? = !!policy_class&.method_defined?(:permitted_attributes)
+
           # @param principal [Object]
           # @param record [ActiveRecord::Base]
           # @return [Array<String>]
@@ -55,8 +58,8 @@ module Saltbox
         def pundit_user = account
 
         # Pundit's authorize. With no rule given, it asks the action's own:
-        # the one declared with the class-level `authorize`, otherwise the
-        # one for its verb. A delete action asks destroy?.
+        # the one declared with `policy_rule`, otherwise the one for its verb.
+        # A delete action asks destroy?.
         def authorize(record, query = nil, policy_class: nil)
           super(record, query || self.class.policy_query, policy_class:)
         end

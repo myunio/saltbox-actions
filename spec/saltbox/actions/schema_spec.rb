@@ -1,6 +1,6 @@
 RSpec.describe Saltbox::Actions::Schema do
   it "takes a create's fields from the policy, typed from the columns, requiring those with no default" do
-    schema = Event::CreateAction.input_schema
+    schema = Events::CreateAction.input_schema
     expect(schema["properties"].keys).to eq(%w[title starts_on capacity price featured doors_open_at status parent notes])
     expect(schema["properties"]["title"]).to eq("type" => "string", "maxLength" => 120, "description" => "The event's name.")
     expect(schema["properties"]["starts_on"]).to eq("type" => %w[string null], "format" => "date")
@@ -12,13 +12,13 @@ RSpec.describe Saltbox::Actions::Schema do
   end
 
   it "builds the catalogue's schema, with no caller, for the schema principal" do
-    expect(Event::CreateAction.input_schema["properties"]).to have_key("notes")
-    expect(Event::UpdateAction.input_schema["required"]).to eq(%w[id])
+    expect(Events::CreateAction.input_schema["properties"]).to have_key("notes")
+    expect(Events::UpdateAction.input_schema["required"]).to eq(%w[id])
   end
 
   context "with a caller" do
     let(:note_keeper) { Account.new(id: 9, permissions: %w[events.view events.manage events.notes]) }
-    let(:fields) { ->(account) { Event::CreateAction.input_schema(as_screen(account))["properties"].keys } }
+    let(:fields) { ->(account) { Events::CreateAction.input_schema(as_screen(account))["properties"].keys } }
 
     it "lists the fields the policy permits that caller, never another caller's" do
       expect(fields.call(manager)).not_to include("notes")
@@ -30,7 +30,7 @@ RSpec.describe Saltbox::Actions::Schema do
 
     it "runs with a policy that needs a person, with no schema principal set" do
       allow(Saltbox::Actions.config).to receive(:schema_principal).and_return(nil)
-      expect { Event::CreateAction.input_schema }.to raise_error(NoMethodError)
+      expect { Events::CreateAction.input_schema }.to raise_error(NoMethodError)
       run = ->(account, arguments) { Saltbox::Actions::Invocation.call(name: "create_event", caller: as_screen(account), arguments:) }
       expect(run.call(note_keeper, {title: "AGM", notes: "Quorum is 12"}).status).to eq(201)
       expect(Event.last.notes).to eq("Quorum is 12")
@@ -47,19 +47,19 @@ RSpec.describe Saltbox::Actions::Schema do
       allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
       invocation = -> { Saltbox::Actions::Invocation.call(name: "create_event", caller: as_screen(manager), arguments: {title: "AGM", notes: "x", nope: 1}) }
       expect { invocation.call }.to raise_error(Saltbox::Actions::Error::Forbidden, "Not yours to change.")
-      expect(seen).to eq([[manager, Event::CreateAction, %w[notes]]])
+      expect(seen).to eq([[manager, Events::CreateAction, %w[notes]]])
     end
 
     it "answers a field the policy refuses for the record through on_forbidden_fields too" do
       event = Event.create!(org_id: 1, title: "AGM")
-      action = Class.new(Event::UpdateAction) do
-        def self.name = "Event::UpdateAction"
+      action = Class.new(Events::UpdateAction) do
+        def self.name = "Events::UpdateAction"
         private def permitted_attribute_names(record) = super - %w[capacity title]
       end
       refusal = ->(caller, action, fields) { Saltbox::Actions::Error::Forbidden.new("#{caller.account.id}/#{action.name}: #{fields.join(",")}") }
       allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
       run = -> { Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager), arguments: {id: event.id.to_s, title: "Picnic", capacity: 5, featured: true}) }
-      expect { run.call }.to raise_error(Saltbox::Actions::Error::Forbidden, "1/Event::UpdateAction: title,capacity")
+      expect { run.call }.to raise_error(Saltbox::Actions::Error::Forbidden, "1/Events::UpdateAction: title,capacity")
       expect(event.reload.title).to eq("AGM")
     end
 
@@ -70,20 +70,44 @@ RSpec.describe Saltbox::Actions::Schema do
     end
   end
 
-  it "types declared arguments, including lists of records capped at the configured size" do
+  it "types attributes, including lists of records capped at the configured size" do
     action = Class.new(ApplicationAction) do
-      def self.name = "Event::ImportAction"
+      def self.name = "Events::ImportAction"
       kind :change
-      connections :allowed
-      argument :rows, :array, of: {title: :string, capacity: :integer}
-      argument :amount, :decimal, nullable: true
-      argument :mode, :string, enum: %i[merge replace], required: true
+      attribute :rows, :array, of: {title: :string, capacity: :integer}
+      attribute :amount, :decimal, nullable: true
+      attribute :starts_at, :datetime
     end
     properties = action.input_schema["properties"]
     expect(properties["rows"]).to include("type" => "array", "maxItems" => 50)
     expect(properties["rows"]["items"]["properties"]["capacity"]).to eq("type" => %w[integer null])
     expect(properties["amount"]).to include("type" => %w[number string null])
+    expect(properties["starts_at"]).to eq("type" => "string", "format" => "date-time")
+    expect { Class.new(ApplicationAction) { attribute :page, :integer, minimum: 1 } }
+      .to raise_error(ArgumentError, "page takes no minimum: validations shape an attribute's schema")
+  end
+
+  it "shapes an attribute's schema with the validations that always run" do
+    action = Class.new(ApplicationAction) do
+      def self.name = "Events::ImportAction"
+      kind :change
+      attribute :mode, :string
+      attribute :note, :string
+      attribute :copies, :integer, default: 1
+      attribute :tags, :array
+      attribute :reason, :string
+      validates :mode, presence: true, inclusion: {in: %i[merge replace]}
+      validates :note, length: {in: 2..40}
+      validates :copies, numericality: {greater_than: 0, less_than_or_equal_to: 10}
+      validates :tags, length: {maximum: 3}
+      validates :reason, presence: true, if: -> { mode == "replace" }
+    end
+    properties = action.input_schema["properties"]
     expect(properties["mode"]).to eq("type" => "string", "enum" => %w[merge replace])
+    expect(properties["note"]).to eq("type" => "string", "minLength" => 2, "maxLength" => 40)
+    expect(properties["copies"]).to eq("type" => "integer", "exclusiveMinimum" => 0, "maximum" => 10, "default" => 1)
+    expect(properties["tags"]).to include("maxItems" => 3)
+    expect(properties["reason"]).to eq("type" => "string")
     expect(action.input_schema["required"]).to eq(%w[mode])
   end
 end

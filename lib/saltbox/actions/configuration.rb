@@ -42,9 +42,6 @@ module Saltbox
       attr_accessor :area_order
       # @return [Integer, #call] the most items an array argument takes
       attr_writer :max_array_items
-      # @return [Symbol, nil] the connections rule of an action that declares none;
-      #   nil makes every action declare one
-      attr_accessor :default_connections
       # @return [Boolean] whether Invocation refuses a person who lacks an action's
       #   declared permissions; when false they only decide the actions list
       attr_accessor :enforce_permissions
@@ -73,7 +70,6 @@ module Saltbox
         @require_area = false
         @area_order = []
         @max_array_items = 100
-        @default_connections = nil
         @enforce_permissions = true
         @enforce_confirm = false
         @every_file_an_action = true

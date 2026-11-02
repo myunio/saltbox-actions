@@ -5,10 +5,10 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
   # Updates the event, and adds a child inside a savepoint it rolls back.
   let(:half_undone) do
     Class.new(ApplicationAction) do
-      def self.name = "Event::SplitAction"
+      def self.name = "Events::SplitAction"
       kind :change
       connections :allowed
-      authorize :update?
+      policy_rule :update?
 
       def perform
         event = policy_scope(Event).first
@@ -54,10 +54,10 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
 
   it "notes nothing when the action fails" do
     failing = Class.new(ApplicationAction) do
-      def self.name = "Event::BreakAction"
+      def self.name = "Events::BreakAction"
       kind :change
       connections :allowed
-      authorize :update?
+      policy_rule :update?
 
       def perform
         event = policy_scope(Event).first

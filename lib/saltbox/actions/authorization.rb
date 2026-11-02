@@ -19,6 +19,9 @@ module Saltbox
     # and, on the class:
     # - permitted?(account): whether the person's role allows the action at all;
     # - authorization_problems: what rails actions:check reports, such as a missing policy;
+    # - supplies_fields?: whether the model's policy says which fields a person
+    #   may set; when it does, it is the one list of a create's or update's
+    #   fields, and an action may not also name them with `accepts`;
     # - permitted_attribute_names_for(principal, record), for the input schema;
     # - authorization_errors: the library's refusal, answered as forbidden.
     #
@@ -40,14 +43,17 @@ module Saltbox
             return [] unless model
             problems = []
             if declared_name && declared_query.nil?
-              return ["#{model.name} is its model: name the policy rule, authorize :show? or another"]
+              return ["#{model.name} is its model: name the policy rule, policy_rule :show? or another"]
             elsif more_than_verb? && declared_query.nil? && !declared_name
-              problems << "#{action_words.join(" ")} says more than #{verb}: name the policy query, authorize :#{verb}? or another"
+              problems << "#{action_words.join(" ")} says more than #{verb}: name the policy rule, policy_rule :#{verb}? or another"
             end
             if policy_class.nil?
               problems << "#{model.name} has no #{policy_label} policy: add #{model.name}Policy, or include another authorization adapter (see the README)"
             elsif !policy_rule?(policy_query)
-              problems << "#{policy_class}##{policy_query} is missing: add it, or authorize another query"
+              problems << "#{policy_class}##{policy_query} is missing: add it, or name another with policy_rule"
+            end
+            if accepted_fields.any? && supplies_fields?
+              problems << "#{policy_class}#permitted_attributes says which fields a person may set: remove accepts, so the policy is the one list"
             end
             problems
           end
@@ -64,6 +70,9 @@ module Saltbox
 
           # @return [Array<String>]
           def authorization_problems = []
+
+          # @return [Boolean] false: without an adapter, an action names its model fields with `accepts`
+          def supplies_fields? = false
 
           # @return [nil]
           def policy_class = nil

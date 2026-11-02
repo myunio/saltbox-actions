@@ -15,6 +15,7 @@ require "saltbox/actions/params"
 require "saltbox/actions/naming"
 require "saltbox/actions/summary"
 require "saltbox/actions/declarations"
+require "saltbox/actions/inputs"
 require "saltbox/actions/casting"
 require "saltbox/actions/schema"
 require "saltbox/actions/arguments"
@@ -45,14 +46,9 @@ module Saltbox
   #     include Saltbox::Actions::Authorization::Pundit
   #   end
   #
-  #   class Event::UpdateAction < ApplicationAction
-  #     connections :allowed
-  #     idempotent
-  #
+  #   class Events::UpdateAction < ApplicationAction
   #     def perform
-  #       @event = policy_scope(Event).find(params[:id])
-  #       authorize @event
-  #       @event.update!(permitted_attributes(@event))
+  #       event.update!(permitted_attributes(event))
   #       render :show
   #     end
   #   end
@@ -66,6 +62,7 @@ module Saltbox
     autoload :MCP, "saltbox/actions/mcp"
     autoload :RubyLLMTool, "saltbox/actions/ruby_llm"
     autoload :PaperTrail, "saltbox/actions/paper_trail"
+    autoload :InvocationJob, "saltbox/actions/invocation_job"
 
     class << self
       # @return [Configuration]

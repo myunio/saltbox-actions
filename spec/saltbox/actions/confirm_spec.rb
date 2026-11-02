@@ -34,7 +34,7 @@ RSpec.describe "Confirming a :confirm action" do
     approve { |invocation, action| seen = [invocation.caller.surface, invocation.arguments, action] and true }
     with_settings(enforce_confirm: true) { cancel.call(as_mcp(manager)) }
     expect(event.reload.status).to eq("cancelled")
-    expect(seen).to eq(["mcp", {"id" => event.id.to_s}, Event::CancelAction])
+    expect(seen).to eq(["mcp", {"id" => event.id.to_s}, Events::CancelAction])
   end
 
   it "refuses when the hook answers anything but true, and passes on an error it raises" do
@@ -52,7 +52,7 @@ RSpec.describe "Confirming a :confirm action" do
     other = Event.create!(org_id: 1, title: "Picnic")
     asked = []
     approve { |invocation, _action| asked << invocation.arguments["id"] and invocation.arguments["id"] == event.id.to_s }
-    invocation = Saltbox::Actions::Invocation.new(Event::CancelAction, as_mcp(manager))
+    invocation = Saltbox::Actions::Invocation.new(Events::CancelAction, as_mcp(manager))
     with_settings(enforce_confirm: true) do
       invocation.call({id: event.id.to_s})
       expect { invocation.call({id: other.id.to_s}) }.to be_refused.with(:confirmation_required)
@@ -64,7 +64,7 @@ RSpec.describe "Confirming a :confirm action" do
   it "asks again on a retry after an approved call fails" do
     answers = [true, false]
     approve { answers.shift }
-    invocation = Saltbox::Actions::Invocation.new(Event::CancelAction, as_mcp(manager))
+    invocation = Saltbox::Actions::Invocation.new(Events::CancelAction, as_mcp(manager))
     with_settings(enforce_confirm: true) do
       expect { invocation.call({id: "0"}) }.to be_not_found
       expect { invocation.call({id: event.id.to_s}) }.to be_refused.with(:confirmation_required)
@@ -94,19 +94,17 @@ RSpec.describe "Confirming a :confirm action" do
     # A change that can also cancel, which a :confirm action guards.
     let(:action) do
       Class.new(ApplicationAction) do
-        def self.name = "Event::RescheduleAction"
+        def self.name = "Events::RescheduleAction"
         kind :change
         connections :allowed
-        authorize :update?
-        argument :id
-        argument :cancel, :boolean
+        policy_rule :update?
+        attribute :id
+        attribute :cancel, :boolean
 
         def perform
-          @event = policy_scope(Event).find(params[:id])
-          authorize @event
-          @event.update!(title: "Moved")
-          actor.confirm!(Event::CancelAction) if params[:cancel]
-          @event.update!(status: params[:cancel] ? "cancelled" : "published")
+          event.update!(title: "Moved")
+          actor.confirm!(Events::CancelAction) if cancel
+          event.update!(status: cancel ? "cancelled" : "published")
           render :show
         end
       end
@@ -125,7 +123,7 @@ RSpec.describe "Confirming a :confirm action" do
         expect(event.reload).to have_attributes(title: "AGM", status: "draft")
         reschedule.call(as_mcp(manager), cancel: false)
         expect(event.reload.status).to eq("published")
-        approve { |_invocation, named| named == Event::CancelAction }
+        approve { |_invocation, named| named == Events::CancelAction }
         reschedule.call(as_mcp(manager))
       end
       expect(event.reload.status).to eq("cancelled")
@@ -136,7 +134,7 @@ RSpec.describe "Confirming a :confirm action" do
     end
 
     it "is for a running action only" do
-      expect { as_mcp(manager).confirm!(Event::CancelAction) }.to raise_error(ArgumentError, /inside a running action/)
+      expect { as_mcp(manager).confirm!(Events::CancelAction) }.to raise_error(ArgumentError, /inside a running action/)
     end
   end
 

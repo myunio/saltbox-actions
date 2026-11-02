@@ -1,12 +1,12 @@
 # A list action sends agents each record's summary in place of its view.
-# The dummy app's base class declares Event's summary; Event::CreateAction
+# The dummy app's base class declares Event's summary; Events::CreateAction
 # declares its own.
 RSpec.describe Saltbox::Actions::Summary do
   before do
     Event.create!(org_id: 1, title: "AGM", starts_on: "2026-07-01", status: "published", notes: "Bring the minutes")
   end
 
-  def list(base: ApplicationAction, name: "Event::ListAction", perform: nil, &block)
+  def list(base: ApplicationAction, name: "Events::ListAction", perform: nil, &block)
     perform ||= proc do
       authorize Event
       @events = policy_scope(Event).order(:id)
@@ -20,7 +20,7 @@ RSpec.describe Saltbox::Actions::Summary do
     end
   end
 
-  def list_events(caller, action: Event::ListAction) = Saltbox::Actions::Invocation.call(name: action, caller:).as_json
+  def list_events(caller, action: Events::ListAction) = Saltbox::Actions::Invocation.call(name: action, caller:).as_json
 
   it "sends an agent each record's summary, computed fields included, with the meta beside it" do
     expect(list_events(as_mcp(manager))).to eq(
@@ -36,12 +36,12 @@ RSpec.describe Saltbox::Actions::Summary do
   end
 
   it "matches the output schema the catalogue gives agents, in either result format" do
-    expect(Saltbox::Actions::Invocation.call(name: Event::ListAction, caller: as_mcp(manager))).to match_output_schema(Event::ListAction.summary_output_schema)
-    expect(Event::ListAction.definition["output_schema"]).to eq(Event::ListAction.summary_output_schema)
+    expect(Saltbox::Actions::Invocation.call(name: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
+    expect(Events::ListAction.definition["output_schema"]).to eq(Events::ListAction.summary_output_schema)
     with_settings(result_format: :envelope) do
-      expect(Saltbox::Actions::Invocation.call(name: Event::ListAction, caller: as_mcp(manager))).to match_output_schema(Event::ListAction.summary_output_schema)
+      expect(Saltbox::Actions::Invocation.call(name: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
     end
-    expect(Event::ListAction.summary_output_schema.dig("properties", "data", "properties", "events", "items", "properties"))
+    expect(Events::ListAction.summary_output_schema.dig("properties", "data", "properties", "events", "items", "properties"))
       .to eq("id" => {"type" => "integer"}, "title" => {"type" => "string"}, "starts_on" => {"type" => %w[string null], "format" => "date"},
         "status" => {"type" => %w[string number boolean null]})
   end
@@ -88,7 +88,7 @@ RSpec.describe Saltbox::Actions::Summary do
       render :index
     end)
     [no_records, nil_records].product([as_mcp(manager), as_screen(manager)]).each do |action, caller|
-      expect { list_events(caller, action:) }.to raise_error(ArgumentError, "Event::ListAction sends agents Event's summary: set @events to its records, or render collection:")
+      expect { list_events(caller, action:) }.to raise_error(ArgumentError, "Events::ListAction sends agents Event's summary: set @events to its records, or render collection:")
     end
   end
 
@@ -99,7 +99,7 @@ RSpec.describe Saltbox::Actions::Summary do
       render json: {data: {events: @events.as_json}}
     end)
     expect { list_events(as_mcp(manager), action: as_json) }
-      .to raise_error(ArgumentError, "Event::ListAction sends agents Event's summary: render a template with @events or collection:, not json:")
+      .to raise_error(ArgumentError, "Events::ListAction sends agents Event's summary: render a template with @events or collection:, not json:")
   end
 
   it "summarizes a renamed list action's records handed over with collection:" do
@@ -110,10 +110,10 @@ RSpec.describe Saltbox::Actions::Summary do
       action_name "upcoming_events"
       kind :read
       model Event
-      authorize :index?
+      policy_rule :index?
     end
     expect(list_events(as_mcp(manager), action: upcoming).dig("data", "events").pluck("title")).to eq(["AGM"])
-    show = list(name: "Event::ShowAction", perform: proc do
+    show = list(name: "Events::ShowAction", perform: proc do
       @event = policy_scope(Event).first
       authorize @event
       render :show, collection: [@event]
@@ -139,7 +139,7 @@ RSpec.describe Saltbox::Actions::Summary do
     end)
     [as_mcp(manager), as_screen(manager)].each do |caller|
       expect { list_events(caller, action: leaky) }
-        .to raise_error(ArgumentError, /\AEvent::ListAction sends agents Event's summary: meta.records\[0\] holds a Event; meta is plain data/)
+        .to raise_error(ArgumentError, /\AEvents::ListAction sends agents Event's summary: meta.records\[0\] holds a Event; meta is plain data/)
     end
   end
 
@@ -173,14 +173,14 @@ RSpec.describe Saltbox::Actions::Summary do
   end
 
   it "sends summaries only from a list action" do
-    show = Saltbox::Actions::Invocation.call(name: Event::ShowAction, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s})
+    show = Saltbox::Actions::Invocation.call(name: Events::ShowAction, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s})
     expect(show.body.dig("data", "event")).to include("capacity" => nil)
   end
 
   it "gives the catalogue the summary's fields, which the CLI prints as columns" do
-    expect(Event::ListAction.definition["summary"]).to eq(%w[id title starts_on status])
-    expect(Event::CreateAction.definition["summary"]).to eq(%w[id title starts_on])
-    expect(Event::ListAction.definition["cli"]).not_to have_key("columns")
+    expect(Events::ListAction.definition["summary"]).to eq(%w[id title starts_on status])
+    expect(Events::CreateAction.definition["summary"]).to eq(%w[id title starts_on])
+    expect(Events::ListAction.definition["cli"]).not_to have_key("columns")
   end
 
   it "tells agents what a list returns, and which action gives the rest" do

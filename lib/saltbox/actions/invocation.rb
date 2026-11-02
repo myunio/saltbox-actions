@@ -89,8 +89,10 @@ module Saltbox
               raise Error::Invalid, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
             end
             @arguments = @action.validate_arguments(arguments, @caller)
+            action = @action.new(actor: @caller, params: Params.new(@arguments, action: @action))
+            raise Error::Invalid.for(action.errors) unless action.valid?
             confirm!(@action)
-            run(@arguments)
+            run(action)
           end
         end
       rescue Error
@@ -126,8 +128,9 @@ module Saltbox
       # - the token lacks the scope: insufficient_scope;
       # - the person's role is not allowed the action, or they lack a permission
       #   it declares (unless Configuration#enforce_permissions is off): forbidden.
-      # After the input is checked, #confirm! refuses a :confirm action the app
-      # has not approved: confirmation_required.
+      # Then the input is checked against the schema and the action's
+      # validations: validation_failed. Last, #confirm! refuses a :confirm
+      # action the app has not approved: confirmation_required.
       def refuse!
         raise Error::NotFound unless @action.enabled_for?(@caller)
         raise Error::HumanRequired unless @caller.agent_allowed?(@action)
@@ -137,8 +140,7 @@ module Saltbox
         raise Error::Forbidden unless allowed
       end
 
-      def run(arguments)
-        action = @action.new(actor: @caller, params: Params.new(arguments, action: @action))
+      def run(action)
         Actions.config.around_run.call(self, -> do
           next action.perform_now if @action.kind == :read
           # Its own savepoint inside a caller's transaction, so a failure
@@ -171,8 +173,7 @@ module Saltbox
         case error
         when ActiveRecord::RecordNotFound then Error::NotFound.new
         when ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed
-          Error::Invalid.new(error.record.errors.full_messages.to_sentence.presence || error.message,
-            errors: error.record.errors.to_hash(true).transform_keys(&:to_s).presence)
+          Error::Invalid.for(error.record.errors, fallback: error.message)
         when ActiveRecord::DeleteRestrictionError then Error.new(error.message, code: :in_use, status: :unprocessable_content)
         when *@action.authorization_errors then Error::Forbidden.new
         end

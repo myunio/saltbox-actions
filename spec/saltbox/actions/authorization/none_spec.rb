@@ -6,6 +6,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
   before do
     stub_const("Gathering", Class.new(ApplicationRecord) {
       self.table_name = "events"
+      belongs_to :parent, class_name: "Gathering", optional: true
       scope :visible_to, ->(user) { where(org_id: user.org_id) }
       def self.writable_attributes(_user) = %w[title capacity]
     })
@@ -23,15 +24,15 @@ RSpec.describe Saltbox::Actions::Authorization::None do
 
   it "asks for no policy, rule or rule name, at boot or in rails actions:check" do
     with_settings(require_area: false) do
-      archive = action("Gathering::ArchiveAction") do
+      archive = action("Gatherings::ArchiveAction") do
         kind :change
-        argument :id
+        attribute :id
         connections :confirm
       end
-      totals = action("Gathering::ShowTotalsAction") { connections :allowed }
+      totals = action("Gatherings::ShowTotalsAction") { connections :allowed }
       expect(Saltbox::Actions::Registry.problems(archive)).to eq([])
       expect(Saltbox::Actions::Registry.problems(totals)).to eq([])
-      create = action("Gathering::CreateAction") { connections :allowed }
+      create = action("Gatherings::CreateAction") { connections :allowed }
       expect(Saltbox::Actions::Registry.problems(create)).to eq([])
       expect(Saltbox::Actions::Registry.problems(create, declared_only: true)).to eq([])
     end
@@ -39,10 +40,10 @@ RSpec.describe Saltbox::Actions::Authorization::None do
 
   it "runs every action, for every person, with no authorize or policy_scope" do
     gathering = Gathering.create!(org_id: 1, title: "AGM")
-    rename = action("Gathering::RenameAction") do
+    rename = action("Gatherings::RenameAction") do
       kind :change
-      argument :id
-      argument :title, :string
+      attribute :id
+      attribute :title, :string
       connections :allowed
       def perform
         Gathering.find(params[:id]).update!(title: params[:title])
@@ -54,8 +55,27 @@ RSpec.describe Saltbox::Actions::Authorization::None do
     expect(gathering.reload.title).to eq("Renamed")
   end
 
+  it "takes the model fields an action accepts, the same for every person, refusing any other as unknown" do
+    gathering = Gathering.create!(org_id: 1, title: "AGM")
+    retitle = action("Gatherings::UpdateAction") do
+      accepts :title, :capacity, :parent
+
+      def perform
+        gathering.update!(permitted_attributes(gathering))
+        render json: {title: gathering.title, capacity: gathering.capacity}
+      end
+    end
+    with_settings(require_area: false) { expect(Saltbox::Actions::Registry.problems(retitle)).to eq([]) }
+    expect(retitle.input_schema(as_screen(stranger))["properties"].keys).to eq(%w[id title capacity parent])
+    parent = Gathering.create!(org_id: 1, title: "Conference")
+    expect(invoke.call(retitle, {id: gathering.id, title: "Renamed", capacity: "40", parent: parent.id}, as_screen(stranger)).body)
+      .to eq("title" => "Renamed", "capacity" => 40)
+    expect(gathering.reload.parent).to eq(parent)
+    expect { invoke.call(retitle, {id: gathering.id, notes: "x"}, as_screen(stranger)) }.to have_field_errors(:notes)
+  end
+
   it "takes a model given to policy_scope as all its records" do
-    open = action("Gathering::ListAction") { connections :allowed }
+    open = action("Gatherings::ListAction") { connections :allowed }
     expect(open.new(actor: as_screen(stranger), params: nil).policy_scope(Gathering)).to be_a(ActiveRecord::Relation)
   end
 
@@ -80,7 +100,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
     let(:viewer) { person_class.new(11, 1, false) }
 
     let(:update) do
-      action("Gathering::UpdateAction", base: ModelAction) do
+      action("Gatherings::UpdateAction", base: ModelAction) do
         connections :allowed
         def perform
           gathering = policy_scope(Gathering).find(params[:id])
@@ -92,14 +112,14 @@ RSpec.describe Saltbox::Actions::Authorization::None do
     end
 
     let(:list) do
-      action("Gathering::ListAction", base: ModelAction) do
+      action("Gatherings::ListAction", base: ModelAction) do
         connections :allowed
         def perform = render(json: {titles: policy_scope(Gathering).order(:id).pluck(:title)})
       end
     end
 
     let(:create) do
-      action("Gathering::CreateAction", base: ModelAction) do
+      action("Gatherings::CreateAction", base: ModelAction) do
         connections :confirm
         def perform
           @gathering = policy_scope(Gathering).new(permitted_attributes(Gathering))

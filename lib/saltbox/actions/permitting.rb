@@ -1,8 +1,10 @@
 module Saltbox
   module Actions
-    # Does the job of Pundit's permitted_attributes for an action's input,
-    # which has already passed the action's JSON Schema. It differs in three
-    # ways:
+    # Does the job of Pundit's permitted_attributes for an action's model
+    # fields, which have already passed the action's JSON Schema. The fields
+    # allowed are the ones the authorization adapter permits the person on
+    # the record, or the ones the action accepts (Inputs#accepts). It differs
+    # from Pundit's in three ways:
     # - a field the person may not change is refused by name, not silently
     #   dropped;
     # - a foreign key is sent under its association's name (event_type, not
@@ -15,12 +17,14 @@ module Saltbox
     module Permitting
       # @param record [ActiveRecord::Base, Class] the record, or its model for a create
       # @return [ActiveSupport::HashWithIndifferentAccess] the fields sent, keyed as the policy names them
-      # @raise [ArgumentError] in an action other than a create or update
+      # @raise [ArgumentError] in an action that takes no model fields
       # @raise [Error::Forbidden] naming each field the person may not change
       # @raise [Error::Invalid] for a reference to a record the person cannot pick
       def permitted_attributes(record)
-        raise ArgumentError, "#{self.class.name} takes no permitted fields: only create and update actions do" unless self.class.writes_fields?
-        allowed = permitted_attribute_names(record)
+        unless self.class.writes_fields?
+          raise ArgumentError, "#{self.class.name} takes no model fields: a create or update takes the ones its policy permits, any other action names them with accepts"
+        end
+        allowed = self.class.accepted_fields.any? ? self.class.writable_fields.values.map(&:key) : permitted_attribute_names(record)
         sent = self.class.writable_fields(actor).select { |name, _| params.key?(name) }
         forbidden = sent.reject { |_, field| allowed.include?(field.key) }.keys
         refuse_forbidden_fields!(forbidden) if forbidden.any?

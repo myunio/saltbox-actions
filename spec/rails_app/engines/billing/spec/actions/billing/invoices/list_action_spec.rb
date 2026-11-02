@@ -1,5 +1,5 @@
 # The engine's own action spec, beside its app/actions folder.
-RSpec.describe Billing::Invoice::ListAction do
+RSpec.describe Billing::Invoices::ListAction do
   let(:permitted_account) { Account.new(id: 5, permissions: %w[billing.view]) }
   let(:unpermitted_account) { stranger }
   let(:arguments) { {} }
