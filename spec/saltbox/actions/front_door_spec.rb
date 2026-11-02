@@ -24,6 +24,16 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     expect(found[:actions].first).to include(name: "show_event_notes", run_with: nil, message: "Only a person can do this, in Dummy")
   end
 
+  it "lists only what a connection's access reaches, in its tools, find_action and the catalogue" do
+    reads_only = Struct.new(:kind) { def allows?(action) = action.kind == kind }.new(:read)
+    connection = Saltbox::Actions::Caller.new(account: manager, surface: "mcp", agent: "Claude", access: reads_only)
+    expect(described_class.tools(connection).map(&:name)).to eq(%w[show_event whoami find_action run_read_action])
+    expect(described_class.call("find_action", {"query" => "cancel the meeting"}, caller: connection)[:actions]).to be_empty
+    listed = Saltbox::Actions::Registry.catalogue(connection).pluck("name")
+    expect(listed).to include("list_events")
+    expect(listed).not_to include("cancel_event", "delete_event")
+  end
+
   it "runs direct and generic tools through Invocation, refusing the wrong kind" do
     expect(described_class.call("show_event", {"id" => event.id.to_s}, caller: as_mcp(manager)).dig("data", "event", "title")).to eq(event.title)
     expect(described_class.call("run_read_action", {"name" => "list_events"}, caller: as_mcp(manager)).dig("data", "events").size).to eq(1)
