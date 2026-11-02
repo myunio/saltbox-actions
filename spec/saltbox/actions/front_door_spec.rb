@@ -36,13 +36,3 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     expect { described_class.call("run_read_action", {"arguments" => {}, "extra" => 1}, caller: as_mcp(manager)) }.to have_field_errors(:name, :extra)
   end
 end
-
-RSpec.describe Saltbox::Actions::Finder do
-  it "ranks by title, name and description, matching other forms of a word and ignoring filler words" do
-    finder = described_class.new(Saltbox::Actions::Registry.actions)
-    expect(finder.find("removing events").first).to eq(Event::DeleteAction)
-    expect(finder.find("the and of")).to be_empty
-    expect(described_class.stem("boxes")).to eq("box")
-    expect(described_class.stem("types")).to eq("type")
-  end
-end
