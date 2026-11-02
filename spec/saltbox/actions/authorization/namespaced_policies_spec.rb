@@ -94,6 +94,20 @@ RSpec.describe "Namespaced policies" do
       expect(report.policy_class).to eq(public_policy)
     end
 
+    it "asks the namespace's policy for a namespaced model found further in, never the model's own" do
+      deep = define("Admin::Billing::Invoices::ListAction")
+      expect(deep).to have_attributes(model: Billing::Invoice, policy_namespace: [:admin], policy_class: nil)
+      expect { invoke.call(deep, {}, as_api(manager)) }.to raise_error(missing_policy)
+      expect(Saltbox::Actions::Registry.problems(deep).join).to include("add Admin::Billing::InvoicePolicy")
+    end
+
+    it "takes that namespaced model's policy once it exists" do
+      stub_const("Admin::Billing::InvoicePolicy", admin_policy)
+      deep = define("Admin::Billing::Invoices::ListAction")
+      expect(deep.policy_class).to eq(Admin::Billing::InvoicePolicy)
+      expect { invoke.call(deep, {}, as_api(manager)) }.to be_refused.with(:forbidden)
+    end
+
     it "says an action looks nested when its outer module names a model, and still fails closed" do
       nested = define("Events::Invoices::ListAction") { model Billing::Invoice }
       expect(nested.policy_class).to be_nil

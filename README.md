@@ -631,14 +631,14 @@ Every module around the action counts, except the one that names the model
 | `Crm::Organizations::ListAction` | `Organization` | `list_crm_organizations` | `Crm::OrganizationPolicy` |
 | `Crm::Organizations::ListAction` | `Crm::Organization` | `list_crm_organizations` | `Crm::OrganizationPolicy` |
 
-The class name cannot tell a back office from an area that groups actions
-(`Reports`, `Crm`) or a resource nested under another (`Events::Attendees`),
-so each asks its own namespace's policy. Until that policy exists the action
-fails, and `rails actions:check` names the policy to add. When the outer
-module names a model too, as `Events` names `Event`, the check also says the
-action may be nested. Add the namespaced policy, or declare
-`policy_namespace false` on the action to ask the model's own policy
-(`AttendeePolicy`); the name stays `list_events_attendees`.
+A class name cannot tell a back office from a group of actions (`Reports`,
+`Crm`) or a nested resource (`Events::Attendees`). So each asks its own
+namespace's policy. Until that policy exists, the action fails, and
+`rails actions:check` names the policy to add. If the outer module also
+names a model, as `Events` names `Event`, the check says the action may be
+nested. Add the policy it names, or declare `policy_namespace false` to ask
+the model's own policy (`AttendeePolicy`). The name stays
+`list_events_attendees`.
 
 "Agents: confirm" tells the agent to ask the person first. The server
 checks it only when `enforce_confirm` is on (see Connections).
@@ -968,7 +968,7 @@ give them.
 | `returns(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
 | `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_customers`. |
-| `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy (see Authorization). |
+| `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy. It holds for subclasses in the same modules (see Authorization). |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too, and its `model` and `policy_rule` if it has a model: a declared name gives neither. |
 | `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
 | `cli "events count"` | The command for a command-line client you build on the catalogue. |
@@ -1323,9 +1323,9 @@ same way and never falls back to `EventPolicy`. To use another namespace,
 declare it: `policy_namespace :staff`, or `policy_namespace false` for the
 model's own policy.
 
-A declaration holds for the class that makes it and its subclasses in the
-same modules. A subclass in other modules adds its own after it, so it never
-inherits a way out of them:
+A declaration holds for the class that makes it, and for its subclasses in
+the same modules. A subclass in other modules adds its own modules after it.
+So it never inherits a way out of them:
 
 - `Admin::Events::ListAllAction < Events::ListAllAction`, whose parent
   declares `policy_namespace false`, asks `Admin::EventPolicy`;
