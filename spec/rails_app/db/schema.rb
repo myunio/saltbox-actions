@@ -13,6 +13,12 @@ ActiveRecord::Schema.define(version: 1) do
     t.timestamps
   end
 
+  create_table :billing_invoices, force: true do |t|
+    t.integer :org_id, null: false
+    t.string :number, null: false
+    t.timestamps
+  end
+
   create_table :versions, force: true do |t|
     t.string :item_type, null: false
     t.string :item_id, null: false

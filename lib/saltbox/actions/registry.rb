@@ -8,45 +8,83 @@ module Saltbox
       # @return [Array<Class>] every action, sorted by name
       def self.actions
         @actions ||= begin
-          entries = (Actions.config.every_file_an_action ? action_files.map { |path| action_at(path) } : descendants).sort_by(&:action_name)
+          entries = Actions.config.every_file_an_action ? action_files.map { |path| action_at(path) } : descendants
           validate!(entries)
-          entries.freeze
+          warn_outside(entries)
+          entries.sort_by(&:action_name).freeze
         end
       end
 
       # @return [void] forgets the loaded actions, so the next call loads them again
       def self.reset! = @actions = @version = nil
 
-      # @return [Pathname] the actions folder
-      def self.root = Rails.root.join(Actions.config.actions_path)
+      # @return [Array<Pathname>] the folders actions load from (see Configuration#action_paths),
+      #   each once however it was spelled
+      def self.roots = Actions.config.action_paths.map(&:root).uniq
 
-      # The files under the actions folder, without the base class's own file
+      # The files in the action folders, without the base class's own file
       # and folder (application_action.rb and application_action/), which hold
-      # shared code.
+      # shared code. An engine's own base class, such as
+      # billing/application_action.rb, is shared code too.
       #
       # @return [Array<String>] action file paths
-      # @raise [ArgumentError] for a file under the actions folder that is not an action
+      # @raise [ArgumentError] for a file in an action folder that is not an action
       def self.action_files
-        support = Actions.config.base_class.underscore
-        files = Dir[root.join("**/*.rb").to_s].reject do |path|
-          relative = Pathname(path).relative_path_from(root).to_s
-          relative == "#{support}.rb" || relative.start_with?("#{support}/")
+        support = "/#{Actions.config.base_class.underscore}/"
+        files = roots.flat_map do |root|
+          Dir[root.join("**/*.rb").to_s].reject do |path|
+            "/#{Pathname(path).relative_path_from(root).to_s.delete_suffix(".rb")}/".include?(support)
+          end
         end
+        # A folder inside another lists its files twice: each counts once.
+        files = files.uniq
         misnamed = files.reject { it.end_with?("_action.rb") }
-        raise ArgumentError, "Every file under #{Actions.config.actions_path}/ ends _action.rb: rename or move #{misnamed.map { relative(it) }.join(", ")}" if misnamed.any?
+        raise ArgumentError, "Every file in #{Actions.config.action_paths} ends _action.rb: rename or move #{misnamed.map { relative(it) }.join(", ")}" if misnamed.any?
         files
       end
 
-      # For an app whose actions folder holds other files too
+      # For an app whose action folders hold other files too
       # (Configuration#every_file_an_action off): the base class's named
-      # subclasses, once the folder is loaded. Only the class its name now
-      # points to counts, not one a code reload replaced.
+      # subclasses defined in those folders, once they are loaded.
       #
       # @return [Array<Class>]
       def self.descendants
-        Rails.autoloaders.main.eager_load_dir(root.to_s)
+        roots.select(&:directory?).each { Rails.autoloaders.main.eager_load_dir(it.to_s) }
+        paths = Actions.config.action_paths
+        named = named_descendants
+        named.select { |action| paths.for(source(action)) }.reject { |action| named.any? { it < action } }
+      end
+
+      # The base class's subclasses that hold a name now: not anonymous
+      # classes, nor ones a code reload replaced.
+      #
+      # @return [Array<Class>]
+      def self.named_descendants
         Actions.config.base.descendants.select { |action| action.name&.safe_constantize.equal?(action) }
       end
+
+      # Warns about the base class's subclasses that are loaded but outside
+      # every action folder, such as an engine's actions before the engine
+      # adds its folder: they would be missing from the API and MCP with no
+      # other sign. A class other actions inherit from is a base, not an action.
+      #
+      # @param entries [Array<Class>]
+      # @return [void]
+      def self.warn_outside(entries)
+        paths = Actions.config.action_paths
+        named = named_descendants
+        strays = (named - entries).reject { |action| named.any? { it < action } || paths.for(source(action)) }
+        return if strays.empty?
+        one = strays.size == 1
+        warn "saltbox-actions: #{strays.map(&:name).sort.join(", ")} #{one ? "inherits" : "inherit"} from " \
+          "#{Actions.config.base_class} but #{one ? "is" : "are"} outside the action folders (#{paths}), so no caller " \
+          "can run #{one ? "it" : "them"}. Move #{one ? "it" : "them"}, or add the folder in an initializer: " \
+          "Saltbox::Actions.config.action_paths.add(root.join(\"app/actions\"))"
+      end
+
+      # @param action [Class]
+      # @return [String, nil] the file that defines it
+      def self.source(action) = Object.const_source_location(action.name)&.first
 
       # The action class a file defines, found by the constant Zeitwerk
       # expects at its path. It must be defined in that file: a model whose
@@ -71,11 +109,27 @@ module Saltbox
       # @return [void]
       # @raise [ArgumentError] naming every problem with each action
       def self.validate!(entries)
-        Actions.config.registry_checks.each { it.call(entries) }
-        duplicates = entries.group_by(&:action_name).select { |_, actions| actions.size > 1 }
-        raise ArgumentError, "Action names must be unique: #{duplicates.keys.join(", ")}" if duplicates.any?
+        # Each action's own checks come first: a name the others need, such
+        # as a model's, may be the problem.
         problems = entries.flat_map { |action| problems(action).map { "#{action.name}: #{it}" } }
         raise ArgumentError, problems.join("\n") if problems.any?
+        Actions.config.registry_checks.each { it.call(entries) }
+        unique!(entries, "Action names", "declare action_name on one, or give one engine's action path a namespace") { [it.action_name] }
+        unique!(entries, "CLI commands", "declare cli on one, or give one engine's action path a namespace") do |action|
+          [action.cli_command, *action.declared_cli&.fetch(:aliases)].map { it.join(" ") }
+        end
+      end
+
+      # @param entries [Array<Class>]
+      # @param what [String] what must be unique, for the message
+      # @param fix [String]
+      # @yieldparam action [Class]
+      # @yieldreturn [Array<String>] the names the action answers to
+      # @raise [ArgumentError] naming each name more than one action answers to, and those actions
+      def self.unique!(entries, what, fix)
+        owners = entries.flat_map { |action| yield(action).uniq.map { [it, action] } }.group_by(&:first)
+        clashes = owners.filter_map { |name, pairs| "#{name} (#{pairs.map { it.last.name }.sort.join(", ")})" if pairs.size > 1 }
+        raise ArgumentError, "#{what} must be unique: #{clashes.join("; ")}. To fix: #{fix}" if clashes.any?
       end
 
       # @param action [Class]
@@ -194,7 +248,7 @@ module Saltbox
       def self.catalogue_json = "#{JSON.pretty_generate(definitions)}\n"
 
       def self.relative(path) = Pathname(path).relative_path_from(Rails.root).to_s
-      private_class_method :relative
+      private_class_method :relative, :named_descendants, :warn_outside, :unique!
     end
   end
 end

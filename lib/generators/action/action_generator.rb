@@ -50,7 +50,7 @@ module Saltbox
 
         # @return [void]
         def write_action
-          template "action.rb.tt", File.join(Actions.config.actions_path, "#{action_path}_action.rb")
+          template "action.rb.tt", File.join(Actions.config.action_paths.first.path.to_s, "#{action_path}_action.rb")
         end
 
         # @return [void]

@@ -11,7 +11,7 @@ Saltbox::Actions.configure do |config|
   config.instructions = "Dummy keeps events. Call find_action for anything not listed."
   config.max_array_items = 50
   config.require_area = true
-  config.area_for { |model| "events" if model.name == "Event" }
+  config.area_for { |model| {"Event" => "events", "Billing::Invoice" => "billing"}[model.name] }
   config.permissions_held { |caller| (caller.account.permissions == :all) ? [] : caller.account.permissions }
   config.schema_principal { |run| run.call(Account.new(id: 0, permissions: :all)) }
   config.around_run do |invocation, run|
