@@ -133,10 +133,21 @@ RSpec.describe Saltbox::Actions::Base do
     it "run before confirmation, refused as validation_failed by field, with nothing written" do
       with_settings(enforce_confirm: true) do
         expect { run({id: event.id, starts_on: "2020-01-01"}, as: as_mcp(manager), action: reschedule) }
-          .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors).to eq("starts_on" => ["Starts on must be in the future"]) }
+          .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors).to eq("starts_on" => ["must be in the future"]) }
         expect { run({id: event.id, starts_on: "2027-01-01"}, as: as_mcp(manager), action: reschedule) }.to be_refused.with(:confirmation_required)
       end
       expect(event.reload.starts_on).to be_nil
+    end
+
+    it "give a model's errors by field without its name, so a screen can add them back to its record once" do
+      error = begin
+        run({id: event.id, title: ""}, as: as_screen(manager), action: Events::UpdateAction)
+      rescue Saltbox::Actions::Error::Invalid => invalid
+        invalid
+      end
+      expect(error.errors).to eq("title" => ["can't be blank"])
+      error.errors.each { |field, messages| messages.each { event.errors.add(field, it) } }
+      expect(event.errors.full_messages).to eq(["Title can't be blank"])
     end
   end
 

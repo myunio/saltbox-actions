@@ -30,6 +30,33 @@ RSpec.describe Saltbox::Actions::Naming do
     expect(action("Reports::ShowAction") { model Event }.model).to eq(Event)
   end
 
+  it "names an action in a module its model is not in with that module, as a back office's controllers are" do
+    expect(action("Admin::Events::ListAction")).to have_attributes(outer_namespace: ["admin"], action_name: "list_admin_events",
+      cli_command: %w[admin-events list], title: "List admin events", policy_query: :index?, model: Event)
+    expect(action("Admin::Events::ShowNotesAction")).to have_attributes(action_name: "show_admin_event_notes")
+    expect(action("Admin::Billing::Invoices::ListAction") { model Billing::Invoice }).to have_attributes(outer_namespace: ["admin"], action_name: "list_admin_billing_invoices")
+    expect(action("Billing::Invoices::ListAction")).to have_attributes(outer_namespace: [], action_name: "list_billing_invoices")
+  end
+
+  it "counts a single module that does not name the model as one the model is not in" do
+    expect(action("Admin::ExportAction") { model Event }).to have_attributes(outer_namespace: ["admin"], action_name: "export_admin_events",
+      cli_command: %w[admin-events export], title: "Export admin events")
+    expect(action("Reports::CountAction") { model Event }).to have_attributes(outer_namespace: ["reports"], action_name: "count_reports_event")
+    expect(action("Admin::Customers::ExportAction") { model Event }).to have_attributes(outer_namespace: %w[admin customers],
+      action_name: "export_admin_customers_events")
+    expect(action("Events::Invoices::ListAction") { model Billing::Invoice }).to have_attributes(outer_namespace: ["events"],
+      action_name: "list_events_billing_invoices")
+  end
+
+  it "finds a model in a module further in when the outer one has none" do
+    expect(action("Admin::Billing::Invoices::ListAction")).to have_attributes(model: Billing::Invoice, outer_namespace: ["admin"],
+      action_name: "list_admin_billing_invoices")
+    stub_const("Invoice", Class.new)
+    expect(action("Admin::Billing::Invoices::ListAction").model).to eq(Billing::Invoice)
+    stub_const("Admin::Invoice", Class.new)
+    expect(action("Admin::Billing::Invoices::ListAction").model).to eq(Admin::Invoice)
+  end
+
   it "lets the locale file's title and description win over the class's, as Action Mailer's subject does" do
     postpone = action("Events::PostponeAction") do
       title "Move an event"

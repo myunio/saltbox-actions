@@ -66,6 +66,7 @@ module Saltbox
         announced = []
         subscriber = ->(*, payload) { announced.concat(payload[:changes]) }
         ActiveSupport::Notifications.subscribed(subscriber, "changes.saltbox_actions") { yield }
+        flunk ChangeTracking::NOT_IN_USE if announced.empty? && !ChangeTracking.in_use?
         refute_empty announced if expected.empty?
         expected.each do |target, event|
           type, id = target.is_a?(Class) ? [target.name, nil] : [target.class.name, target.id.to_s]

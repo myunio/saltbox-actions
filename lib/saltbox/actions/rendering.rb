@@ -14,9 +14,9 @@ module Saltbox
     # WebMCP and the assistant) in place of the view: each record in
     # `collection:`, or else in the model's plural instance variable
     # (@events), under data and the model's plural, with the meta beside it.
-    # Screens get the view. Such an action always renders a template, and
-    # always hands over its records, so nothing reaches an agent around the
-    # summary.
+    # Screens get the view, or the json: sent beside collection: (a
+    # serializer's, such as Alba's). Such an action always hands over its
+    # records, so nothing reaches an agent around the summary.
     module Rendering
       # Instance variables the base class, Active Model and the adapters set
       # for themselves; views never see them. Any starting @_ are left out too.
@@ -35,8 +35,8 @@ module Saltbox
       # @param locals [Hash] the template's locals
       # @return [Result]
       # @raise [AbstractController::DoubleRenderError] on a second render or head
-      # @raise [ArgumentError] when a list action with a summary renders json:, or hands over no records,
-      #   or another action passes collection:
+      # @raise [ArgumentError] when a list action with a summary renders json: without collection:,
+      #   or hands over no records, or another action passes collection:
       def render(template = nil, status: :ok, json: NO_JSON, meta: nil, collection: NO_COLLECTION, **locals)
         raise AbstractController::DoubleRenderError if performed?
         records = summarized_records(json, collection, meta)
@@ -45,7 +45,9 @@ module Saltbox
         elsif !json.equal?(NO_JSON)
           json.as_json
         else
-          JSON.parse(Actions.config.renderer_class.render(template: template_path(template), formats: [:json], assigns: view_assigns, locals:))
+          renderer = Actions.config.renderer_class
+          load_routes(renderer)
+          JSON.parse(renderer.render(template: template_path(template), formats: [:json], assigns: view_assigns, locals:))
         end
         @_result = Result.new(status: Rack::Utils.status_code(status), body:, meta:)
       end
@@ -65,6 +67,12 @@ module Saltbox
 
       private
 
+      # In development and test, Rails 8 draws the routes on first use. A
+      # view's *_url helper draws them only after the renderer has read
+      # default_url_options, so a fresh console, runner or job would link to
+      # example.org once. Asking for the routes draws them first.
+      def load_routes(renderer) = renderer.respond_to?(:_routes) && renderer._routes.routes
+
       def template_path(template)
         raise ArgumentError, "render needs a template, or json:" if template.nil?
         return template if template.to_s.include?("/")
@@ -83,8 +91,9 @@ module Saltbox
           return
         end
         variable = "@#{action.model.model_name.plural}"
-        unless json.equal?(NO_JSON)
-          raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: render a template with #{variable} or collection:, not json:"
+        if !json.equal?(NO_JSON) && collection.equal?(NO_COLLECTION)
+          raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: render a template with #{variable}, " \
+            "or hand over its records with collection:, beside json: if you send one"
         end
         records = collection.equal?(NO_COLLECTION) ? instance_variable_get(variable) : collection
         unless records.respond_to?(:map) && !records.is_a?(Hash)

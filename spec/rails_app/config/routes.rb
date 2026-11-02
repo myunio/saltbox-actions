@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  default_url_options host: "dummy.test", protocol: "https"
+
   namespace :api do
     namespace :v1 do
       get "actions", to: "actions#index"

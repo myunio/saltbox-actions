@@ -92,18 +92,28 @@ RSpec.describe Saltbox::Actions::Summary do
     end
   end
 
-  it "refuses render json: from a list with a summary, so the summary is never skipped" do
+  it "refuses render json: alone from a list with a summary, so the summary is never skipped" do
     as_json = list(perform: proc do
       authorize Event
       @events = policy_scope(Event)
       render json: {data: {events: @events.as_json}}
     end)
     expect { list_events(as_mcp(manager), action: as_json) }
-      .to raise_error(ArgumentError, "Events::ListAction sends agents Event's summary: render a template with @events or collection:, not json:")
+      .to raise_error(ArgumentError, "Events::ListAction sends agents Event's summary: render a template with @events, " \
+        "or hand over its records with collection:, beside json: if you send one")
+  end
+
+  it "sends screens the json: of a serializer, and agents the summaries of the collection: beside it" do
+    serialized = list(perform: proc do
+      records = policy_scope(Event).order(:id)
+      render json: {events: records.map { {title: it.title, notes: it.notes} }}, collection: records
+    end)
+    expect(list_events(as_screen(manager), action: serialized)).to eq("events" => [{"title" => "AGM", "notes" => "Bring the minutes"}])
+    expect(list_events(as_mcp(manager), action: serialized).dig("data", "events", 0).keys).to eq(%w[id title starts_on status])
   end
 
   it "summarizes a renamed list action's records handed over with collection:" do
-    upcoming = list(name: "Reports::ListUpcomingAction", perform: proc do
+    upcoming = list(name: "Events::ListUpcomingAction", perform: proc do
       authorize Event
       render :index, collection: policy_scope(Event).where(status: "published")
     end) do
@@ -188,6 +198,15 @@ RSpec.describe Saltbox::Actions::Summary do
     expect(found[:actions].find { it[:name] == "list_events" })
       .to include(response_description: "Returns each event's id, title, starts_on, and status. Call show_event with its id for the rest.")
     expect(found[:actions].find { it[:name] == "show_event" }).not_to have_key(:response_description)
+  end
+
+  it "points a back-office list at its own show action, never the public one" do
+    admin_list = list(name: "Admin::Events::ListAction")
+    expect(admin_list.summary_note).to eq("Returns each event's id, title, starts_on, and status.")
+    admin_show = Class.new(ApplicationAction) { define_singleton_method(:name) { "Admin::Events::ShowAction" } }
+    allow(Saltbox::Actions::Registry).to receive(:find).and_call_original
+    allow(Saltbox::Actions::Registry).to receive(:find).with("show_admin_event").and_return(admin_show)
+    expect(admin_list.summary_note).to end_with("Call show_admin_event with its id for the rest.")
   end
 
   it "stops the boot for a field the model lacks, or a list summary without id" do

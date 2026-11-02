@@ -37,6 +37,8 @@ RSpec.describe "The actions API", type: :request do
     expect(response).to have_http_status(:unprocessable_content)
     post "/api/v1/actions/create_event", params: "{", headers: headers
     expect(response.parsed_body.dig("error", "message")).to eq("The request body is not valid JSON")
+    post "/api/v1/actions/create_event", params: {arguments: {title: "Picnic"}}.to_json, headers: headers.except("CONTENT_TYPE")
+    expect(response.parsed_body.dig("error", "message")).to eq("The body was not read as JSON: send it with Content-Type: application/json")
     get "/api/v1/actions", headers: {"Authorization" => "Bearer nobody"}
     expect(response).to have_http_status(:unauthorized)
     expect(response.headers["WWW-Authenticate"]).to eq("Bearer")

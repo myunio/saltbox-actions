@@ -11,10 +11,16 @@ module TestUnit
       class_option :id, type: :boolean, default: true
 
       def write_test
-        template "action_test.rb.tt", File.join("test/actions", *class_path, "#{file_name}_action_test.rb")
+        template "action_test.rb.tt", test_path
+      end
+
+      def say_placeholders
+        say "Fill in the placeholders in #{test_path}: it raises NotImplementedError until you do.", :yellow
       end
 
       private
+
+      def test_path = File.join("test/actions", *class_path, "#{file_name}_action_test.rb")
 
       def action_class_name = "#{class_path.map(&:camelize).join("::")}::#{file_name.camelize}Action"
 

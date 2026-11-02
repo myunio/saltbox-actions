@@ -26,6 +26,9 @@ module Saltbox
         @installed = true
       end
 
+      # @return [Boolean] whether install! has run
+      def self.installed? = !!@installed
+
       # @param invocation [Invocation]
       # @param controller_info [Hash] extra columns for each version, such as agent and surface
       # @yield the action's run

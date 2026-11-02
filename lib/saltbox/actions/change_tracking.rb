@@ -17,10 +17,23 @@ module Saltbox
     module ChangeTracking
       extend ActiveSupport::Concern
 
+      # What a change assertion says when it heard of nothing and nothing notes changes.
+      NOT_IN_USE = "Nothing notes changes: include Saltbox::Actions::ChangeTracking in ApplicationRecord, " \
+        "or call Saltbox::Actions::PaperTrail.install!"
+
       included do
+        ChangeTracking.in_use = true
         after_create { ChangeTracking.note(self, "create") }
         after_update { ChangeTracking.note(self, "update") if saved_changes? }
         after_destroy { ChangeTracking.note(self, "destroy") }
+      end
+
+      class << self
+        # @api private
+        attr_writer :in_use
+
+        # @return [Boolean] whether a model includes it, or PaperTrail's versions are noted
+        def in_use? = @in_use || (!Actions.autoload?(:PaperTrail) && Actions::PaperTrail.installed?)
       end
 
       # @param record [ActiveRecord::Base]

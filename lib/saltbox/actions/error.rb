@@ -127,13 +127,16 @@ module Saltbox
         def self.code = "validation_failed"
 
         # The refusal for an action's or a record's validation errors: the
-        # messages, in the person's language, and the errors by field.
+        # full messages, in the person's language, and the errors by field,
+        # without the field's name, as a record's errors.as_json gives them
+        # ({"title" => ["can't be blank"]}). A screen adds them back to its
+        # record with errors.add(field, message).
         #
         # @param errors [ActiveModel::Errors]
         # @param fallback [String, nil] the message when there are none to list
         # @return [Invalid]
         def self.for(errors, fallback: nil)
-          new(errors.full_messages.to_sentence.presence || fallback, errors: errors.to_hash(true).transform_keys(&:to_s).presence)
+          new(errors.full_messages.to_sentence.presence || fallback, errors: errors.to_hash.transform_keys(&:to_s).presence)
         end
       end
     end

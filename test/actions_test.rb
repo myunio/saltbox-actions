@@ -131,6 +131,22 @@ class ActionsTest < ActiveSupport::TestCase
     assert_raises(Minitest::Assertion) { assert_changes_audit_trail(on: @event) {} }
     assert_raises(Minitest::Assertion) { assert_announces_changes(@event => :update) {} }
     assert_raises(Minitest::Assertion) { assert_announces_changes {} }
+    without_change_tracking do
+      error = assert_raises(Minitest::Assertion) { assert_announces_changes(@event => :update) {} }
+      assert_equal Saltbox::Actions::ChangeTracking::NOT_IN_USE, error.message
+    end
+  end
+
+  def without_change_tracking
+    tracking = Saltbox::Actions::ChangeTracking
+    paper_trail = Saltbox::Actions::PaperTrail
+    saved = [tracking.instance_variable_get(:@in_use), paper_trail.instance_variable_get(:@installed)]
+    tracking.in_use = false
+    paper_trail.instance_variable_set(:@installed, false)
+    yield
+  ensure
+    tracking.in_use = saved[0]
+    paper_trail.instance_variable_set(:@installed, saved[1])
   end
 
   test "checks the committed catalogue and all registry promises" do

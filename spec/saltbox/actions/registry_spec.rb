@@ -9,8 +9,20 @@ RSpec.describe Saltbox::Actions::Registry do
   def problems(klass) = described_class.problems(klass)
 
   it "loads every action under app/actions, sorted, with unique names" do
-    expect(described_class.actions.map(&:action_name)).to eq(%w[cancel_event count_events create_event delete_event list_billing_invoices list_events
+    expect(described_class.actions.map(&:action_name)).to eq(%w[cancel_event count_events create_event delete_event list_billing_events list_billing_invoices list_events
       postpone_event show_event show_event_notes update_event whoami])
+  end
+
+  it "takes an application_action.rb in any folder, such as a back office's base class, as shared code" do
+    Dir.mktmpdir do |root|
+      %w[admin/application_action.rb admin/application_action/scoping.rb admin/events/list_action.rb].each do |file|
+        FileUtils.mkdir_p(File.dirname(File.join(root, file)))
+        FileUtils.touch(File.join(root, file))
+      end
+      with_settings(action_paths: [root]) do
+        expect(described_class.action_files).to eq([File.join(root, "admin/events/list_action.rb")])
+      end
+    end
   end
 
   it "finds the actions as the base class's subclasses when the folder holds other files too" do
@@ -115,9 +127,19 @@ RSpec.describe Saltbox::Actions::Registry do
   end
 
   it "names both classes when two actions share a name" do
+    upcoming = action("Events::ListUpcomingAction") {
+      action_name "list_events"
+      kind :read
+      model Event
+      policy_rule :index?
+    }
+    expect { described_class.validate!([upcoming, Events::ListAction]) }
+      .to raise_error(ArgumentError, /Action names must be unique: list_events \(Events::ListAction, Events::ListUpcomingAction\)\. To fix: declare action_name/)
+  end
+
+  it "keeps a back-office action apart from the public one, by its outer namespace" do
     admin = action("Admin::Events::ListAction")
-    expect { described_class.validate!([admin, Events::ListAction]) }
-      .to raise_error(ArgumentError, /Action names must be unique: list_events \(Admin::Events::ListAction, Events::ListAction\)\. To fix: declare action_name/)
+    expect(described_class.validate!([admin, Events::ListAction])).to be_nil
   end
 
   it "refuses two actions with one CLI command, or an alias that is another's command" do

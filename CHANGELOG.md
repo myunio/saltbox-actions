@@ -2,6 +2,78 @@
 
 ## 0.1.0 (unreleased)
 
+- An action in a module its model is not in asks that module's policy, as Pundit's
+  `authorize [:admin, record]` does: `Admin::Projects::ListAction` asks `Admin::ProjectPolicy`,
+  never `ProjectPolicy`, in `permitted?`, the record loader, `authorize`, `policy_scope`, its
+  fields and the records a reference may pick. A missing namespaced policy fails closed
+  (Pundit's `NotDefinedError`, ActionPolicy's `NotFound`) and `rails actions:check` names it,
+  as it names a reference field whose namespaced scope is missing.
+- An action whose policy is missing, namespaced or not, is left out of every actions list (the
+  JSON API's, MCP's `tools/list` and `find_action`, the assistant's tools), so the other actions
+  stay listed. Before, one missing policy made every list raise for every caller. Running the
+  action still fails, `rails actions:check` names the policy, and the first list warns once per
+  action, through the Rails logger once Rails has one.
+  ActionPolicy lookups in a namespace no longer fall back to the model's own policy, and skip a
+  `policy_class` the model or record defines; Pundit's `policy` helper asks the namespace too.
+  `policy_namespace :staff` declares another namespace, `policy_namespace false` the model's own
+  policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method, and a
+  value that names no module, such as `""`, `true`, `1` or `[]`, raises `ArgumentError`. A declaration holds for
+  subclasses in its modules and below them; a subclass adds the modules its name has beyond the
+  declaring class's, so `policy_namespace :staff` in a base class makes
+  `Admin::Projects::ListAction` ask `Staff::Admin::ProjectPolicy`, the same in
+  `Admin::ApplicationAction` makes it ask `Staff::ProjectPolicy`, and an `Admin::` subclass of an
+  action that declares `false` still asks `Admin::ProjectPolicy`.
+- Every module around the action counts, except the one that names its model and the model's own
+  modules. So these are renamed and ask a namespaced policy, failing closed until it exists or
+  the action declares `policy_namespace false`:
+  - a single module: `Admin::ExportAction` on `Project` is `export_admin_projects` and asks
+    `Admin::ProjectPolicy`; `Reports::ExportAction` on `Customer` is `export_reports_customers`
+    and asks `Reports::CustomerPolicy`;
+  - a nested resource: `Events::Attendees::ListAction` on `Attendee` is `list_events_attendees`
+    and asks `Events::AttendeePolicy`;
+  - an area module: `Crm::Organizations::ListAction` on a top-level `Organization` is
+    `list_crm_organizations` and asks `Crm::OrganizationPolicy` (on `Crm::Organization` nothing
+    changes).
+
+  `rails actions:check` names each missing policy, and says when the outer module names a model
+  (`Events` names `Event`), so the action may be nested: declare `policy_namespace false` only if
+  everyone the model's own policy allows may run it.
+- An action with no model counts every module it is in, as it has no model's modules to leave
+  out. `Admin::CountProjectsAction`, with a declared name, asked `ProjectPolicy` in its own
+  `authorize Project` and `policy_scope(Project)`; it asks `Admin::ProjectPolicy`, failing closed
+  until it exists. A module named like a model counts too: `Events::TallyAction` with no model
+  asks `Events::EventPolicy`. Declare `policy_namespace false` to ask the models' own policies.
+  An action with no model at the top level is unchanged. `rails actions:check` cannot name the
+  policy, since only `perform` says which model it authorizes; the error names it. With
+  ActionPolicy, `policy_scope` in a namespace without the policy raises
+  "Couldn't find Admin::ProjectPolicy for Project", instead of falling back to the action as its
+  authorization target.
+- `Admin::Billing::Invoices::ListAction` finds `Billing::Invoice`: a model lookup drops outer
+  modules from the left before trying the top-level model. Such an action was named `list` with no
+  policy check; it is `list_admin_billing_invoices` and asks `Admin::Billing::InvoicePolicy`.
+- An isolated engine's action on a host model keeps one namespace in its name:
+  `Billing::Projects::ListAction` in a folder named `billing` is `list_billing_projects`, and asks
+  `Billing::ProjectPolicy`.
+- That module is part of the action's name: `Admin::Projects::ListAction` is `list_admin_projects`,
+  with the CLI command `admin-projects list` and the title "List admin projects", so it no longer
+  collides with `Projects::ListAction`, and a summarized admin list points agents at
+  `show_admin_project`. `Naming#outer_namespace` gives it. Names of actions inside their model's
+  namespace do not change.
+- Errors by field hold each message without the field's name (`{"title" => ["can't be blank"]}`),
+  as a record's `errors.as_json` does, so a screen that adds them back shows them once.
+- A fresh development or test process draws its routes before the first render, so its first
+  links use the routes' `default_url_options` instead of `example.org`.
+- A list with a summary may `render json:` beside `collection:`: screens get the json (an Alba or
+  Blueprinter resource), agents the summaries of the collection.
+- A field the input does not list is refused as "update_note does not take user_id. It takes id,
+  title, body." A request body sent without `Content-Type: application/json` says so.
+- A named action with a model and no `policy_rule` raises the message `rails actions:check`
+  gives, instead of a `TypeError`.
+- With no authorization adapter, the generator leaves `belongs_to` fields out of `accepts`,
+  commented, and says why. It says the generated test has placeholders to fill in.
+- `announce_changes` and `assert_announces_changes` say how to install change tracking when
+  nothing notes changes.
+
 - `Caller.system` runs an action as the app itself, from a job, a rake task or the console. It is
   not an agent: `connections` never bar it, it holds every scope and is never asked to confirm.
   Its account is `Saltbox::Actions::SystemAccount` unless the app passes one, and the policy sees

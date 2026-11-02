@@ -123,24 +123,57 @@ module Saltbox
         #   otherwise ["events", "update"], ["event-types", "create"]
         def cli_command
           return declared_cli[:command] if declared_cli
-          noun = action_namespace ? name_noun(plural: true) : model&.model_name&.route_key
+          noun = (action_namespace || outer_namespace.any?) ? name_noun(plural: true) : model&.model_name&.route_key
           [noun&.dasherize, action_words.join("-")].compact
         end
 
         # @return [String, nil] the namespace its action folder gives its names (see ActionPaths#add)
         def action_namespace = Actions.config.action_paths.namespace_for(self)
 
-        # The model's part of the action's name. A namespace from the action
-        # folder takes the place of an isolated engine's module: Billing::Invoice
-        # is billing_invoice, or pay_invoice under the namespace "pay".
+        # Every module the action is in that its model is not in, as a
+        # controller's in a back office: ["admin"] for
+        # Admin::Projects::ListAction or Admin::ExportAction on Project. The
+        # resource namespace, the module that names the model (Projects), and
+        # the model's own modules are left out, so Projects::ListAction and
+        # Billing::Invoices::ListAction on Billing::Invoice have none.
+        # Reports::ExportAction on Customer has ["reports"], and
+        # Events::Attendees::ListAction on Attendee has ["events"]. An action
+        # with no model has every module it is in: ["admin"] for
+        # Admin::CountProjectsAction, [] for a top-level one. They are
+        # part of the action's name (list_admin_projects), and its policy is
+        # looked up in them (Authorization::Policies#policy_namespace).
+        #
+        # @return [Array<String>]
+        def outer_namespace = name ? outer_modules(name.deconstantize.split("::")) : []
+
+        # @api private
+        # The outer modules in the action's name. A namespace from the action
+        # folder takes the place of the engine's module, so
+        # Billing::Projects::ListAction on the app's Project, in a folder
+        # named "billing", is list_billing_projects.
+        #
+        # @return [Array<String>]
+        def name_namespace
+          return outer_namespace unless action_namespace && outer_namespace.first == name.split("::").first.underscore
+          outer_namespace.drop(1)
+        end
+
+        # The model's part of the action's name, after any outer namespace.
+        # A namespace from the action folder takes the place of an isolated
+        # engine's module: Billing::Invoice is billing_invoice, or
+        # pay_invoice under the namespace "pay".
         #
         # @param plural [Boolean]
         # @return [String, nil]
         def name_noun(plural:)
           return unless model
           names = model.model_name
-          return plural ? names.plural : names.singular unless (namespace = action_namespace)
-          "#{namespace}_#{plural ? names.param_key.pluralize : names.param_key}"
+          noun = if (namespace = action_namespace)
+            "#{namespace}_#{plural ? names.param_key.pluralize : names.param_key}"
+          else
+            plural ? names.plural : names.singular
+          end
+          [*name_namespace, noun].join("_")
         end
 
         # @return [String, nil] the name declared with action_name
@@ -210,9 +243,21 @@ module Saltbox
 
         private
 
+        # The outer namespace among these modules of the action's name: the
+        # resource namespace, when it is the last of them, and the model's
+        # own modules are left out. An action with no model has neither, so
+        # all of them count.
+        def outer_modules(modules)
+          return modules.map(&:underscore) unless model.is_a?(Class)
+          modules = modules.dup
+          modules.pop if modules.last&.singularize == model.name.demodulize
+          (modules - model.name.deconstantize.split("::")).map(&:underscore)
+        end
+
         def built_title
           noun = model&.model_name&.human&.downcase
           noun = "#{action_namespace.humanize(capitalize: false)} #{noun}" if noun && action_namespace
+          noun = [*name_namespace.map { it.humanize(capitalize: false) }, noun].join(" ") if noun
           noun = noun&.pluralize if PLURAL_VERBS.include?(verb)
           [verb.humanize, noun, *action_words.drop(1)].compact.join(" ")
         end
@@ -222,17 +267,20 @@ module Saltbox
 
       # The model a resource namespace names, found as wrap_parameters finds a
       # controller's: singular, walking out of the namespace, so
-      # Admin::Events tries Admin::Event, then Event.
+      # Admin::Events tries Admin::Event, then Event. Before the top-level
+      # model it drops outer modules from the left too, so
+      # Admin::Billing::Invoices tries Admin::Billing::Invoice,
+      # Admin::Invoice, Billing::Invoice, then Invoice.
       #
       # @param namespace [String] such as "Admin::Events"
       # @return [Class, nil]
       def self.model_for(namespace)
         parts = namespace.split("::")
-        until parts.empty?
-          found = parts.join("::").classify.safe_constantize
+        walked_out = (parts.size - 1).downto(1).map { [*parts.first(it), parts.last] }
+        from_left = (1..parts.size - 2).map { parts.drop(it) }
+        [*walked_out, *from_left, [parts.last]].each do |candidate|
+          found = candidate.join("::").classify.safe_constantize
           return found if found.is_a?(Class)
-          break if parts.size == 1
-          parts.delete_at(-2)
         end
         nil
       end

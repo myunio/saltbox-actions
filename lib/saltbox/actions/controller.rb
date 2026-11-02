@@ -76,6 +76,9 @@ module Saltbox
         fields = request.request_parameters
         raise Error::Invalid, 'Send a JSON object: {"arguments": {...}}' if fields.key?("_json")
         unknown = fields.keys - ["arguments"]
+        if unknown.any? && !request.media_type.to_s.end_with?("json")
+          raise Error::Invalid, "The body was not read as JSON: send it with Content-Type: application/json"
+        end
         raise Error::Invalid, "Unknown fields: #{unknown.join(", ")}. Put the action's arguments in \"arguments\"." if unknown.any?
         fields["arguments"]
       end

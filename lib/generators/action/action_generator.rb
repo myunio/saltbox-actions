@@ -84,6 +84,10 @@ module Saltbox
             say "Describe #{undescribed.to_sentence} for agents in config/locales/actions.en.yml, under actions.#{probe.resource_locale_key}.fields, " \
               "then rerun bin/rails actions:catalogue.", :green
           end
+          if accepted_references.present?
+            say "Left #{accepted_references.to_sentence} out of accepts: a caller could point #{(accepted_references.size > 1) ? "them" : "it"} " \
+              "at any record it can see. Accept #{(accepted_references.size > 1) ? "one" : "it"} only if that is safe.", :yellow
+          end
           return unless verb == "list" && probe.summary.nil?
           say "Agents get each #{model.model_name.human.downcase}'s full view. To send them a short one, declare " \
             "`summary #{model_name}, :id, ...` in #{base_class}.", :yellow
@@ -161,22 +165,31 @@ module Saltbox
           lines << "kind :#{kind}" unless verb_rule
           lines << "attribute :id" if !verb_rule && takes_id?
           lines << "policy_rule :#{policy_rule}" if policy_rule
-          lines << "accepts #{accepted.map { ":#{it}" }.join(", ")}" if accepted
+          lines << "accepts #{accepted.map { ":#{it}" }.join(", ")}" if accepted.present?
+          if accepted_references.present?
+            lines << "# A caller may point a reference at any record it can see: accept one only if that is safe."
+            lines << "# accepts #{accepted_references.map { ":#{it}" }.join(", ")}"
+          end
           lines
         end
 
         # The model fields a create or update names with `accepts` when the
         # base class's authorization adapter does not supply them: every
         # column the person could set, to trim, as a scaffold's params list
-        # does. Nil when the adapter supplies them, or for any other verb.
+        # does. A belongs_to is left out (accepted_references): with no
+        # policy, a caller could point it at any record it can see, such as
+        # another person as a record's owner. Nil when the adapter supplies
+        # them, or for any other verb.
         def accepted
           return unless Schema::WRITING_VERBS.include?(verb) && !bare_probe.supplies_fields?
-          skipped = [model.primary_key, "created_at", "updated_at"]
-          model.column_names.reject { skipped.include?(it) }.map do |column|
-            association = model.reflect_on_all_associations(:belongs_to).find { it.foreign_key.to_s == column }
-            association ? association.name.to_s : column
-          end
+          skipped = [model.primary_key, "created_at", "updated_at", *references.keys]
+          model.column_names - skipped
         end
+
+        # @return [Array<String>, nil] the belongs_to fields the template leaves commented out, by association name
+        def accepted_references = (references.values if accepted)
+
+        def references = model.reflect_on_all_associations(:belongs_to).to_h { [it.foreign_key.to_s, it.name.to_s] }
 
         # An anonymous action class with the new action's name and the
         # declarations the template writes, used to check it and read its
@@ -184,7 +197,7 @@ module Saltbox
         def probe
           @probe ||= begin
             fields = accepted
-            bare_probe.tap { |action| action.accepts(*fields) if fields }
+            bare_probe.tap { |action| action.accepts(*fields) if fields.present? }
           end
         end
 

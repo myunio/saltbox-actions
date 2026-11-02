@@ -71,6 +71,12 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
     expect(Dummy::ANNOUNCED).to be_empty
   end
 
+  it "says how to note changes when nothing was announced and nothing notes them" do
+    allow(Saltbox::Actions::ChangeTracking).to receive(:in_use?).and_return(false)
+    expect { expect {}.to announce_changes(event => :update) }
+      .to raise_error(RSpec::Expectations::ExpectationNotMetError, /include Saltbox::Actions::ChangeTracking in ApplicationRecord/)
+  end
+
   it "notes a save that changed nothing as no change" do
     _, changes = Saltbox::Actions::Invocation.collect_changes { event.save! }
     expect(changes).to be_empty
