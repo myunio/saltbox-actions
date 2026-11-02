@@ -82,8 +82,8 @@ end
 RSpec.shared_examples "a valid action registry" do
   let(:registry) { Saltbox::Actions::Registry }
 
-  it "loads every action and passes the boot checks" do
-    expect(registry.actions).not_to be_empty
+  it "loads every action and passes every check, as rails actions:check runs them" do
+    expect(registry.check!).not_to be_empty
   end
 
   it "has a spec file for every action" do

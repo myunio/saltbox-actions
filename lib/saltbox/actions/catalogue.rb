@@ -43,13 +43,15 @@ module Saltbox
         # @return [String] the token scope it needs: the read scope for a read, the write scope for anything else
         def scope = Actions.config.scope_for(kind)
 
+        # @param caller [Caller, nil] whose entry in the actions list; nil for config/actions.json
+        # @param input [Schema::Input] the input it lists
         # @return [Hash] the action's entry in the actions list and in config/actions.json
-        def definition
+        def definition(caller = nil, input: input(caller))
           {"name" => action_name, "title" => title, "description" => description, "area" => area,
            "kind" => kind.to_s, "idempotent" => idempotent?, "scope" => scope, "connections" => connections.to_s,
            "permissions" => permissions&.grep(String), "permissions_any_of" => permissions&.grep(Array)&.presence,
            "mcp_core" => mcp_core?, "cli" => {"command" => cli_command, "aliases" => declared_cli&.fetch(:aliases)&.presence, "args" => cli_args}.compact,
-           "summary" => summary&.names, "input_schema" => input_schema,
+           "summary" => summary&.names, "input_schema" => input.schema,
            "output_schema" => summarizes_list? ? summary_output_schema : output_schema}.compact
         end
 

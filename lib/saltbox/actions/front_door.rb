@@ -28,12 +28,15 @@ module Saltbox
       # @param caller [Caller]
       # @return [Array<Tool>]
       def self.tools(caller)
-        runnable = Registry.runnable(caller)
-        direct = runnable.select(&:mcp_core?).map do |action|
-          Tool.new(name: action.action_name, title: action.title, description: [action.description, action.summary_note].compact.join(" ").presence,
-            input_schema: action.input_schema, annotations: annotations(action.kind, idempotent: action.idempotent?))
+        # Inside the caller's set-up, which a policy may need to build each schema.
+        Actions.within(caller) do |fresh|
+          runnable = Registry.actions.select { |action| action.runnable_for?(fresh) }
+          direct = runnable.select(&:mcp_core?).map do |action|
+            Tool.new(name: action.action_name, title: action.title, description: [action.description, action.summary_note].compact.join(" ").presence,
+              input_schema: action.input_schema(fresh), annotations: annotations(action.kind, idempotent: action.idempotent?))
+          end
+          direct + [find_tool] + RUN.keys.select { |kind| runnable.any? { |action| action.kind == kind } }.map { |kind| run_tool(kind) }
         end
-        direct + [find_tool] + RUN.keys.select { |kind| runnable.any? { |action| action.kind == kind } }.map { |kind| run_tool(kind) }
       end
 
       # @param tool_name [String]
@@ -116,7 +119,7 @@ module Saltbox
           available = Registry.actions.select { |action| action.available_to?(fresh) }
           actions = Finder.new(available).find(query).map do |action|
             runnable = action.runnable_for?(fresh)
-            {name: action.action_name, title: action.title, description: action.description, arguments: action.input_schema,
+            {name: action.action_name, title: action.title, description: action.description, arguments: action.input_schema(fresh),
              response_description: action.summary_note, run_with: runnable ? RUN.fetch(action.kind) : nil, confirm_first: action.connections == :confirm,
              message: ("Only a person can do this, in #{app}" unless runnable)}.reject { |key, value| %i[response_description message].include?(key) && value.nil? }
           end

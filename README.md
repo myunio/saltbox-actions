@@ -87,8 +87,15 @@ RSpec.describe Event::UpdateAction do
 end
 ```
 
-When the app boots in production or CI, it checks every action. If an action
-leaves out a setting it needs, the boot stops and the error names the fix.
+Run `bin/rails actions:check` in CI, as you would `bin/rails zeitwerk:check`.
+It checks every action against its model, policy and fields, and names the
+action and the fix for each problem. It reads the models' columns, so it
+needs the database.
+
+Booting never touches the database. When an app boots with eager loading
+(production, CI), it checks only what each action declares, such as its
+name, kind and connections. If one leaves out a setting it needs, the boot
+stops and the error names the fix.
 
 ## Install
 
@@ -557,6 +564,21 @@ ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
 the model's fields.
 
+Each caller's input schema lists the fields the policy permits that caller.
+The policy is asked with the real person, inside `around_invocation`, so a
+tenant is set. Two callers whose policy permits different fields see
+different schemas. A field of the model the caller may not set is refused
+as forbidden: "You can't change notes."
+
+The committed catalogue and `rails actions:check` have no caller. They build
+the schema for `config.schema_principal`, a person who may set every field.
+Without it the policy is asked with no person. If your policy needs a person
+or a tenant, set it:
+
+```ruby
+config.schema_principal { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
+```
+
 ### Change tracking
 
 `Saltbox::Actions::ChangeTracking` notes each record an action creates,
@@ -673,9 +695,10 @@ end
 ```
 
 There is also `"renders its declared output schema"`, and
-`"a valid action registry"`. Put the registry one in a single spec. It checks
-that every action loads, has a spec file and a valid input schema, and that
-the committed catalogue is up to date.
+`"a valid action registry"`. Put the registry one in a single spec. It runs
+every check `rails actions:check` runs, and checks that every action has a
+spec file and a valid input schema, and that the committed catalogue is up
+to date.
 
 ## Testing with Minitest
 
@@ -730,8 +753,9 @@ The helper also has these checks:
 - `assert_announces_changes(event => :update) { run(...) }` checks change events.
 - `assert_changes_audit_trail(on: event, by: user) { run(...) }` needs PaperTrail.
 - `assert_matches_catalogue` checks the committed catalogue.
-- `assert_valid_action_registry` checks that every action loads, has a test
-  under `test/actions/` and a valid input schema, and matches the catalogue.
+- `assert_valid_action_registry` runs every check `rails actions:check` runs,
+  and checks that every action has a test under `test/actions/` and a valid
+  input schema, and matches the catalogue.
   Pass `test_root:` if your tests live elsewhere.
 
 Put the registry check in one test:
@@ -755,6 +779,7 @@ details. A missing refusal, wrong code or missing field fails the test.
 bin/rails g action Event::Update                  # a verb from the table
 bin/rails g action Event::Archive --kind change   # any other verb
 bin/rails actions:catalogue                       # rewrite config/actions.json
+bin/rails actions:check                           # check every action (in CI)
 ```
 
 The generator writes the action, its locale entry and a test for the app's
@@ -769,6 +794,7 @@ and `lib/templates/test_unit/action/action_test.rb.tt` (Minitest) or
 
 `config/actions.json` is the **catalogue**: every action as callers see it.
 Commit it, so a change to any action's name or input shows up in review.
+Writing it needs the database, like `actions:check`.
 
 ## Configuration
 
@@ -796,7 +822,7 @@ Saltbox::Actions.configure do |config|
   # Turn your own errors into ones callers see.
   config.map_error("Events::Locked") { |error| Saltbox::Actions::Error.new(error.message, code: :locked) }
 
-  # Add a boot check of your own.
+  # Add a check of your own, run by rails actions:check.
   config.check_action { |action| action.description ? [] : ["write a description"] }
 end
 ```

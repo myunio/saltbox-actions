@@ -1,9 +1,15 @@
 module Saltbox
   module Actions
-    # Loads every action under the actions folder and checks its settings
-    # when the app boots. A setting the class name cannot give, and the class
-    # does not declare, stops the boot in CI and production instead of being
-    # guessed. Each error names the action and the fix.
+    # Loads every action under the actions folder and checks it, in two
+    # steps. Each error names the action and the fix.
+    # - When an eager-loading app boots (production, CI), what each action
+    #   declares: a setting the class name cannot give, and the class does
+    #   not declare, stops the boot instead of being guessed. These checks
+    #   never touch the database.
+    # - `rails actions:check` (.check!), run in CI and by the registry spec,
+    #   checks the rest against the models, policies and database: the
+    #   policy rules, the fields each schema takes, the summaries, and the
+    #   app's own checks.
     module Registry
       # @return [Array<Class>] every action, sorted by name
       def self.actions
@@ -105,19 +111,37 @@ module Saltbox
         constant
       end
 
+      # The boot checks: what each action declares, and that names are
+      # unique. Nothing here touches the database.
+      #
       # @param entries [Array<Class>]
       # @return [void]
       # @raise [ArgumentError] naming every problem with each action
       def self.validate!(entries)
         # Each action's own checks come first: a name the others need, such
         # as a model's, may be the problem.
-        problems = entries.flat_map { |action| problems(action).map { "#{action.name}: #{it}" } }
+        problems = entries.flat_map { |action| problems(action, declared_only: true).map { "#{action.name}: #{it}" } }
         raise ArgumentError, problems.join("\n") if problems.any?
-        Actions.config.registry_checks.each { it.call(entries) }
         unique!(entries, "Action names", "declare action_name on one, or give one engine's action path a namespace") { [it.action_name] }
         unique!(entries, "CLI commands", "declare cli on one, or give one engine's action path a namespace") do |action|
           [action.cli_command, *action.declared_cli&.fetch(:aliases)].map { it.join(" ") }
         end
+      end
+
+      # Every check, as `rails actions:check` runs it: the boot checks, then
+      # each action's model, policy, fields and summary, and the app's own
+      # checks (Configuration#action_checks and #registry_checks). It reads
+      # the models' columns, so it needs the database; a write action's
+      # schema is built for Configuration#schema_principal.
+      #
+      # @return [Array<Class>] every action, once all pass
+      # @raise [ArgumentError] naming every problem with each action
+      def self.check!
+        entries = actions
+        problems = entries.flat_map { |action| problems(action).map { "#{action.name}: #{it}" } }
+        raise ArgumentError, problems.join("\n") if problems.any?
+        Actions.config.registry_checks.each { it.call(entries) }
+        entries
       end
 
       # @param entries [Array<Class>]
@@ -133,9 +157,10 @@ module Saltbox
       end
 
       # @param action [Class]
+      # @param declared_only [Boolean] only the boot checks of what the class declares
       # @return [Array<String>] what is wrong with the action, and the fix
-      def self.problems(action)
-        return named_problems(action) if action.declared_name
+      def self.problems(action, declared_only: false)
+        return named_problems(action, declared_only:) if action.declared_name
         verb = action.verb
         problems = []
         if (spelling = Naming::RAILS_SPELLINGS[verb])
@@ -151,7 +176,11 @@ module Saltbox
           problems << "#{verb} is not a verb in the table: declare kind :read, :change or :destructive"
         end
         problems.concat(connection_problems(action))
-        problems.concat(model_problems(action))
+        # Its name comes from its model, so this one is a boot check too.
+        unmodelled = not_a_model(action)
+        problems << unmodelled if unmodelled
+        return problems if declared_only
+        problems.concat(model_problems(action)) unless unmodelled
         problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
       end
 
@@ -167,17 +196,27 @@ module Saltbox
       # its kind, and its policy is checked only when it declares a model.
       #
       # @param action [Class]
+      # @param declared_only [Boolean]
       # @return [Array<String>]
-      def self.named_problems(action)
+      def self.named_problems(action, declared_only: false)
         problems = []
         problems << "declare kind :read, :change or :destructive" unless action.declared_kind
         problems.concat(connection_problems(action))
+        return problems if declared_only
         if action.model && action.declared_query.nil?
           problems << "#{action.model.name} is its model: name the policy rule, authorize :show? or another"
         elsif action.model
           problems.concat(model_problems(action))
         end
         problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
+      end
+
+      # @param action [Class]
+      # @return [String, nil] for an action under a namespace that is not a model, and no model declared, the fix
+      def self.not_a_model(action)
+        model = action.model
+        return if (action.name.deconstantize.empty? && model.nil?) || (model.is_a?(Class) && model < ActiveRecord::Base)
+        "#{action.name.deconstantize} is not a model: declare model, or move the action"
       end
 
       # @param action [Class]
@@ -197,12 +236,25 @@ module Saltbox
         elsif !action.policy_rule?(action.policy_query)
           problems << "#{policy}##{action.policy_query} is missing: add it, or authorize another query"
         end
-        begin
-          action.writable_fields
-        rescue ArgumentError => error
-          problems << error.message
-        end
+        problems.concat(schema_problems(action))
         problems.concat(summary_problems(action))
+      end
+
+      # Builds the catalogue's input schema, which asks the policy's
+      # permitted_attributes of the schema principal.
+      #
+      # @param action [Class] an action with a model
+      # @return [Array<String>] what stops its schema being built, and the fix
+      def self.schema_problems(action)
+        action.input_schema
+        []
+      rescue ArgumentError => error
+        [error.message]
+      rescue ActiveRecord::ConnectionNotEstablished, ActiveRecord::NoDatabaseError
+        raise
+      rescue => error
+        ["building its input schema asked #{action.policy_class || "its policy"}#permitted_attributes, which raised #{error.class}: #{error.message}. " \
+          "If the policy needs a person or a tenant, set config.schema_principal, which actions:check and the catalogue build schemas for"]
       end
 
       # @param action [Class] an action with a model
@@ -228,26 +280,28 @@ module Saltbox
       def self.fetch(name) = find(name) || raise(Error::UnknownAction, name)
 
       # @param caller [Caller]
-      # @return [Array<Class>] the actions this caller may run
-      def self.runnable(caller)
-        Actions.within(caller) { |fresh| actions.select { |action| action.runnable_for?(fresh) } }
-      end
-
-      # @param caller [Caller]
       # @return [Array<Hash>] visible definitions, each marked runnable or not
       #   for this caller, from one fresh check of the caller
       def self.catalogue(caller)
         Actions.within(caller) do |fresh|
           actions.select { |action| action.available_to?(fresh) }
-            .map { |action| action.definition.merge("runnable" => fresh.agent_allowed?(action)) }
+            .map { |action| action.definition(fresh).merge("runnable" => fresh.agent_allowed?(action)) }
         end
       end
 
-      # @return [Array<Hash>] every action's definition, as written to the catalogue file
+      # @return [Array<Hash>] every action's definition, as written to the catalogue file:
+      #   a create or update lists the fields the policy permits Configuration#schema_principal
       def self.definitions = actions.map(&:definition)
 
-      # @return [String] hash of every definition
-      def self.version = @version ||= Digest::SHA256.hexdigest(JSON.generate(definitions))[0, 16]
+      # The version of the actions' code, for the API's meta and the MCP
+      # server: a hash of every definition without the policy's fields, so
+      # no caller is needed. A caller's own fields change their catalogue's
+      # ETag instead.
+      #
+      # @return [String]
+      def self.version
+        @version ||= Digest::SHA256.hexdigest(JSON.generate(actions.map { it.definition(input: it.declared_input) }))[0, 16]
+      end
 
       # @return [Pathname] the committed catalogue, which a spec checks matches the code
       def self.catalogue_path = Rails.root.join(Actions.config.catalogue_path)

@@ -11,9 +11,32 @@ RSpec.describe Saltbox::Actions::Schema do
     expect(schema["additionalProperties"]).to be(false)
   end
 
-  it "gives every caller the same schema, asked of the schema principal, who may set every field" do
+  it "builds the catalogue's schema, with no caller, for the schema principal" do
     expect(Event::CreateAction.input_schema["properties"]).to have_key("notes")
     expect(Event::UpdateAction.input_schema["required"]).to eq(%w[id])
+  end
+
+  context "with a caller" do
+    let(:note_keeper) { Account.new(id: 9, permissions: %w[events.view events.manage events.notes]) }
+    let(:fields) { ->(account) { Event::CreateAction.input_schema(as_screen(account))["properties"].keys } }
+
+    it "lists the fields the policy permits that caller, never another caller's" do
+      expect(fields.call(manager)).not_to include("notes")
+      expect(fields.call(note_keeper)).to include("notes")
+      expect(fields.call(manager)).not_to include("notes")
+      expect(Saltbox::Actions::FrontDoor.find("add an event", as_mcp(manager))[:actions].find { it[:name] == "create_event" }[:arguments]["properties"]).not_to have_key("notes")
+      expect(Saltbox::Actions::Registry.catalogue(as_screen(note_keeper)).find { it["name"] == "create_event" }.dig("input_schema", "properties")).to have_key("notes")
+    end
+
+    it "runs with a policy that needs a person, with no schema principal set" do
+      allow(Saltbox::Actions.config).to receive(:schema_principal).and_return(nil)
+      expect { Event::CreateAction.input_schema }.to raise_error(NoMethodError)
+      run = ->(account, arguments) { Saltbox::Actions::Invocation.call(name: "create_event", caller: as_screen(account), arguments:) }
+      expect(run.call(note_keeper, {title: "AGM", notes: "Quorum is 12"}).status).to eq(201)
+      expect(Event.last.notes).to eq("Quorum is 12")
+      expect { run.call(manager, {title: "AGM", notes: "x"}) }.to be_refused.with(:forbidden)
+      expect { run.call(manager, {title: "AGM", notes: "x"}) }.to raise_error(Saltbox::Actions::Error::Forbidden, "You can't change notes.")
+    end
   end
 
   it "types declared arguments, including lists of records capped at the configured size" do

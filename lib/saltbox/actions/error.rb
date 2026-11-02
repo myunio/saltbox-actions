@@ -75,6 +75,10 @@ module Saltbox
       class Forbidden < Error
         self.default_status = :forbidden
         self.default_message = "You don't have permission to do this."
+
+        # @param fields [Array<String>] fields the person sent but may not change
+        # @return [Forbidden] naming each field
+        def self.fields(fields) = new("You can't change #{fields.to_sentence}.", errors: fields.index_with { ["you can't change this"] })
       end
 
       # An agent asked for an action only a person may take.

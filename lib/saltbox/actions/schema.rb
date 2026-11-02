@@ -1,3 +1,5 @@
+require "concurrent/map"
+
 module Saltbox
   module Actions
     # Builds the JSON Schema of an action's input. Agents read it before they
@@ -93,72 +95,120 @@ module Saltbox
       # @return [Boolean] whether the schema allows null
       def self.nullable?(schema) = Array(schema["type"]).include?("null")
 
+      # What one caller may send to an action, built the first time a caller
+      # with the same permitted fields asks for it.
+      #
+      # @!attribute schema [Hash] the JSON Schema, refusing any field it does not list
+      # @!attribute types [Hash{String => ActiveModel::Type::Value, Array, Hash}] what casts each
+      #   input before the schema checks it (Casting.cast)
+      # @!attribute fields [Hash{String => Field}] the model fields among them, keyed by the name callers send
+      Input = Data.define(:schema, :types, :fields)
+
       class_methods do
-        # @return [Hash] the action's input schema: the same for every caller,
-        #   and refusing any field it does not list
-        def input_schema
-          @input_schema ||= begin
-            properties = {}
-            required = []
-            properties["id"] = ID if takes_id? && !arguments.key?("id")
-            required << "id" if properties.key?("id")
-            writable_fields.each do |name, field|
-              properties[name] = field.schema
-              required << name if field.required && verb == "create"
-            end
-            arguments.each do |name, argument|
-              properties[name] = argument[:schema]
-              required << name if argument[:required]
-            end
-            properties = properties.to_h { |name, schema| [name, schema.merge("description" => field_description(name) || schema["description"]).compact] }
-            {"type" => "object", "properties" => properties, "required" => required.uniq, "additionalProperties" => false}.freeze
-          end
+        # The input schema for one caller. A create or update lists the
+        # fields the model's policy permits that caller, so two callers see
+        # different schemas when their policy permits different fields.
+        # Without a caller it is the catalogue's schema, built for
+        # Configuration#schema_principal.
+        #
+        # @param caller [Caller, nil]
+        # @return [Hash]
+        def input_schema(caller = nil) = input(caller).schema
+
+        # @param caller [Caller, nil]
+        # @return [Hash{String => Field}] the policy's permitted fields for the caller, keyed by the name callers send
+        # @raise [ArgumentError] for a permitted name that is not a column, an association or an argument
+        def writable_fields(caller = nil) = input(caller).fields
+
+        # Asks the policy which fields the caller may set, on a new record,
+        # each time; the Input is built once per action, per list of fields
+        # and per locale, then shared by every caller with the same list, so
+        # one caller's fields never reach another's schema. Run it inside the
+        # caller's Configuration#around_invocation, where the policy's tenant
+        # is set: every surface does. Permitting#permitted_attributes checks
+        # the fields against the real record again.
+        #
+        # @param caller [Caller, nil] nil for the catalogue's schema (Configuration#schema_principal)
+        # @return [Input]
+        def input(caller = nil)
+          keys = (writes_fields? && model) ? permitted_keys(caller) : []
+          input_for(keys)
         end
 
-        # @return [Hash{String => ActiveModel::Type::Value, Array, Hash}] what casts each input
-        #   before the schema checks it (Casting.cast)
-        def input_types
-          @input_types ||= writable_fields.transform_values(&:type)
-            .merge(arguments.transform_values { it[:type] }).compact.freeze
-        end
+        # @return [Input] the action's input without the policy's fields:
+        #   its id and declared arguments, the same for every caller
+        def declared_input = input_for([])
 
         # Checks a caller's input before the action runs. Override it in the
         # app's base class to check input another way.
         #
         # @param arguments [Hash, nil]
-        # @param _caller [Caller]
+        # @param caller [Caller]
         # @return [Hash] the input #perform receives as params
         # @raise [Error::Invalid]
-        def validate_arguments(arguments, _caller) = Arguments.for(self).validate!(arguments)
+        # @raise [Error::Forbidden] naming each field of the model the caller may not set
+        def validate_arguments(arguments, caller) = Arguments.for(self, caller).validate!(arguments)
 
         # @return [Boolean] whether the verb takes the fields the policy permits
         def writes_fields? = !declared_name && WRITING_VERBS.include?(verb)
 
-        # The fields the model's policy permits for a new record, asked of the
-        # schema principal (Configuration#schema_principal), so every caller
-        # gets the same schema. Permitting#permitted_attributes checks the real
-        # person again on each call.
-        #
-        # @return [Hash{String => Field}] keyed by the name callers send
-        # @raise [ArgumentError] for a permitted name that is not a column, an association or an argument
-        def writable_fields
-          return {} unless writes_fields? && model
-          @writable_fields ||= policy_keys.each_with_object({}) do |key, fields|
-            next if arguments.key?(key)
-            name, field = column_field(key)
-            raise ArgumentError, "#{policy_class}#permitted_attributes lists #{key}, which is not a column, an association or an argument of #{self.name}" unless field
-            fields[name] = field
-          end
+        # @param name [String, Symbol]
+        # @return [Boolean] whether some caller may send it: an argument, the
+        #   id, or for a create or update a column or association of the model
+        def declares_input?(name)
+          name = name.to_s
+          arguments.key?(name) || (name == "id" && takes_id?) || model_field?(name)
         end
 
-        # @return [Array<String>] the keys the policy permits for the schema principal
-        def policy_keys
-          principal = Actions.config.schema_principal
-          ask = ->(user) { permitted_attribute_names_for(user, model.new) }
-          principal ? principal.call(ask) : ask.call(nil)
+        # @param name [String]
+        # @return [Boolean] whether a create or update could take it, for a
+        #   caller whose policy permits it: a column, or a belongs_to under
+        #   its association's name. Not the primary key.
+        def model_field?(name)
+          return false unless writes_fields? && model && name != model.primary_key
+          model.columns_hash.key?(name) || !!model.reflect_on_association(name)&.belongs_to?
         end
 
         private
+
+        # @return [Array<String>] the keys the policy permits the caller, or
+        #   the schema principal without one
+        def permitted_keys(caller)
+          return policy_keys(caller.account) if caller
+          principal = Actions.config.schema_principal
+          principal ? principal.call(->(account) { policy_keys(account) }) : policy_keys(nil)
+        end
+
+        def policy_keys(account) = permitted_attribute_names_for(account, model.new).uniq.freeze
+
+        def input_for(keys)
+          (@inputs ||= Concurrent::Map.new).compute_if_absent([keys, I18n.locale]) { build_input(keys) }
+        end
+
+        def build_input(keys)
+          fields = keys.each_with_object({}) do |key, result|
+            next if arguments.key?(key)
+            name, field = column_field(key)
+            raise ArgumentError, "#{policy_class}#permitted_attributes lists #{key}, which is not a column, an association or an argument of #{self.name}" unless field
+            result[name] = field
+          end
+          properties = {}
+          required = []
+          properties["id"] = ID if takes_id? && !arguments.key?("id")
+          required << "id" if properties.key?("id")
+          fields.each do |name, field|
+            properties[name] = field.schema
+            required << name if field.required && verb == "create"
+          end
+          arguments.each do |name, argument|
+            properties[name] = argument[:schema]
+            required << name if argument[:required]
+          end
+          properties = properties.to_h { |name, schema| [name, schema.merge("description" => field_description(name) || schema["description"]).compact] }
+          schema = {"type" => "object", "properties" => properties, "required" => required.uniq, "additionalProperties" => false}.freeze
+          types = fields.transform_values(&:type).merge(arguments.transform_values { it[:type] }).compact.freeze
+          Input.new(schema:, types:, fields: fields.freeze)
+        end
 
         def column_field(key)
           association = model.reflect_on_association(key.delete_suffix("_id")) if key.end_with?("_id")
