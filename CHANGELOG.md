@@ -14,6 +14,9 @@
   `around_invocation`, and cached per list of permitted fields, so callers whose policy permits
   different fields see different schemas. A model field the caller may not set is refused as
   forbidden. `input_schema`, `writable_fields` and `definition` take an optional caller.
+- `on_forbidden_fields { |caller, action, fields| ... }` returns the error for a field the caller
+  may not set, wherever it is refused: against the caller's schema or by the policy for the
+  record. The default is the same `forbidden` error as before: "You can't change notes."
 - `schema_principal` is used only where there is no caller: the committed catalogue,
   `actions:check` and the registry spec, the generator's field list, and the schema matchers
   without `as:`. `be_invalid_against_schema` and `assert_invalid_against_schema` take `as:` a

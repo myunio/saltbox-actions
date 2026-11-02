@@ -16,19 +16,23 @@ module Saltbox
       # @param types [Hash{String => Object}] what casts each input (Casting.cast)
       # @param forbidden [#call, nil] whether a name the schema does not list is a field
       #   the caller may not set, refused as forbidden rather than unknown
-      def initialize(schema, name: nil, types: {}, forbidden: nil)
+      # @param refuse [#call] takes those fields and returns the Error::Forbidden to raise
+      def initialize(schema, name: nil, types: {}, forbidden: nil, refuse: Error::Forbidden.method(:fields))
         @schema = schema
         @name = name
         @types = types
         @forbidden = forbidden
+        @refuse = refuse
       end
 
       # @param action [Class]
       # @param caller [Caller, nil] whose schema; nil for the catalogue's
-      # @return [Arguments] a checker for the action's input schema for that caller
+      # @return [Arguments] a checker for the action's input schema for that caller,
+      #   refusing a field they may not set with Configuration#on_forbidden_fields
       def self.for(action, caller = nil)
         input = action.input(caller)
-        new(input.schema, name: action.action_name, types: input.types, forbidden: action.method(:model_field?))
+        refuse = caller ? ->(fields) { Actions.config.on_forbidden_fields.call(caller, action, fields) } : Error::Forbidden.method(:fields)
+        new(input.schema, name: action.action_name, types: input.types, forbidden: action.method(:model_field?), refuse:)
       end
 
       # Checks input against the action's schema for a caller, inside the
@@ -77,7 +81,7 @@ module Saltbox
 
       def refuse_forbidden!(unlisted)
         forbidden = @forbidden ? unlisted.select { @forbidden.call(it) } : []
-        raise Error::Forbidden.fields(forbidden) if forbidden.any?
+        raise @refuse.call(forbidden) if forbidden.any?
       end
 
       # A copy for this call: the schema is shared by every caller, and an
