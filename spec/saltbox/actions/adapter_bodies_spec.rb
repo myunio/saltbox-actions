@@ -1,8 +1,8 @@
 require "saltbox/actions/mcp"
 require "saltbox/actions/ruby_llm"
 
-# Every JSON value an action renders reaches each surface as that value;
-# only a response with no body (head) is "Done.".
+# Every JSON value an action renders reaches each surface as that value,
+# marked as record data; only a response with no body (head) is "Done.".
 RSpec.describe "Response bodies on every surface" do
   def answering(body)
     Class.new(ApplicationAction) do
@@ -36,8 +36,8 @@ RSpec.describe "Response bodies on every surface" do
 
   {false => "false", nil => "null", {"ok" => true} => '{"ok":true}'}.each do |body, json|
     it "sends #{json} as #{json}" do
-      expect(mcp_text(body)).to eq(json)
-      expect(assistant_answer(body)).to eq(body.is_a?(Hash) ? body : json)
+      expect(mcp_text(body)).to eq("<record-data>\n#{json}\n</record-data>")
+      expect(assistant_answer(body)).to eq("<record-data>\n#{json}\n</record-data>")
     end
   end
 

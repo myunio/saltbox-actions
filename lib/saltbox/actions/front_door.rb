@@ -101,7 +101,7 @@ module Saltbox
       # @return [Tool] the plain-words discovery contract
       def self.find_tool
         Tool.new(name: FIND, title: "Find something to do in #{app}",
-          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, their arguments and which run tool to use. Leave query out to list everything you can run, a page at a time, without arguments.",
+          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, their arguments and which run tool to use. Leave query out to list everything you can run, a page at a time, without arguments. #{RecordData::NOTE}",
           input_schema: {"type" => "object", "properties" => {
             "query" => {"type" => "string", "minLength" => 1, "maxLength" => 200, "description" => "The request in plain words, or an action's name"},
             "page" => {"type" => "integer", "minimum" => 1, "description" => "With no query: the page of the list, from 1"},
@@ -114,7 +114,7 @@ module Saltbox
       # @return [Tool] a typed named-execution contract
       def self.run_tool(kind)
         title, description = RUN_TEXT.fetch(kind)
-        Tool.new(name: RUN.fetch(kind), title: format(title, app:), description: description,
+        Tool.new(name: RUN.fetch(kind), title: format(title, app:), description: "#{description} #{RecordData::NOTE}",
           input_schema: {"type" => "object", "properties" => {
             "name" => {"type" => "string", "minLength" => 1, "maxLength" => 64, "description" => "The action's name from find_action"},
             "arguments" => {"type" => %w[object null], "description" => "The action's arguments"}

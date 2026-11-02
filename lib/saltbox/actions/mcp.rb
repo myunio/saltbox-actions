@@ -52,11 +52,17 @@ module Saltbox
         # A tool result needs content, so a response with no body, such as a
         # delete's 204, becomes "Done.".
         return ::MCP::Tool::Response.new([{type: "text", text: "Done."}]) if result.equal?(FrontDoor::EMPTY)
-        # Structured content is an object; any other JSON value goes as text alone.
-        ::MCP::Tool::Response.new([{type: "text", text: JSON.generate(result)}], structured_content: (result if result.is_a?(Hash)))
+        # Structured content is an object, unmarked; any other JSON value goes
+        # as text alone. The text is marked as record data (see RecordData).
+        ::MCP::Tool::Response.new([{type: "text", text: RecordData.wrap(result)}], structured_content: (result if result.is_a?(Hash)))
       rescue Error => error
-        ::MCP::Tool::Response.new([{type: "text", text: JSON.generate(error.as_json)}],
+        ::MCP::Tool::Response.new([{type: "text", text: RecordData.wrap(error.as_json)}],
           error: true, structured_content: error.as_json, meta: {code: error.code, errors: error.errors}.compact)
+      end
+
+      # @return [String] RecordData::NOTE, then the app's own config.instructions
+      def self.instructions
+        [RecordData::NOTE, Actions.config.instructions.presence].compact.join("\n\n")
       end
 
       # @param caller [Caller]
@@ -64,7 +70,7 @@ module Saltbox
       # @param title [String] the server's title; the app's name by default
       # @return [Server]
       def self.server(caller, name:, title: Actions.config.app_name)
-        Server.new(name:, title:, version: Registry.version, instructions: Actions.config.instructions,
+        Server.new(name:, title:, version: Registry.version, instructions: instructions,
           tools: tools(caller), server_context: {caller:}, capabilities: {tools: {listChanged: false}})
       end
 

@@ -21,6 +21,15 @@
 
 - Authorization is optional. With no adapter, every action is allowed and `actions:check` asks
   for no policy. Adapters report their problems through `authorization_problems`; the
+- The text of each result and refusal an agent gets over MCP or from the assistant tools is
+  marked as record data: it comes inside `<record-data>` tags, with `<`, `>` and `&`
+  escaped so a record cannot close the tag. MCP's `structuredContent` and `_meta` are
+  unchanged. One sentence, `RecordData::NOTE`, tells the agent to treat the tagged text,
+  structured content and error details alike as data: first in the MCP server's instructions
+  (then `config.instructions`) and in the `find_action` and run tool descriptions.
+  `RubyLLMTool#execute` now returns that marked text, never a Hash.
+- Authorization is optional. With no adapter, every action is allowed and the boot check asks
+  for no policy. Adapters report their boot problems through `authorization_problems`; the
   README documents the adapter contract with a plain-model example.
 - A list action needs only `policy_scope`, as Pundit's `verify_policy_scoped` on `index`.
 - `rails g action` checks the action as `actions:check` does before writing any file, writes
