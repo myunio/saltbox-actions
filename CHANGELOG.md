@@ -2,6 +2,11 @@
 
 ## 0.1.0 (unreleased)
 
+- `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
+  `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
+  default, which keeps `:confirm` as advice to agents.
+- `Caller#confirm!(action)` applies another action's `connections` rule inside a running action.
+
 - `summary` declares the fields a list action sends agents in place of its view, once per model
   in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
   the catalogue's `cli.columns` is now the top-level `summary`. A list's catalogue `output_schema`
