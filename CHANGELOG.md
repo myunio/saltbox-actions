@@ -2,10 +2,27 @@
 
 ## 0.1.0 (unreleased)
 
-- `Saltbox::Actions::ChangeTracking`, included in `ApplicationRecord`, notes changes for
-  `on_changes` and `announce_changes` without PaperTrail. PaperTrail still notes its versions.
-- A write rolled back inside an action is no longer announced as a change.
-- A change runs in its model's own transaction, so a model in a second database rolls back too.
+- `Saltbox::Actions::ChangeTracking`, included in `ApplicationRecord`, notes records created,
+  updated or destroyed through callbacks, for `on_changes` and `announce_changes`, without
+  PaperTrail. PaperTrail still notes its versions.
+- A write rolled back by a savepoint inside an action is no longer announced as a change.
+- A change runs in its model's own transaction, so a model in a second database rolls back.
+  Writes on any other connection are not covered.
+
+- `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
+  `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
+  default, which keeps `:confirm` as advice to agents.
+- `Caller#confirm!(action)` applies another action's `connections` rule inside a running action.
+
+- `summary` declares the fields a list action sends agents in place of its view, once per model
+  in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
+  the catalogue's `cli.columns` is now the top-level `summary`. A list's catalogue `output_schema`
+  is its `summary_output_schema`. `render collection:` hands over a list's records; a list with a
+  summary refuses `render json:`, missing records, field values whose JSON is not plain, and
+  meta that is not plain data (hashes, arrays, text, numbers, booleans, dates, times, nil).
+- find_action finds an action only through its title or name, or two or more of the
+  request's words in its description; one shared description word no longer matches.
+
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
 

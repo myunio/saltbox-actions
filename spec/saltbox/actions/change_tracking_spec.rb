@@ -76,6 +76,16 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
     expect(changes).to be_empty
   end
 
+  it "does not note writes that skip callbacks, or touch" do
+    _, changes = without_paper_trail do
+      Saltbox::Actions::Invocation.collect_changes do
+        Event.where(id: event.id).update_all(title: "Bulk")
+        event.touch
+      end
+    end
+    expect(changes).to be_empty
+  end
+
   describe "with PaperTrail as the only source" do
     before do
       stub_const("Archive", Class.new(ActiveRecord::Base) { self.table_name = "events" })

@@ -6,6 +6,12 @@ RSpec.describe Event::DeleteAction do
 
   it_behaves_like "refuses callers the action does not allow"
 
+  context "with enforce_confirm on" do
+    around { |example| with_settings(enforce_confirm: true) { example.run } }
+
+    it_behaves_like "refuses callers the action does not allow"
+  end
+
   it "removes the event, answering with no body, and announces it" do
     expect { expect(run(arguments, as: as_mcp(manager)).body).to be_nil }.to announce_changes(event => :destroy)
     expect(Event.exists?(event.id)).to be(false)

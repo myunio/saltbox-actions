@@ -52,6 +52,29 @@ RSpec.describe "Changes and transactions" do
     expect(ids).to contain_exactly(a_string_matching(/\A\h{8}-/))
   end
 
+  it "does not note writes made in commit callbacks, which run after on_changes" do
+    stub_const("Booking", Class.new(ApplicationRecord) {
+      self.table_name = "events"
+      before_commit { Event.create!(org_id: 1, title: "Before commit") }
+      after_create_commit { Event.create!(org_id: 1, title: "After commit") }
+    })
+    action = Class.new(ApplicationAction) do
+      def self.name = "Event::BookAction"
+      kind :change
+      connections :allowed
+      authorize :update?
+
+      def perform
+        authorize policy_scope(Event).first
+        Booking.create!(org_id: 1, title: "Booking")
+        head :no_content
+      end
+    end
+    Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager))
+    expect(Event.pluck(:title)).to include("Before commit", "After commit")
+    expect(Dummy::ANNOUNCED.sole[:changes]).to eq([["Booking", Event.find_by!(title: "Booking").id.to_s, "create"]])
+  end
+
   describe "a model in a second database" do
     let(:database) { File.expand_path("../../rails_app/tmp/archive.sqlite3", __dir__) }
 
@@ -80,6 +103,26 @@ RSpec.describe "Changes and transactions" do
           raise Saltbox::Actions::Error::Invalid, "No"
         end
       end
+    end
+
+    it "does not undo a write to that database from an action whose model is in the first" do
+      action = Class.new(ApplicationAction) do
+        def self.name = "Event::ArchiveAction"
+        kind :change
+        connections :allowed
+        authorize :update?
+
+        def perform
+          event = policy_scope(Event).first
+          authorize event
+          event.update!(title: "Archived")
+          Entry.create!(title: "Archived AGM")
+          raise Saltbox::Actions::Error::Invalid, "No"
+        end
+      end
+      expect { Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect(event.reload.title).to eq("AGM")
+      expect(Entry.count).to eq(1)
     end
 
     it "runs the change in that model's transaction, so a failure undoes it" do
