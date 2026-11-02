@@ -1331,7 +1331,11 @@ whatever its `perform` names, so every module it is in counts.
 ask `Admin::ProjectPolicy`, and a top-level `CountProjectsAction`'s ask
 `ProjectPolicy`. Until `Admin::ProjectPolicy` exists, the action fails and
 the error names it. `rails actions:check` cannot name it: only `perform`
-says which model the action authorizes.
+says which model the action authorizes, and the action stays in every
+actions list until it runs. An action with a declared name that works on
+one model declares `model`, so the model's own modules are left out:
+without it, `Billing::Invoices::CountAction` asks
+`Billing::Invoices::Billing::InvoicePolicy`.
 
 A declaration holds for the class that makes it, and for its subclasses in
 its modules and below them. A subclass adds the modules its name has beyond

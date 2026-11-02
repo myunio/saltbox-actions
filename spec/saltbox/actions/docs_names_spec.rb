@@ -52,6 +52,9 @@ RSpec.describe "Names in the README and CHANGELOG" do
      action: "Admin::CountProjectsAction", declare: {action_name: "count_admin_projects", kind: :read}, asks: %w[Project Admin::ProjectPolicy]},
     {doc: "README.md", says: "a top-level `CountProjectsAction`'s ask `ProjectPolicy`",
      action: "CountProjectsAction", declare: {action_name: "count_projects", kind: :read}, asks: %w[Project ProjectPolicy]},
+    {doc: "README.md", says: "An action with a declared name that works on one model declares `model`, so the model's own modules are left out: " \
+      "without it, `Billing::Invoices::CountAction` asks `Billing::Invoices::Billing::InvoicePolicy`.",
+     action: "Billing::Invoices::CountAction", declare: {action_name: "count_invoices", kind: :read}, asks: %w[Billing::Invoice Billing::Invoices::Billing::InvoicePolicy]},
     {doc: "README.md", says: "`Admin::Events::ListAllAction < Events::ListAllAction`, whose parent declares `policy_namespace false`, asks `Admin::EventPolicy`",
      action: "Admin::Events::ListAllAction", model: "Event", parent: ["Events::ListAllAction", false], gives: {action_name: "list_admin_events_all", expected_policy_name: "Admin::EventPolicy"}},
     {doc: "README.md", says: "with `policy_namespace :staff` in `ApplicationAction`, `Events::ListAction` asks `Staff::EventPolicy`",
