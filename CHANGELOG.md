@@ -6,8 +6,8 @@
   in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
   the catalogue's `cli.columns` is now the top-level `summary`. A list's catalogue `output_schema`
   is its `summary_output_schema`. `render collection:` hands over a list's records; a list with a
-  summary refuses `render json:`, missing records, field values whose JSON is not plain, and a
-  record or relation in its meta.
+  summary refuses `render json:`, missing records, field values whose JSON is not plain, and
+  meta that is not plain data (hashes, arrays, text, numbers, booleans, dates, times, nil).
 
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.

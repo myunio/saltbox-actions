@@ -295,7 +295,8 @@ Each field holds one plain value: text, a number, true or false, a date or
 time, or nil. Decimals and dates are sent as text. A record, a hash or a list
 stops the call with an error, so no field the summary leaves out reaches an
 agent inside another. The `meta:` beside it is your own plain data, such as
-paging; a record or a relation in it stops the call too.
+paging: hashes, arrays, text, numbers, true or false, dates, times and nil.
+Anything else in it, such as a record or a set of them, stops the call too.
 
 `Event::ListAction` needs no change. It sets `@events` and calls
 `render :index, meta: {page: 2}`. Screens get views. Every other caller (the

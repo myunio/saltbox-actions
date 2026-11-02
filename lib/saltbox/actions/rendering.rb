@@ -102,16 +102,21 @@ module Saltbox
         {"data" => body, "meta" => meta&.as_json}.compact
       end
 
+      # What a summarized list's meta may hold, besides hashes and arrays of them.
+      PLAIN_META = [String, Symbol, Numeric, TrueClass, FalseClass, NilClass, Date, Time].freeze
+
       # A summarized list's meta is the app's own plain data, such as paging:
-      # a record or a relation in it would reach agents around the summary.
+      # anything else, a record or a set of them, would reach agents around
+      # the summary.
       def plain_meta!(value, path = "meta")
         case value
-        when ActiveRecord::Base, ActiveRecord::Relation
-          raise ArgumentError, "#{self.class.name} sends agents #{self.class.model.name}'s summary: #{path} holds a #{value.class}; " \
-            "meta is plain data, such as paging"
-        when Hash then value.each { |key, item| plain_meta!(item, "#{path}.#{key}") }
-        when Array then value.each_with_index { |item, index| plain_meta!(item, "#{path}[#{index}]") }
+        when ActiveRecord::Base, ActiveRecord::Relation then nil
+        when Hash then return value.each { |key, item| plain_meta!(item, "#{path}.#{key}") }
+        when Array then return value.each_with_index { |item, index| plain_meta!(item, "#{path}[#{index}]") }
+        when *PLAIN_META then return
         end
+        raise ArgumentError, "#{self.class.name} sends agents #{self.class.model.name}'s summary: #{path} holds a #{value.class}; " \
+          "meta is plain data, such as paging: hashes, arrays, text, numbers, true or false, dates, times and nil"
       end
 
       # @return [Hash{String => Object}] the action's own instance variables

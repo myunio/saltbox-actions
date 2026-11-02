@@ -139,8 +139,25 @@ RSpec.describe Saltbox::Actions::Summary do
     end)
     [as_mcp(manager), as_screen(manager)].each do |caller|
       expect { list_events(caller, action: leaky) }
-        .to raise_error(ArgumentError, "Event::ListAction sends agents Event's summary: meta.records[0] holds a Event; meta is plain data, such as paging")
+        .to raise_error(ArgumentError, /\AEvent::ListAction sends agents Event's summary: meta.records\[0\] holds a Event; meta is plain data/)
     end
+  end
+
+  it "takes only plain data in a summarized list's meta, so a Set or a Struct of records is refused" do
+    meta_of = lambda do |meta|
+      list(perform: proc do
+        authorize Event
+        @events = policy_scope(Event)
+        render :index, meta: meta.call(@events)
+      end)
+    end
+    expect { list_events(as_mcp(manager), action: meta_of.call(->(events) { {records: Set.new(events)} })) }
+      .to raise_error(ArgumentError, /meta.records holds a Set; meta is plain data/)
+    page = Struct.new(:number, :records)
+    expect { list_events(as_mcp(manager), action: meta_of.call(->(events) { {page: page.new(1, events.to_a)} })) }
+      .to raise_error(ArgumentError, /meta.page holds a .*; meta is plain data/)
+    plain = {page: 1, per: 25.0, more: false, sort: :title, on: Date.new(2026, 7, 1), at: Time.utc(2026), next: nil, filters: [{status: "draft"}]}
+    expect(list_events(as_mcp(manager), action: meta_of.call(->(_events) { plain }))["meta"]).to include("page" => 1, "sort" => "title", "filters" => [{"status" => "draft"}])
   end
 
   it "checks a field's JSON, so a value that serializes to an object is refused" do
