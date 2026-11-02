@@ -1,0 +1,26 @@
+en:
+  actions:
+    shared:
+      fields:
+        id: The record's id.
+    whoami:
+      description: Says who this connection acts for.
+    event/list:
+      description: Lists the events the person can see, newest first.
+      fields:
+        status: Only events with this status.
+    event/show:
+      description: Shows one event.
+    event/create:
+      description: Creates an event.
+      fields:
+        title: The event's name.
+    event/update:
+      description: Changes an event's title, date or capacity.
+    event/cancel:
+      description: Cancels an event and says why.
+    event/delete:
+      description: Removes an event for good.
+    event/show_notes:
+      title: Read an event's private notes
+      description: Shows an event's private notes.

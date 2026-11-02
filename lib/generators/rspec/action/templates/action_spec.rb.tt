@@ -1,0 +1,25 @@
+require "rails_helper"
+
+RSpec.describe <%= action_class_name %> do
+  let(:permitted_account) { raise NotImplementedError, "a person whose role allows <%= action_class_name %>" }
+  let(:unpermitted_account) { raise NotImplementedError, "a person whose role does not" }
+<% if takes_id? -%>
+  let(:<%= model.model_name.singular %>) { raise NotImplementedError, "<%= a_record %> the permitted person can see" }
+  let(:arguments) { {id: <%= model.model_name.singular %>.id} }
+<% else -%>
+  let(:arguments) { {} }
+<% end -%>
+
+  it_behaves_like "refuses callers the action does not allow"
+<% if takes_id? -%>
+
+  it_behaves_like "hides records the caller cannot see" do
+    let(:hidden_arguments) { raise NotImplementedError, "arguments naming <%= a_record %> the person cannot see" }
+  end
+<% end -%>
+
+  it "runs for a person whose role allows it" do
+    result = run(arguments, as: as_screen(permitted_account))
+    expect(result.status).to be < 300
+  end
+end

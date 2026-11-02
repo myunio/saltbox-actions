@@ -1,0 +1,45 @@
+class <%= action_class_name %> < <%= base_class %>
+<% unless table_verb? -%>
+  kind :<%= kind %>
+<% if takes_id? -%>
+  argument :id
+<% end -%>
+<% end -%>
+  connections :<%= connections %>
+<% if words.size > 1 || !table_verb? -%>
+  authorize :<%= verb %>?
+<% end -%>
+
+  def perform
+<% case verb -%>
+<% when "list", "export" -%>
+    authorize <%= model_name %>
+    <%= records %> = policy_scope(<%= model_name %>)
+    render :index
+<% when "create" -%>
+    <%= record %> = policy_scope(<%= model_name %>).new(permitted_attributes(<%= model_name %>))
+    authorize <%= record %>
+    <%= record %>.save!
+    render :show, status: :created
+<% when "update" -%>
+    <%= record %> = policy_scope(<%= model_name %>).find(params[:id])
+    authorize <%= record %>
+    <%= record %>.update!(permitted_attributes(<%= record %>))
+    render :show
+<% when "delete" -%>
+    <%= record %> = policy_scope(<%= model_name %>).find(params[:id])
+    authorize <%= record %>
+    <%= record %>.destroy!
+    head :no_content
+<% else -%>
+<% if takes_id? -%>
+    <%= record %> = policy_scope(<%= model_name %>).find(params[:id])
+    authorize <%= record %>
+<% else -%>
+    authorize <%= model_name %>
+    skip_policy_scope
+<% end -%>
+    render :show
+<% end -%>
+  end
+end

@@ -1,0 +1,409 @@
+[
+  {
+    "name": "cancel_event",
+    "title": "Cancel event",
+    "description": "Cancels an event and says why.",
+    "area": "events",
+    "kind": "change",
+    "idempotent": false,
+    "scope": "api:write",
+    "connections": "confirm",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "cancel"
+      ],
+      "args": [
+        "id"
+      ],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The record's id."
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "count_events",
+    "title": "Count events",
+    "description": "Use this when the person asks how many events there are, or how many have a status. Returns the count.",
+    "kind": "read",
+    "idempotent": true,
+    "scope": "api:read",
+    "connections": "allowed",
+    "permissions": [
+      "events.view"
+    ],
+    "permissions_any_of": [
+      [
+        "events.manage",
+        "events.delete"
+      ]
+    ],
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "count"
+      ],
+      "aliases": [
+        [
+          "events",
+          "tally"
+        ]
+      ],
+      "args": [
+        "status"
+      ],
+      "columns": [
+        "count"
+      ]
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Only events with this status",
+          "enum": [
+            "draft",
+            "published",
+            "cancelled"
+          ]
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number, from 1",
+          "minimum": 1
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "create_event",
+    "title": "Create event",
+    "description": "Creates an event.",
+    "area": "events",
+    "kind": "change",
+    "idempotent": false,
+    "scope": "api:write",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "create"
+      ],
+      "args": [],
+      "columns": [
+        "id",
+        "title",
+        "starts_on"
+      ]
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "The event's name."
+        },
+        "starts_on": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "capacity": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "published",
+            "cancelled"
+          ]
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "delete_event",
+    "title": "Delete event",
+    "description": "Removes an event for good.",
+    "area": "events",
+    "kind": "destructive",
+    "idempotent": false,
+    "scope": "api:write",
+    "connections": "confirm",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "delete"
+      ],
+      "args": [
+        "id"
+      ],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The record's id."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_events",
+    "title": "List events",
+    "description": "Lists the events the person can see, newest first.",
+    "area": "events",
+    "kind": "read",
+    "idempotent": true,
+    "scope": "api:read",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "list"
+      ],
+      "args": [],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "published",
+            "cancelled"
+          ],
+          "description": "Only events with this status."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "show_event",
+    "title": "Show event",
+    "description": "Shows one event.",
+    "area": "events",
+    "kind": "read",
+    "idempotent": true,
+    "scope": "api:read",
+    "connections": "allowed",
+    "mcp_core": true,
+    "cli": {
+      "command": [
+        "events",
+        "show"
+      ],
+      "args": [
+        "id"
+      ],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The record's id."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "show_event_notes",
+    "title": "Read an event's private notes",
+    "description": "Shows an event's private notes.",
+    "area": "events",
+    "kind": "read",
+    "idempotent": true,
+    "scope": "api:read",
+    "connections": "never",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "show-notes"
+      ],
+      "args": [
+        "id"
+      ],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The record's id."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_event",
+    "title": "Update event",
+    "description": "Changes an event's title, date or capacity.",
+    "area": "events",
+    "kind": "change",
+    "idempotent": true,
+    "scope": "api:write",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "update"
+      ],
+      "args": [
+        "id"
+      ],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The record's id."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "starts_on": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "capacity": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "published",
+            "cancelled"
+          ]
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "whoami",
+    "title": "Whoami",
+    "description": "Says who this connection acts for.",
+    "kind": "read",
+    "idempotent": true,
+    "scope": "api:read",
+    "connections": "allowed",
+    "mcp_core": true,
+    "cli": {
+      "command": [
+        "whoami"
+      ],
+      "args": [],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  }
+]

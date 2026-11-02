@@ -1,0 +1,58 @@
+module Saltbox
+  module Actions
+    # Does the job of Pundit's permitted_attributes for an action's input,
+    # which has already passed the action's JSON Schema. It differs in three
+    # ways:
+    # - a field the person may not change is refused by name, not silently
+    #   dropped;
+    # - a foreign key is sent under its association's name (event_type, not
+    #   event_type_id) and is looked up before it is saved;
+    # - values are passed on exactly as sent (a time stays its "HH:MM"
+    #   string), so Active Record parses them itself, in the app's time zone.
+    #
+    # The app's base class may override #resolve_reference and
+    # #refuse_forbidden_fields! to say more.
+    module Permitting
+      # @param record [ActiveRecord::Base, Class] the record, or its model for a create
+      # @return [ActiveSupport::HashWithIndifferentAccess] the fields sent, keyed as the policy names them
+      # @raise [ArgumentError] in an action other than a create or update
+      # @raise [Error::Forbidden] naming each field the person may not change
+      # @raise [Error::Invalid] for a reference to a record the person cannot pick
+      def permitted_attributes(record)
+        raise ArgumentError, "#{self.class.name} takes no permitted fields: only create and update actions do" unless self.class.writes_fields?
+        allowed = permitted_attribute_names(record)
+        sent = self.class.writable_fields.select { |name, _| params.key?(name) }
+        forbidden = sent.reject { |_, field| allowed.include?(field.key) }.keys
+        refuse_forbidden_fields!(forbidden) if forbidden.any?
+        sent.to_h do |name, field|
+          value = params[name]
+          [field.key, (field.reference && !value.nil?) ? resolve_reference(field.reference, value, field: name) : value]
+        end.with_indifferent_access
+      end
+
+      private
+
+      # The id of the record a field names, looked up through the person's
+      # policy scope.
+      #
+      # @param model [Class<ActiveRecord::Base>]
+      # @param value [String] the id sent
+      # @param field [String] the name it was sent under
+      # @return [Object] the record's id
+      # @raise [Error::Invalid] when the person cannot see such a record
+      def resolve_reference(model, value, field:)
+        id = model.type_for_attribute(model.primary_key).cast(value)
+        found = scoped_records(model).find_by(model.primary_key => id) if id
+        return found.id if found
+        raise Error::Invalid.new("#{field.humanize} isn't a #{model.model_name.human.downcase} you can see",
+          errors: {field => ["isn't a #{model.model_name.human.downcase} you can see"]})
+      end
+
+      # @param fields [Array<String>] the fields sent that the person may not change
+      # @raise [Error::Forbidden]
+      def refuse_forbidden_fields!(fields)
+        raise Error::Forbidden.new("You can't change #{fields.to_sentence}.", errors: fields.index_with { ["you can't change this"] })
+      end
+    end
+  end
+end
