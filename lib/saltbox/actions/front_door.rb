@@ -117,8 +117,8 @@ module Saltbox
           actions = Finder.new(available).find(query).map do |action|
             runnable = action.runnable_for?(fresh)
             {name: action.action_name, title: action.title, description: action.description, arguments: action.input_schema,
-             returns: action.summary_note, run_with: runnable ? RUN.fetch(action.kind) : nil, confirm_first: action.connections == :confirm,
-             message: ("Only a person can do this, in #{app}" unless runnable)}.reject { |key, value| %i[returns message].include?(key) && value.nil? }
+             response_description: action.summary_note, run_with: runnable ? RUN.fetch(action.kind) : nil, confirm_first: action.connections == :confirm,
+             message: ("Only a person can do this, in #{app}" unless runnable)}.reject { |key, value| %i[response_description message].include?(key) && value.nil? }
           end
           result = {actions: actions}
           result[:hint] = "Nothing matched. Try other words for the same request." if actions.empty?

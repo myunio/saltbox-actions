@@ -262,6 +262,61 @@
       },
       "required": [],
       "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "starts_on": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "starts_on",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "events"
+          ]
+        },
+        "meta": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "data"
+      ]
     }
   },
   {

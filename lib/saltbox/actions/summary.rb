@@ -5,9 +5,17 @@ module Saltbox
     # record's summary in place of its view, and the CLI prints the same
     # fields as its table's columns. Declared with `summary` (Declarations).
     #
+    # Each field holds one plain value: text, a number, true or false, a date
+    # or time, or nil. A record, a hash or a list is refused, so no attribute
+    # the summary does not name reaches an agent inside another.
+    #
     # @!attribute fields [Hash{String => #call, nil}] each field's name, and
     #   the lambda that computes it, or nil for the record's own method
-    Summary = Data.define(:fields) do
+    class Summary < Data.define(:fields)
+      PLAIN = [String, Symbol, Numeric, TrueClass, FalseClass, NilClass, Date, Time, ActiveSupport::TimeWithZone].freeze
+      # The JSON Schema of a plain value, for a field not typed from a column.
+      PLAIN_SCHEMA = {"type" => %w[string number boolean null]}.freeze
+
       # @param plain [Array<Symbol>] the record's own attributes or methods
       # @param computed [Hash{Symbol => #call}] fields computed from the record
       # @return [Summary]
@@ -25,7 +33,16 @@ module Saltbox
 
       # @param record [Object]
       # @return [Hash{String => Object}] the record's summary, as JSON
-      def call(record) = fields.to_h { |name, value| [name, (value ? value.call(record) : record.public_send(name)).as_json] }
+      # @raise [ArgumentError] for a field whose value is not plain
+      def call(record)
+        fields.to_h do |name, computed|
+          value = computed ? computed.call(record) : record.public_send(name)
+          unless PLAIN.any? { value.is_a?(it) }
+            raise ArgumentError, "summary #{name} is a #{value.class}: a summary field holds text, a number, true or false, a date or time, or nil"
+          end
+          [name, value.as_json]
+        end
+      end
     end
   end
 end

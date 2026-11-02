@@ -156,9 +156,10 @@ module Saltbox
           model_summaries[model.name] = Summary.build(fields, computed)
         end
 
-        # @return [Boolean] whether agents get summaries in place of the view: a list action, named
-        #   by the verb list, whose model has a summary
-        def summarizes_list? = verb == "list" && !declared_name && !model.nil? && !summary.nil?
+        # @return [Boolean] whether agents get summaries in place of the view: an action whose class
+        #   name's verb is list (Event::ListAction, or a renamed Reports::ListUpcomingAction that
+        #   declares its model), with a summary
+        def summarizes_list? = verb == "list" && !model.nil? && !summary.nil?
 
         # @return [Hash{String => Summary}] the summaries declared here for each model, by its name
         def model_summaries = @model_summaries ||= {}
@@ -219,6 +220,8 @@ module Saltbox
 
         # Declares the JSON Schema of the body the action renders, so agents
         # know what comes back and specs can check it (match_output_schema).
+        # On a list action with a summary it describes the view screens get;
+        # the catalogue gives agents summary_output_schema instead.
         #
         # @param schema [Hash]
         # @return [Hash]

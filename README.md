@@ -291,18 +291,31 @@ with a lambda that takes the record. Keep `id` in it, so the agent can pick
 a record and run the show action for the rest. Leave links out, such as
 signed file URLs: an agent's transcript keeps everything it reads.
 
+Each field holds one plain value: text, a number, true or false, a date or
+time, or nil. A record, a hash or a list stops the call with an error, so no
+field the summary leaves out reaches an agent inside another.
+
 `Event::ListAction` needs no change. It sets `@events` and calls
-`render :index, meta: {page: 2}`. A person on a screen still gets the view.
-Every other caller gets:
+`render :index, meta: {page: 2}`. Screens get views. Every other caller (the
+API, MCP, WebMCP and the assistant) gets summaries:
 
 ```json
 {"data": {"events": [{"id": 7, "title": "AGM", "starts_on": "2026-07-01", "status": "Published"}]}, "meta": {"page": 2}}
 ```
 
+A list action is one whose class name's verb is `list`. If it keeps its
+records under another name, or declares its own `action_name`, hand them
+over with `render :index, collection: @upcoming`. A list with a summary
+always renders a template and always hands over its records: `render json:`,
+or no records, stops the call with an error, rather than sending agents more
+than the summary.
+
 A model with no summary sends the view to everyone. An action can declare its
-own `summary :id, :title` in place of its model's. The summary is also the
-`summary` in the catalogue, which a command-line client prints as a table's
-columns, and `find_action` tells agents which fields a list returns.
+own `summary :id, :title` in place of its model's. The catalogue lists the
+summary's fields as `summary`, which a command-line client prints as a table's
+columns, on every action of the model. For a list, its `output_schema`
+describes the summaries agents get, and `find_action` tells agents which
+fields a list returns.
 
 ### Titles and descriptions
 
@@ -521,8 +534,9 @@ Other settings include `scopes` (default `api:read` and `api:write`),
 - The unknown-action message always names `/api/v1/actions`, even if you
   mount the controller somewhere else.
 - `returns` is in the catalogue and in specs, but is not yet sent to MCP
-  clients as the tool's output schema. On a list that sends summaries, it
-  describes the view, not what agents get.
+  clients as the tool's output schema. On a list with a summary, `returns`
+  describes the view screens get; check an agent's result with
+  `match_output_schema(described_class.summary_output_schema)`.
 - A literal `%` in a default error message must be written `%%`.
 - Configuration is set once, at boot. Changing it while requests run is not
   supported.

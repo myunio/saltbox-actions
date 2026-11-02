@@ -8,30 +8,41 @@ module Saltbox
     # the configured controller's renderer (Configuration#renderer), the Rails
     # way to render outside a request.
     #
-    # A list action whose model has a summary renders it for an agent (any
-    # caller but a person on a screen) in place of the view: each record in
-    # the model's plural instance variable (@events), under data and the
-    # model's plural, with the meta beside it. Screens get the view.
+    # A list action whose model has a summary (Declarations#summarizes_list?)
+    # renders it for every caller but a person on a screen (the API, MCP,
+    # WebMCP and the assistant) in place of the view: each record in
+    # `collection:`, or else in the model's plural instance variable
+    # (@events), under data and the model's plural, with the meta beside it.
+    # Screens get the view. Such an action always renders a template, and
+    # always hands over its records, so nothing reaches an agent around the
+    # summary.
     module Rendering
       # Instance variables the base class and its adapters set for themselves;
       # views never see them. Any starting @_ are left out too.
       PROTECTED_IVARS = %i[@actor @params @pundit].freeze
       # Tells render json: false or json: nil from no json: at all.
       NO_JSON = Object.new.freeze
+      # Tells render collection: nil from no collection: at all.
+      NO_COLLECTION = Object.new.freeze
 
       # @param template [Symbol, String, nil] :show, or "events/types/show"
       # @param status [Symbol, Integer]
       # @param json [Object] a body to send as is, with no view: any JSON value, false and nil included
       # @param meta [Hash, nil] meta beside the body, such as pagination (Result#meta)
+      # @param collection [Enumerable] a list action's records, for one that keeps them elsewhere than @events;
+      #   never a template local
       # @param locals [Hash] the template's locals
       # @return [Result]
       # @raise [AbstractController::DoubleRenderError] on a second render or head
-      def render(template = nil, status: :ok, json: NO_JSON, meta: nil, **locals)
+      # @raise [ArgumentError] when a list action with a summary renders json:, or hands over no records,
+      #   or another action passes collection:
+      def render(template = nil, status: :ok, json: NO_JSON, meta: nil, collection: NO_COLLECTION, **locals)
         raise AbstractController::DoubleRenderError if performed?
-        body = if !json.equal?(NO_JSON)
-          json.as_json
-        elsif (records = summarized_records)
+        records = summarized_records(json, collection)
+        body = if records
           summaries(records, meta)
+        elsif !json.equal?(NO_JSON)
+          json.as_json
         else
           JSON.parse(Actions.config.renderer_class.render(template: template_path(template), formats: [:json], assigns: view_assigns, locals:))
         end
@@ -61,11 +72,23 @@ module Saltbox
         "#{model.model_name.collection}/#{template}"
       end
 
-      # @return [Enumerable, nil] the records to summarize for this caller, or nil to render the view
-      def summarized_records
-        return unless actor.agent? && self.class.summarizes_list?
-        name = :"@#{self.class.model.model_name.plural}"
-        instance_variable_get(name) if instance_variable_defined?(name)
+      # @return [Enumerable, nil] the records to summarize for this caller, or nil to render as asked
+      # @raise [ArgumentError] when a list action with a summary would send agents anything else
+      def summarized_records(json, collection)
+        action = self.class
+        unless action.summarizes_list?
+          raise ArgumentError, "render collection: is for a list action with a summary; #{action.name} has none" unless collection.equal?(NO_COLLECTION)
+          return
+        end
+        variable = "@#{action.model.model_name.plural}"
+        unless json.equal?(NO_JSON)
+          raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: render a template with #{variable} or collection:, not json:"
+        end
+        records = collection.equal?(NO_COLLECTION) ? instance_variable_get(variable) : collection
+        unless records.respond_to?(:map) && !records.is_a?(Hash)
+          raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: set #{variable} to its records, or render collection:"
+        end
+        records if actor.agent?
       end
 
       # The same JSON in either result format: {"data": {"events": [...]}, "meta": {...}}.
