@@ -13,6 +13,11 @@
 - The shared example "refuses callers the action does not allow" checks a person without
   rights only when the spec defines `unpermitted_account`.
 - The README's API controller inherits `ActionController::API`.
+- Input is cast with each field's Active Model type before the schema check, so form strings
+  ("12", "", "on", a local date-time) work on every surface; a value not of its type is still refused.
+  An impossible date, an integer its column cannot store and a float that is not finite are
+  refused by field. Indexed `fields_for` params are not cast yet.
+- Ids and foreign keys take an integer or a string; decimal columns take a number or a string of digits.
 
 - `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
   `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
