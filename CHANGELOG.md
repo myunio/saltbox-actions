@@ -2,6 +2,11 @@
 
 ## 0.1.0 (unreleased)
 
+- Input is cast with each field's Active Model type before the schema check, so form strings
+  ("12", "", "on", a local date-time) work on every surface; a value not of its type is still refused.
+  An impossible date, an integer its column cannot store and a float that is not finite are
+  refused by field. Indexed `fields_for` params are not cast yet.
+- Ids and foreign keys take an integer or a string; decimal columns take a number or a string of digits.
 - `Saltbox::Actions::ChangeTracking`, included in `ApplicationRecord`, notes records created,
   updated or destroyed through callbacks, for `on_changes` and `announce_changes`, without
   PaperTrail. PaperTrail still notes its versions.

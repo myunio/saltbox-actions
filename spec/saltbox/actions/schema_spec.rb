@@ -1,11 +1,12 @@
 RSpec.describe Saltbox::Actions::Schema do
   it "takes a create's fields from the policy, typed from the columns, requiring those with no default" do
     schema = Event::CreateAction.input_schema
-    expect(schema["properties"].keys).to eq(%w[title starts_on capacity status parent notes])
+    expect(schema["properties"].keys).to eq(%w[title starts_on capacity price featured doors_open_at status parent notes])
     expect(schema["properties"]["title"]).to eq("type" => "string", "maxLength" => 120, "description" => "The event's name.")
     expect(schema["properties"]["starts_on"]).to eq("type" => %w[string null], "format" => "date")
     expect(schema["properties"]["status"]).to include("type" => "string", "enum" => %w[draft published cancelled])
-    expect(schema["properties"]["parent"]).to eq("type" => %w[string null])
+    expect(schema["properties"]["price"]).to eq("type" => %w[number string null], "pattern" => "^[+-]?(\\d+\\.?\\d*|\\.\\d+)$")
+    expect(schema["properties"]["parent"]).to eq("type" => %w[string integer null])
     expect(schema["required"]).to eq(%w[title])
     expect(schema["additionalProperties"]).to be(false)
   end
@@ -27,7 +28,7 @@ RSpec.describe Saltbox::Actions::Schema do
     properties = action.input_schema["properties"]
     expect(properties["rows"]).to include("type" => "array", "maxItems" => 50)
     expect(properties["rows"]["items"]["properties"]["capacity"]).to eq("type" => %w[integer null])
-    expect(properties["amount"]).to eq("type" => %w[number string null])
+    expect(properties["amount"]).to include("type" => %w[number string null])
     expect(properties["mode"]).to eq("type" => "string", "enum" => %w[merge replace])
     expect(action.input_schema["required"]).to eq(%w[mode])
   end

@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = "One action class per thing a person can do, served to screens, the API, MCP and AI assistants"
   spec.description = "An action layer for Rails apps: actions named from their class, checked at boot, " \
     "authorized through Pundit or ActionPolicy, and served by the same code to a JSON API, MCP and RubyLLM tools. " \
-    "Ships an RSpec layer (spec type, callers, matchers, shared examples) and generators. " \
+    "Ships RSpec and Minitest helpers, registry checks and Rails generators. " \
     "Part of the Saltbox gem suite extracted from internal applications."
   spec.homepage = "https://github.com/myunio/saltbox-actions"
   spec.license = "MIT"
