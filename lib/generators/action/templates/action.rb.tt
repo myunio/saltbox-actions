@@ -5,14 +5,19 @@ class <%= action_class_name %> < <%= base_class %>
   argument :id
 <% end -%>
 <% end -%>
+<% if connections -%>
   connections :<%= connections %>
+<% end -%>
 <% if words.size > 1 || !table_verb? -%>
   authorize :<%= verb %>?
 <% end -%>
 
   def perform
 <% case verb -%>
-<% when "list", "export" -%>
+<% when "list" -%>
+    <%= records %> = policy_scope(<%= model_name %>)
+    render :index
+<% when "export" -%>
     authorize <%= model_name %>
     <%= records %> = policy_scope(<%= model_name %>)
     render :index

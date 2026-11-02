@@ -5,10 +5,11 @@ require "json_schemer"
 
 # The refusal ladder, by surface. The including spec defines:
 # - `permitted_account`: a person whose role allows the action;
-# - `unpermitted_account`: a person whose role does not;
-# - `arguments`: input that succeeds for the permitted person.
+# - `arguments`: input that succeeds for the permitted person;
+# - `unpermitted_account`, only when some people may not run it at all: a
+#   person whose role does not allow it.
 #
-# Checked: the person without rights is refused; each agent surface is
+# Checked: the person without rights, when defined, is refused; each agent surface is
 # refused or let through as the action's `connections` says; a read-only
 # token cannot change; a browser assistant never runs a destructive action.
 # With Configuration#enforce_confirm on, an agent's :confirm call is refused
@@ -19,8 +20,10 @@ require "json_schemer"
 #     let(:arguments) { {id: event.id, title: "AGM"} }
 #   end
 RSpec.shared_examples "refuses callers the action does not allow" do
-  it "refuses a person without its rights" do
-    expect { run(arguments, as: as_screen(unpermitted_account)) }.to be_refused.with(:forbidden)
+  if method_defined?(:unpermitted_account)
+    it "refuses a person without its rights" do
+      expect { run(arguments, as: as_screen(unpermitted_account)) }.to be_refused.with(:forbidden)
+    end
   end
 
   it "lets the person run it on a screen" do

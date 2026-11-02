@@ -146,7 +146,7 @@ module Saltbox
           @writable_fields ||= policy_keys.each_with_object({}) do |key, fields|
             next if arguments.key?(key)
             name, field = column_field(key)
-            raise ArgumentError, "#{policy_class}#permitted_attributes lists #{key}, which is not a column, an association or an argument of #{self.name}" unless field
+            raise ArgumentError, "#{policy_class ? "#{policy_class}#permitted_attributes" : "permitted_attribute_names_for"} lists #{key}, which is not a column, an association or an argument of #{self.name}" unless field
             fields[name] = field
           end
         end

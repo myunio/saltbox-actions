@@ -2,6 +2,18 @@
 
 ## 0.1.0 (unreleased)
 
+- Authorization is optional. With no adapter, every action is allowed and the boot check asks
+  for no policy. Adapters report their boot problems through `authorization_problems`; the
+  README documents the adapter contract with a plain-model example.
+- A list action needs only `policy_scope`, as Pundit's `verify_policy_scoped` on `index`.
+- `rails g action` checks the action against the boot check before writing any file, writes
+  nothing on a problem, and puts back every file it wrote when the catalogue step fails; either
+  failure exits 1. A new change action declares
+  `connections :confirm` (was `:allowed`) unless the app sets `default_connections`. The spec
+  template assumes no factories or roles and passes the id for any verb that takes one.
+- The shared example "refuses callers the action does not allow" checks a person without
+  rights only when the spec defines `unpermitted_account`.
+- The README's API controller inherits `ActionController::API`.
 - `find_action` with no query lists every action the caller can run from its surface, a page
   at a time (`page`, `page_size`: 50 by default, at most 100), sorted by area then name, with
   `config.area_order` to put some areas first. When nothing matches, its hint names
