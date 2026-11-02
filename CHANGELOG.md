@@ -2,6 +2,33 @@
 
 ## 0.1.0 (unreleased)
 
+- An action in a module its model is not in asks that module's policy, as Pundit's
+  `authorize [:admin, record]` does: `Admin::Projects::ListAction` asks `Admin::ProjectPolicy`,
+  never `ProjectPolicy`, in `permitted?`, the record loader, `authorize`, `policy_scope`, its
+  fields and the records a reference may pick. A missing namespaced policy fails closed
+  (Pundit's `NotDefinedError`, ActionPolicy's `NotFound`) and `rails actions:check` names it.
+  ActionPolicy lookups in a namespace no longer fall back to the model's own policy.
+  `policy_namespace :staff` declares another namespace, `policy_namespace false` the model's own
+  policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method.
+- That module is part of the action's name: `Admin::Projects::ListAction` is `list_admin_projects`,
+  with the CLI command `admin-projects list` and the title "List admin projects", so it no longer
+  collides with `Projects::ListAction`. `Naming#outer_namespace` gives it. Names of actions inside
+  their model's namespace do not change.
+- Errors by field hold each message without the field's name (`{"title" => ["can't be blank"]}`),
+  as a record's `errors.as_json` does, so a screen that adds them back shows them once.
+- A fresh development or test process draws its routes before the first render, so its first
+  links use the routes' `default_url_options` instead of `example.org`.
+- A list with a summary may `render json:` beside `collection:`: screens get the json (an Alba or
+  Blueprinter resource), agents the summaries of the collection.
+- A field the input does not list is refused as "update_note does not take user_id. It takes id,
+  title, body." A request body sent without `Content-Type: application/json` says so.
+- A named action with a model and no `policy_rule` raises the message `rails actions:check`
+  gives, instead of a `TypeError`.
+- With no authorization adapter, the generator leaves `belongs_to` fields out of `accepts`,
+  commented, and says why. It says the generated test has placeholders to fill in.
+- `announce_changes` and `assert_announces_changes` say how to install change tracking when
+  nothing notes changes.
+
 - `Caller.system` runs an action as the app itself, from a job, a rake task or the console. It is
   not an agent: `connections` never bar it, it holds every scope and is never asked to confirm.
   Its account is `Saltbox::Actions::SystemAccount` unless the app passes one, and the policy sees

@@ -100,7 +100,8 @@ RSpec.describe Events::UpdateAction do
 end
 ```
 
-`result.body` is the JSON the view rendered, as a Hash.
+`result.body` is the JSON the view rendered: a Hash, or an Array when the
+view renders one.
 
 Run `bin/rails actions:check` in CI, as you would `bin/rails zeitwerk:check`.
 It checks every action against its model, policy and fields, and names the
@@ -120,7 +121,7 @@ RubyGems yet, so install it from GitHub and pin a commit:
 ```ruby
 # Gemfile
 gem "saltbox-actions", github: "myunio/saltbox-actions", ref: "<commit sha>"
-gem "jbuilder"   # action views; a new Rails app already has it
+gem "jbuilder"   # action views; a new Rails app already has it. Not needed if you render json: from a serializer
 gem "pundit"     # optional: or gem "action_policy", or neither
 ```
 
@@ -228,6 +229,11 @@ bin/rails g action Tasks::List
 bin/rails g action Tasks::Update
 ```
 
+Actions use their own verbs. A scaffold's `index`, `show`, `create`,
+`update` and `destroy` are `Tasks::List`, `Tasks::Show`, `Tasks::Create`,
+`Tasks::Update` and `Tasks::Delete`, named `list_tasks`, `show_task` and so
+on.
+
 They render the scaffold's own `tasks/index.json.jbuilder` and
 `tasks/show.json.jbuilder`. The scaffold's views link each task with
 `task_url`, so tell the routes your host, or the links say `example.org`:
@@ -306,6 +312,13 @@ AccessToken.issue(User.find_by!(email: "ada@example.com"), name: "Claude Code")
 # => "QWwTY9LxEN7TaWokBE2WmpBiH4pbPKPR"
 ```
 
+This token can do anything Ada can, changes included: a caller built
+without `scopes:` holds every scope. For a read-only connection, store
+scopes on the token and pass them: `scopes: ["api:read"]`. A delete action
+is `:confirm`, which only tells the agent to ask first (see Connections).
+Until your app has a way for people to approve, keep deletes on screens
+with `connections :never`.
+
 **8. Check it.** With `bin/rails server` running, list the person's tasks
 as an agent would:
 
@@ -374,10 +387,38 @@ RSpec.describe Tasks::UpdateAction do
 end
 ```
 
+```ruby
+# spec/actions/tasks/list_action_spec.rb
+require "rails_helper"
+
+RSpec.describe Tasks::ListAction do
+  it "lists only the person's own tasks" do
+    ada = User.create!(email: "ada@example.com", password: "secret123")
+    bob = User.create!(email: "bob@example.com", password: "secret123")
+    ada.tasks.create!(title: "Write the agenda")
+    bob.tasks.create!(title: "Book the room")
+
+    expect(run({}, as: as_mcp(ada)).body.pluck("title")).to eq(["Write the agenda"])
+  end
+end
+```
+
 The generated spec uses the gem's shared examples, which assume some
 people may not run the action at all. In an app where everyone may, and
 only ownership differs, replace them with examples like these. Do the same
 for the generated `list_action_spec.rb`, which starts with placeholders.
+
+### Without Devise, Pundit or RSpec
+
+A stock Rails 8 app (`bin/rails g authentication`, Minitest, no Pundit)
+follows the same steps with three changes:
+
+- Build a screen's caller from `Current.user`:
+  `ApplicationAction::Caller.screen(Current.user)`.
+- Skip the policy. Keep each person to their own records with two methods
+  in the base class (see [Own records without a policy](#own-records-without-a-policy)).
+- Write tests with fixtures and the Minitest helper (see
+  [Testing with Minitest](#testing-with-minitest)).
 
 ## Core concepts
 
@@ -504,7 +545,9 @@ left out of the schema; it still runs.
 Validations check attributes only. A model field is checked by the model's
 own validations when `perform` saves it, and its errors come back by field
 the same way. `rails actions:check` refuses a validation of a name that is
-not an attribute.
+not an attribute. A model's validations do not shape the schema, so an
+agent learns a model field's allowed values only from a refusal. Say them
+in the field's description (see Titles and descriptions).
 
 A default may be a lambda, as in Active Model. Such an attribute is never
 required in the schema, since the default fills it after the schema check;
@@ -566,6 +609,15 @@ namespace, singular, as `wrap_parameters` finds a controller's model:
 `Event`. Rails spellings such as `DestroyAction` or `IndexAction` stop the
 boot, because the names are public: agents and scripts call them. So does
 an action inside its model's own namespace, such as `Event::UpdateAction`.
+
+An action in a module its model is not in, such as a back office's
+`Admin::Events::ListAction`, takes that module into its name:
+`list_admin_events`, with the CLI command `admin-events list`. It never
+collides with `Events::ListAction`, and it asks `Admin::EventPolicy`, not
+`EventPolicy` (see [Authorization](#authorization)).
+
+"Agents: confirm" tells the agent to ask the person first. The server
+checks it only when `enforce_confirm` is on (see Connections).
 
 The **kind** decides what a token needs. A read needs the `api:read` scope.
 A change or a destructive action needs `api:write`.
@@ -728,8 +780,21 @@ resets `Current` before a job runs, so take the tenant from what the caller
 carries, which travels with the job: its token (`caller.connection`), or
 the person (`caller.account`) when each person belongs to one organization.
 
-If your policy needs a tenant or a person to build an input schema, see
-`schema_principal` under Authorization.
+A back-office action that works across tenants turns the tenant off for
+its run. `around_invocation` sees only the caller, so do it in `around_run`,
+which sees the action:
+
+```ruby
+config.around_run do |invocation, run|
+  next run.call unless invocation.action.outer_namespace == ["admin"]
+  ActsAsTenant.without_tenant { run.call }
+end
+```
+
+With acts_as_tenant's `require_tenant`, set `schema_principal` (see
+Authorization) before you generate a create or update action. The generator
+builds a record to read its fields, which needs a tenant. In specs, create
+records inside `ActsAsTenant.with_tenant`, or set the tenant in a `before`.
 
 ### Connections
 
@@ -878,8 +943,9 @@ give them.
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
 | `returns(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
-| `model Customer` | The model, when the namespace does not give it. `Admin::Customers::ExportAction` with `model Customer` is named `export_customers`. |
-| `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too. |
+| `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_customers`. |
+| `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy (see Authorization). |
+| `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too, and its `model` and `policy_rule` if it has a model: a declared name gives neither. |
 | `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
 | `cli "events count"` | The command for a command-line client you build on the catalogue. |
 
@@ -909,9 +975,9 @@ record.
 ### Calling from a screen
 
 An action returns a `Result`, not a model: its `status`, and its `body`,
-the JSON its view rendered, as a Hash. A JSON screen can send the body as
-it is. An HTML screen redirects on success, and on a refusal shows the form
-again with the action's errors by field:
+the JSON its view rendered. A JSON screen can send the body as it is. An
+HTML screen redirects on success, and on a refusal shows the form again
+with the action's errors by field:
 
 ```ruby
 # app/controllers/tasks_controller.rb
@@ -922,6 +988,21 @@ rescue Saltbox::Actions::Error::Invalid => error
   @task.assign_attributes(task_params)
   error.errors.each { |field, messages| messages.each { @task.errors.add(field, it) } }
   render :edit, status: :unprocessable_content
+end
+```
+
+The errors by field hold each message without the field's name
+(`{"title" => ["can't be blank"]}`), as a record's `errors.as_json` does, so
+the form says "Title can't be blank" once.
+
+Find the record a screen shows through the person's records too, as
+`set_task` does with `current_user.tasks.find(params[:id])`, not
+`Task.find`. A delete works the same way:
+
+```ruby
+def destroy
+  Tasks::DeleteAction.perform_now(caller: ApplicationAction::Caller.screen(current_user), id: @task.id)
+  redirect_to tasks_path, notice: "Task deleted.", status: :see_other
 end
 ```
 
@@ -973,9 +1054,16 @@ API, MCP, WebMCP and the assistant) gets summaries:
 A list action is one whose class name's verb is `list`. If it keeps its
 records under another name, or declares its own `action_name`, hand them
 over with `render :index, collection: @upcoming`. A list with a summary
-always renders a template and always hands over its records: `render json:`,
-or no records, stops the call with an error, rather than sending agents more
-than the summary.
+always hands over its records: `render json:` alone, or no records, stops
+the call with an error, rather than sending agents more than the summary.
+
+Not using Jbuilder? `render json:` takes any object that answers `as_json`,
+such as an Alba or Blueprinter resource. For a list with a summary, hand
+over the records beside it. Screens get the json, and agents the summaries:
+
+```ruby
+render json: ProjectResource.new(@projects), collection: @projects
+```
 
 A model with no summary sends the view to everyone. An action can declare its
 own `summary :id, :title` in place of its model's. The catalogue lists the
@@ -1100,7 +1188,12 @@ It inherits `ActionController::API`, not your `ApplicationController`, so
 your session sign-in, forgery protection and Pundit's `verify_authorized` do
 not run on it. The action checks its own authorization.
 
-`GET /api/v1/actions` lists the actions this caller may run.
+`token.scopes` stands for scopes your token stores, such as `["api:read"]`.
+The walkthrough's `AccessToken` stores none: leave `scopes:` out there, and
+the caller holds every scope.
+
+`GET /api/v1/actions` lists the actions this caller may run, as
+`{"data": [...], "meta": {...}}`, whatever the `result_format`.
 `POST /api/v1/actions/update_event` runs one, with a body of
 `{"arguments": {"id": "42", "title": "AGM"}}`.
 
@@ -1195,6 +1288,17 @@ ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
 the model's fields.
 
+An action in a module its model is not in asks that module's policy, as
+Pundit's `authorize [:admin, event]` does. `Admin::Events::UpdateAction`
+asks `Admin::EventPolicy#update?`: before any record loads, when it loads
+and authorizes the record, in `policy_scope`, for its fields, and for the
+records a `belongs_to` field may pick. If `Admin::EventPolicy` does not
+exist, the action fails instead of asking `EventPolicy`, and
+`rails actions:check` names the policy to add. ActionPolicy looks it up the
+same way and never falls back to `EventPolicy`. To use another namespace,
+declare it: `policy_namespace :staff`, or `policy_namespace false` for the
+model's own policy.
+
 The policy is the one list of the fields a person may set. A create or
 update takes the model's columns that it permits, and an action whose
 policy has `permitted_attributes` may not also list fields with `accepts`:
@@ -1245,6 +1349,37 @@ end
 
 `accepts` works the same under an adapter whose policy has no
 `permitted_attributes`.
+
+Without an adapter, nothing checks that `perform` called `policy_scope`. A
+list that forgets it lists every row, and nothing warns.
+
+#### Own records without a policy
+
+Most apps without a policy library still keep each person to their own
+records (`Current.user.notes`). Two methods in the base class do it:
+`policy_scope` for the records an action finds, and `scoped_records` for
+the records a `belongs_to` field may pick:
+
+```ruby
+# app/actions/application_action.rb
+class ApplicationAction < Saltbox::Actions::Base
+  def policy_scope(scope) = own(super)
+
+  private
+
+  def scoped_records(model) = own(super)
+
+  # The app itself (Caller.system) sees every record.
+  def own(records)
+    return records if actor.system?
+    return records.where(id: account.id) if records.klass == User
+    records.klass.column_names.include?("user_id") ? records.where(user: account) : records
+  end
+end
+```
+
+Record lookup, the API and MCP all go through them, so another person's
+note is `not_found`. Leave the owner (`user`) out of `accepts`.
 
 #### Writing your own adapter
 
@@ -1307,6 +1442,10 @@ class ApplicationAction < Saltbox::Actions::Base
   include ModelAuthorization
 end
 ```
+
+Answer for the system caller in `policy_scope` (`actor.system?`). Under a
+scope written only for people, `scope.where(user: account)` finds nothing
+for it, so a nightly job lists nothing and finds no record.
 
 Files under `app/actions/application_action/` hold shared code, not actions.
 
@@ -1461,6 +1600,23 @@ RSpec.describe Events::UpdateAction do
 end
 ```
 
+To test the endpoint itself, with your token lookup, write a request spec.
+MCP answers only the hosts it allows, so set one:
+
+```ruby
+# spec/requests/mcp_spec.rb
+RSpec.describe "MCP" do
+  it "lists the person's tasks" do
+    ada = User.create!(email: "ada@example.com", password: "secret123")
+    secret = AccessToken.issue(ada, name: "Test")
+    host! "localhost"
+    post "/mcp", as: :json, headers: {"Authorization" => "Bearer #{secret}", "Accept" => "application/json, text/event-stream"},
+      params: {jsonrpc: "2.0", id: 1, method: "tools/call", params: {name: "run_read_action", arguments: {name: "list_tasks"}}}
+    expect(response).to have_http_status(:ok)
+  end
+end
+```
+
 There is also `"renders its declared output schema"`, and
 `"a valid action registry"`. Put the registry one in a single spec. It runs
 every check `rails actions:check` runs, and checks that every action has a
@@ -1518,6 +1674,8 @@ The helper also has these checks:
 - `assert_matches_output_schema(result)` checks the schema from `returns`.
 - `assert_runnable_by(caller)` and `assert_listed_for(caller)` check access.
 - `assert_announces_changes(event => :update) { run(...) }` checks change events.
+  It needs change tracking (`include Saltbox::Actions::ChangeTracking` in
+  `ApplicationRecord`) or PaperTrail.
 - `assert_changes_audit_trail(on: event, by: user) { run(...) }` needs PaperTrail.
 - `assert_matches_catalogue` checks the committed catalogue.
 - `assert_valid_action_registry` runs every check `rails actions:check` runs,
@@ -1564,7 +1722,9 @@ A verb from the table needs no declarations: the verb gives its kind, its
 record and its rule for agents. Any other verb gets `kind`, `attribute :id`
 when it works on one record, and its `policy_rule`. With no adapter that
 supplies fields, a create or update lists the model's columns with
-`accepts`; remove the ones people may not set. The generator then names
+`accepts`; remove the ones people may not set. A `belongs_to`, such as a
+note's `user`, is left commented out: a caller could point it at any record
+it can see. The generator then names
 the fields that still need a description, to write under
 `actions.<resource>.fields` in the locale file.
 
