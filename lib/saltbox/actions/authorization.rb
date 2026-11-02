@@ -19,6 +19,8 @@ module Saltbox
     # and, on the class:
     # - permitted?(account): whether the person's role allows the action at all;
     # - authorization_problems: what rails actions:check reports, such as a missing policy;
+    # - policy_missing?: whether the action's policy does not exist, which
+    #   leaves it out of every actions list;
     # - supplies_fields?: whether the model's policy says which fields a person
     #   may set; when it does, it is the one list of a create's or update's
     #   fields, and an action may not also name them with `accepts`;
@@ -98,6 +100,22 @@ module Saltbox
             end
           end
 
+          # Whether the action's policy does not exist, as when
+          # Reports::ExportAction on Event has no Reports::EventPolicy. Such an
+          # action is left out of every actions list, MCP's and the
+          # assistant's included, so the others stay listed; running it still
+          # fails, and rails actions:check names the policy. The first time,
+          # it warns.
+          #
+          # @return [Boolean]
+          def policy_missing?
+            return false unless model && policy_class.nil?
+            @policy_missing_warned ||= begin
+              warn "saltbox-actions: #{name} is left out of every actions list: #{missing_policy_problem}"
+              true
+            end
+          end
+
           # @return [Array<String>] a missing policy or rule, and the fix
           def authorization_problems
             return [] unless model
@@ -107,11 +125,8 @@ module Saltbox
             elsif more_than_verb? && declared_query.nil? && !declared_name
               problems << "#{action_words.join(" ")} says more than #{verb}: name the policy rule, policy_rule :#{verb}? or another"
             end
-            if policy_class.nil? && policy_namespace.any?
-              problems << "#{model.name} has no #{policy_label} policy in #{policy_namespace.join("/")}: " \
-                "add #{expected_policy_name}, or declare policy_namespace (see the README)#{nested_hint}"
-            elsif policy_class.nil?
-              problems << "#{model.name} has no #{policy_label} policy: add #{expected_policy_name}, or include another authorization adapter (see the README)"
+            if policy_class.nil?
+              problems << missing_policy_problem
             elsif !policy_rule?(policy_query)
               problems << "#{policy_class}##{policy_query} is missing: add it, or name another with policy_rule"
             end
@@ -124,6 +139,15 @@ module Saltbox
           private
 
           def missing_rule = "#{model.name} is its model: name the policy rule, policy_rule :show? or another"
+
+          def missing_policy_problem
+            if policy_namespace.any?
+              "#{model.name} has no #{policy_label} policy in #{policy_namespace.join("/")}: " \
+                "add #{expected_policy_name}, or declare policy_namespace (see the README)#{nested_hint}"
+            else
+              "#{model.name} has no #{policy_label} policy: add #{expected_policy_name}, or include another authorization adapter (see the README)"
+            end
+          end
 
           # Events::Attendees::ListAction on Attendee may be nested under
           # Event, or Events may be an area like Admin: the class name cannot
@@ -147,6 +171,9 @@ module Saltbox
 
           # @return [Array<String>]
           def authorization_problems = []
+
+          # @return [Boolean] false: without a policy, nothing is missing
+          def policy_missing? = false
 
           # @return [Array<String>]
           def reference_problems = []

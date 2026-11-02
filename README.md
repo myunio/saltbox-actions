@@ -1318,7 +1318,9 @@ asks `Admin::EventPolicy#update?`: before any record loads, when it loads
 and authorizes the record, in `policy_scope` and `policy`, for its fields,
 and for the records a `belongs_to` field may pick. If `Admin::EventPolicy`
 does not exist, the action fails instead of asking `EventPolicy`, and
-`rails actions:check` names the policy to add. ActionPolicy looks it up the
+`rails actions:check` names the policy to add. Until then the action is left
+out of every actions list, MCP's and the assistant's included, so the other
+actions stay listed. The first list warns once, naming the policy. ActionPolicy looks it up the
 same way and never falls back to `EventPolicy`. To use another namespace,
 declare it: `policy_namespace :staff`, or `policy_namespace false` for the
 model's own policy.

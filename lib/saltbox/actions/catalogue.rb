@@ -1,7 +1,9 @@
 module Saltbox
   module Actions
     # Decides which actions a caller sees in the actions list, and what each
-    # entry says. An action is listed only when all four hold:
+    # entry says. An action whose policy is missing is never listed
+    # (Authorization#policy_missing?). Otherwise it is listed only when all
+    # four hold:
     # - the action's feature is on for the caller;
     # - the connection's access reaches it (Caller#access);
     # - the token has the scope the action needs;
@@ -16,9 +18,9 @@ module Saltbox
         def enabled_for?(caller) = feature.nil? || Actions.config.feature_enabled.call(feature, caller)
 
         # @param caller [Caller]
-        # @return [Boolean] whether the actions list shows it to this caller: all four checks above
+        # @return [Boolean] whether the actions list shows it to this caller: its policy exists, and all four checks above
         def available_to?(caller)
-          enabled_for?(caller) && caller.reaches?(self) && caller.allows?(scope) && permitted_for?(caller)
+          !policy_missing? && enabled_for?(caller) && caller.reaches?(self) && caller.allows?(scope) && permitted_for?(caller)
         end
 
         # Whether the person may use the action at all: they hold every
