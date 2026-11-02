@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+- `find_action` with no query lists every action the caller can run from its surface, a page
+  at a time (`page`, `page_size`: 50 by default, at most 100), sorted by area then name, with
+  `config.area_order` to put some areas first. When nothing matches, its hint names
+  the caller's areas, if actions have any. `run_change_action` asks first only for an action
+  marked `confirm_first`.
+
 - Engines: `config.action_paths` is a list (replacing `actions_path`); an engine adds its
   folder in an initializer, with an optional `namespace:` for its actions' public names.
 - A warning names `ApplicationAction` subclasses outside every action folder. Overlapping
