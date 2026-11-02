@@ -51,4 +51,40 @@ RSpec.describe "Changes and transactions" do
     ActiveRecord::Base.transaction { update.call("Annual meeting") }
     expect(ids).to contain_exactly(a_string_matching(/\A\h{8}-/))
   end
+
+  describe "a model in a second database" do
+    let(:database) { File.expand_path("../../rails_app/tmp/archive.sqlite3", __dir__) }
+
+    before do
+      FileUtils.mkdir_p(File.dirname(database))
+      stub_const("ArchiveRecord", Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      ArchiveRecord.establish_connection(adapter: "sqlite3", database:)
+      ArchiveRecord.connection_pool.with_connection { it.create_table(:entries, force: true) { |t| t.string :title } }
+      stub_const("Entry", Class.new(ArchiveRecord) { include Saltbox::Actions::ChangeTracking })
+      stub_const("EntryPolicy", Class.new(EventPolicy))
+    end
+
+    after { ArchiveRecord.remove_connection }
+
+    # Writes an entry, then fails.
+    let(:action) do
+      Class.new(ApplicationAction) do
+        def self.name = "Entry::AddAction"
+        kind :change
+        connections :allowed
+        authorize :update?
+
+        def perform
+          authorize Event.first
+          Entry.create!(title: "Half done")
+          raise Saltbox::Actions::Error::Invalid, "No"
+        end
+      end
+    end
+
+    it "runs the change in that model's transaction, so a failure undoes it" do
+      expect { Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect(Entry.count).to eq(0)
+    end
+  end
 end

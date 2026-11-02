@@ -2,6 +2,10 @@
 
 ## 0.1.0 (unreleased)
 
+- `Saltbox::Actions::ChangeTracking`, included in `ApplicationRecord`, notes changes for
+  `on_changes` and `announce_changes` without PaperTrail. PaperTrail still notes its versions.
+- A write rolled back inside an action is no longer announced as a change.
+- A change runs in its model's own transaction, so a model in a second database rolls back too.
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
 

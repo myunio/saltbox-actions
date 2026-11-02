@@ -119,6 +119,17 @@ class ApplicationAction < Saltbox::Actions::Base
 end
 ```
 
+To hear about the records each change writes (see `on_changes` under
+Configuration), include change tracking in your models:
+
+```ruby
+# app/models/application_record.rb
+class ApplicationRecord < ActiveRecord::Base
+  primary_abstract_class
+  include Saltbox::Actions::ChangeTracking
+end
+```
+
 ## Core concepts
 
 ### Actions
@@ -224,8 +235,8 @@ Then the input is checked against the action's JSON Schema. A bad field gives
 `validation_failed`, with errors by field name. A record the person cannot
 see gives `not_found`, so its existence never shows.
 
-A change runs in its own database transaction. If it fails, its writes are
-undone.
+A change runs in its own database transaction, on its model's database. If
+it fails, its writes are undone.
 
 Every surface sends errors in the same shape:
 
@@ -354,10 +365,28 @@ ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
 the model's fields.
 
+### Change tracking
+
+`Saltbox::Actions::ChangeTracking` notes each record an action creates,
+updates or destroys. A write that is rolled back is not noted. Each record is
+noted once, as its class name, its id and `create`, `update` or `destroy`.
+
+Using another audit gem, such as Audited or Logidze? Skip the concern and
+note each entry it writes yourself:
+
+```ruby
+Audited::Audit.after_create do
+  Saltbox::Actions::Invocation.note(auditable_type, auditable_id, action)
+end
+```
+
+Outside an action, `note` does nothing. In a second database, pass that
+model's transaction: `transaction: Entry.current_transaction`.
+
 ### PaperTrail
 
-With PaperTrail, every version an action writes is noted as a change, and
-each version can record the agent and surface:
+With PaperTrail, every version an action writes is also noted as a change,
+and each version can record the agent and surface:
 
 ```ruby
 # config/initializers/actions.rb
@@ -401,7 +430,7 @@ end
 - `have_field_errors(:title)`;
 - `be_invalid_against_schema`, for input the schema refuses;
 - `match_output_schema`, against the schema from `returns`;
-- `announce_changes(event => :update)`;
+- `announce_changes(event => :update)` (needs change tracking or PaperTrail);
 - `change_audit_trail.on(event).by(user).with(agent: "Test agent")` (needs PaperTrail);
 - `be_runnable_by(caller)` and `be_listed_for(caller)`.
 
@@ -460,7 +489,7 @@ Saltbox::Actions.configure do |config|
   # Run each call inside your own context: tenant, time zone, a fresh user.
   config.around_invocation { |caller, run| Current.set(user: caller.account) { run.call(caller) } }
 
-  # Hear about every changed record, inside the transaction.
+  # Hear about every changed record, inside the transaction (see Change tracking).
   config.on_changes { |changes, invocation| EventLog.record(changes, invocation.caller) }
 
   # Run something once the change has committed. Never runs on rollback.
