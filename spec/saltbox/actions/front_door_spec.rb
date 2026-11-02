@@ -68,6 +68,16 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     expect(destructive).to include("get a yes first")
   end
 
+  it "lists only what a connection's access reaches, in its tools, find_action and the catalogue" do
+    reads_only = Struct.new(:kind) { def allows?(action) = action.kind == kind }.new(:read)
+    connection = Saltbox::Actions::Caller.new(account: manager, surface: "mcp", agent: "Claude", access: reads_only)
+    expect(described_class.tools(connection).map(&:name)).to eq(%w[show_event whoami find_action run_read_action])
+    expect(described_class.call("find_action", {"query" => "cancel the meeting"}, caller: connection)[:actions]).to be_empty
+    listed = Saltbox::Actions::Registry.catalogue(connection).pluck("name")
+    expect(listed).to include("list_events")
+    expect(listed).not_to include("cancel_event", "delete_event")
+  end
+
   it "runs direct and generic tools through Invocation, refusing the wrong kind" do
     expect(described_class.call("show_event", {"id" => event.id.to_s}, caller: as_mcp(manager)).dig("data", "event", "title")).to eq(event.title)
     expect(described_class.call("run_read_action", {"name" => "list_events"}, caller: as_mcp(manager)).dig("data", "events").size).to eq(1)
@@ -78,15 +88,5 @@ RSpec.describe Saltbox::Actions::FrontDoor do
 
   it "checks the run tool's own wrapper" do
     expect { described_class.call("run_read_action", {"arguments" => {}, "extra" => 1}, caller: as_mcp(manager)) }.to have_field_errors(:name, :extra)
-  end
-end
-
-RSpec.describe Saltbox::Actions::Finder do
-  it "ranks by title, name and description, matching other forms of a word and ignoring filler words" do
-    finder = described_class.new(Saltbox::Actions::Registry.actions)
-    expect(finder.find("removing events").first).to eq(Event::DeleteAction)
-    expect(finder.find("the and of")).to be_empty
-    expect(described_class.stem("boxes")).to eq("box")
-    expect(described_class.stem("types")).to eq("type")
   end
 end

@@ -209,6 +209,39 @@ person's own click may run it:
 
 A browser assistant (`webmcp`) never runs a destructive action.
 
+By default, nothing on the server checks that an agent asked before a
+`:confirm` action. The agent is only told to. To make the server check, turn
+on `enforce_confirm` and say how a person approves:
+
+```ruby
+Saltbox::Actions.configure do |config|
+  config.enforce_confirm = true
+  config.confirm do |invocation, action|
+    Approval.granted?(invocation.caller.account, action.action_name, invocation.arguments)
+  end
+end
+```
+
+With it on, an agent on the API, MCP or a browser page gets
+`confirmation_required` for a `:confirm` action, until the hook returns
+`true`. The hook sees the caller, the action and the checked arguments, so it
+can ask the person in your app. It can also raise an error of its own, such as
+`Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
+A person on a screen is never asked. Without a hook, every such call is
+refused.
+
+Some actions can reach what a stricter action guards: a create that can also
+publish, say. Check the stricter rule inside `perform`:
+
+```ruby
+actor.confirm!(Event::PublishAction) if params[:status] == "published"
+```
+
+`confirm!` refuses with `human_required` when that action's `connections`
+bar the caller, and with `confirmation_required` when it is `:confirm` and
+not approved. Call it before the action writes anything: a refusal rolls
+back the change, including anything the hook wrote.
+
 ### The order of refusals
 
 Every surface runs an action through `Saltbox::Actions::Invocation`. It
@@ -222,7 +255,9 @@ refuses in the same order every time, so the same call gets the same answer:
 
 Then the input is checked against the action's JSON Schema. A bad field gives
 `validation_failed`, with errors by field name. A record the person cannot
-see gives `not_found`, so its existence never shows.
+see gives `not_found`, so its existence never shows. With `enforce_confirm`
+on, a `:confirm` action the app has not approved gives
+`confirmation_required` before it runs.
 
 A change runs in its own database transaction. If it fails, its writes are
 undone.
@@ -237,6 +272,42 @@ To refuse in your own words, raise an error from `perform`:
 
 ```ruby
 raise ApplicationAction::Error.new("Published events are locked", code: :event_locked, status: :unprocessable_content)
+```
+
+### Limit what a connection reaches
+
+A token's scopes are broad: read, or read and write, across every action. To
+let one connection reach only some actions, give its caller an `access:`
+object that answers `allows?(action)`:
+
+```ruby
+# app/models/connection_access.rb
+ConnectionAccess = Data.define(:action_names) do
+  def allows?(action) = action_names.include?(action.action_name)
+end
+```
+
+Build the caller with it wherever you build one from a token. Here
+`token.action_names` stands for your own record of what the person allowed:
+
+```ruby
+ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: "Claude",
+  scopes: token.scopes, access: ConnectionAccess.new(token.action_names))
+```
+
+The caller then sees only those actions. The catalogue, `find_action` and the
+MCP tools leave the rest out, and a call to one of them is refused with
+`insufficient_scope`. The default message talks about read-only tokens, so
+set `on_access_refused` to say what happened in your words. It is also the
+place to note the refusal:
+
+```ruby
+# config/initializers/actions.rb
+Saltbox::Actions.configure do |config|
+  config.on_access_refused do |caller, action|
+    Saltbox::Actions::Error::InsufficientScope.new("This connection may not use #{action.title}. Allow it in Settings.")
+  end
+end
 ```
 
 ### Declarations
@@ -431,6 +502,10 @@ Saltbox::Actions.configure do |config|
 end
 ```
 
+Each keyword after `invocation` goes to PaperTrail's `controller_info`, so a
+richer agent stamp (the machine, the connection) goes there, with a column on
+`versions` for each.
+
 ## Testing with RSpec
 
 Load the helpers in `spec/rails_helper.rb`:
@@ -539,8 +614,8 @@ end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
-`actions_path`, `catalogue_path`, `default_connections`, `error_format` and
-`result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
+`actions_path`, `catalogue_path`, `default_connections`, `enforce_confirm`
+with `confirm` (see Connections), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits
 

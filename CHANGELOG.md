@@ -6,6 +6,10 @@
   name, with `config.area_order` to put some areas first. When nothing matches, its hint names
   the caller's areas, if actions have any. `run_change_action` asks first only for an action
   marked `confirm_first`.
+- `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
+  `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
+  default, which keeps `:confirm` as advice to agents.
+- `Caller#confirm!(action)` applies another action's `connections` rule inside a running action.
 
 - `summary` declares the fields a list action sends agents in place of its view, once per model
   in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
@@ -13,6 +17,8 @@
   is its `summary_output_schema`. `render collection:` hands over a list's records; a list with a
   summary refuses `render json:`, missing records, field values whose JSON is not plain, and
   meta that is not plain data (hashes, arrays, text, numbers, booleans, dates, times, nil).
+- find_action finds an action only through its title or name, or two or more of the
+  request's words in its description; one shared description word no longer matches.
 
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
