@@ -149,6 +149,7 @@ module Saltbox
           (modules - model.name.deconstantize.split("::")).map(&:underscore)
         end
 
+        # @api private
         # The outer modules in the action's name. A namespace from the action
         # folder takes the place of the engine's module, so
         # Billing::Projects::ListAction on the app's Project, in a folder
