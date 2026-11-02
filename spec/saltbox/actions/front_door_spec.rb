@@ -43,15 +43,19 @@ RSpec.describe Saltbox::Actions::FrontDoor do
       expect(listed(manager, caller: as_assistant(manager))).to all(satisfy { |entry| entry[:run_with] && !entry.key?(:message) })
     end
 
-    it "lists a page at a time, saying how to get the next" do
+    it "lists a page at a time, and following the hint's next page reaches every action once" do
       first = described_class.call("find_action", {"page_size" => 3}, caller: as_mcp(manager))
       expect(first[:actions].pluck(:name)).to eq(%w[cancel_event create_event delete_event])
       expect(first[:meta]).to eq(page: 1, page_size: 3, total: 8, next_page: 2)
-      expect(first[:hint]).to include("Call find_action with page: 2 for more.")
-      last = described_class.call("find_action", {"page" => 3, "page_size" => 3}, caller: as_mcp(manager))
-      expect(last[:actions].pluck(:name)).to eq(%w[count_events whoami])
-      expect(last[:meta]).to include(next_page: nil)
-      expect(last[:hint]).not_to include("page:")
+      expect(first[:hint]).to include("Call find_action with page: 2, page_size: 3 for more.")
+
+      pages = [first]
+      while (next_args = pages.last[:hint][/page: (\d+), page_size: (\d+)/] && {"page" => $1.to_i, "page_size" => $2.to_i})
+        pages << described_class.call("find_action", next_args, caller: as_mcp(manager))
+      end
+      expect(pages.size).to eq(3)
+      expect(pages.flat_map { |page| page[:actions].pluck(:name) }).to eq(listed(manager).pluck(:name))
+      expect(pages.last[:meta]).to include(next_page: nil)
       expect(described_class.call("find_action", {}, caller: as_mcp(manager))[:meta]).to include(page_size: 50)
     end
 

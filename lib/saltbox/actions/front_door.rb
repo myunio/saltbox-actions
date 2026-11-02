@@ -152,7 +152,7 @@ module Saltbox
           end
           next_page = page + 1 if page * page_size < runnable.size
           hint = "Call find_action with an action's name for what it does and the arguments it takes."
-          hint += " Call find_action with page: #{next_page} for more." if next_page
+          hint += " Call find_action with page: #{next_page}, page_size: #{page_size} for more." if next_page
           {actions: actions, meta: {page:, page_size:, total: runnable.size, next_page:}, hint: hint}
         end
       end
