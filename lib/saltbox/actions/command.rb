@@ -171,14 +171,20 @@ module Saltbox
         def locale_scope = "commands"
 
         # A field's description: the command's own in the locale file, then
-        # the resource's (commands.events.fields), then the shared one.
+        # the resource's (commands.events.fields), then the attribute's
+        # description:, then the shared one (actions.shared.fields).
         def field_description(field)
           resource = locale_key.rpartition(".").first.presence
           keys = [:"commands.#{locale_key}.fields.#{field}"]
           keys << :"commands.#{resource}.fields.#{field}" if resource
-          keys << :"actions.shared.fields.#{field}"
+          keys << :"actions.shared.fields.#{field}" unless command_attributes.dig(field.to_s, :description)
           I18n.t(keys.shift, default: [*keys, ""]).squish.presence
         end
+
+        # Lists the command as an MCP tool of its own; see Declarations#mcp_core.
+        #
+        # @return [void]
+        def featured = mcp_core
 
         # Runs the command now, through the same path every surface uses.
         #

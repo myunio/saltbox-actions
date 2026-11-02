@@ -47,6 +47,15 @@ RSpec.describe Saltbox::Actions::Command do
       expect(Events::ExportCommand.input_schema["properties"]["status"]).to include("enum" => Event.statuses.keys)
     end
 
+    it "prefers an attribute's own description to the shared one" do
+      command = Class.new(ApplicationCommand) do
+        def self.name = "Events::ShowAgendaCommand"
+        attribute :id, :string, description: "The agenda's event"
+      end
+      expect(command.field_description("id")).to be_nil
+      expect(Events::ArchiveCommand.field_description("id")).to eq("The record's id.")
+    end
+
     it "takes the fields it accepts, typed from the model's columns, whoever calls" do
       properties = Events::RenameCommand.input_schema(as_screen(manager))["properties"]
       expect(properties.keys).to eq(%w[id title notes parent])
