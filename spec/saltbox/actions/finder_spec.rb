@@ -21,18 +21,14 @@ RSpec.describe Saltbox::Actions::Finder do
     end
   end
 
-  it "finds nothing for a request sharing one description word with several actions, rather than those actions" do
+  it "finds nothing for a request sharing one description word with an action, rather than that action" do
     expect(found("say hello")).to be_empty
     expect(found("send a newsletter")).to be_empty
-  end
-
-  it "finds the one action using a description word when nothing else matches" do
-    expect(found("the capacity")).to eq(["update_event"])
+    expect(found("the capacity")).to be_empty
   end
 
   # Descriptions written so each word's rarity is known: "ticket" and "venue"
-  # are in three descriptions, the rest in two each, so none falls back as
-  # the one action using a word.
+  # are in three descriptions, the rest in two each.
   context "weighing description words" do
     let(:action) { Data.define(:action_name, :title, :description) }
     let(:weighed) do
@@ -75,8 +71,7 @@ RSpec.describe Saltbox::Actions::Finder do
       end
     end
 
-    it "finds the one action using a description word, but nothing for a word several share" do
-      expect(found("newest", among: five)).to eq(["list_events"])
+    it "still finds nothing for one shared description word" do
       expect(found("say hello", among: five)).to be_empty
     end
   end
