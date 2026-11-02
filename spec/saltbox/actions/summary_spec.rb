@@ -187,7 +187,9 @@ RSpec.describe Saltbox::Actions::Summary do
     found = Saltbox::Actions::FrontDoor.call("find_action", {"query" => "list events"}, caller: as_mcp(manager))
     expect(found[:actions].find { it[:name] == "list_events" })
       .to include(response_description: "Returns each event's id, title, starts_on, and status. Call show_event with its id for the rest.")
-    expect(found[:actions].find { it[:name] == "show_event" }).not_to have_key(:response_description)
+    others = found[:actions].reject { it[:name] == "list_events" }
+    expect(others).not_to be_empty
+    expect(others).to all(satisfy { !it.key?(:response_description) })
   end
 
   it "stops the boot for a field the model lacks, or a list summary without id" do

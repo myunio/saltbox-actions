@@ -32,7 +32,7 @@ module Saltbox
 end
 
 ::RSpec.configure do |config|
-  config.define_derived_metadata(file_path: %r{/spec/actions/}) { |metadata| metadata[:type] ||= :action }
+  config.define_derived_metadata(file_path: %r{/spec/(actions|commands)/}) { |metadata| metadata[:type] ||= :action }
   config.include Saltbox::Actions::RSpec::Helpers, type: :action
   config.include Saltbox::Actions::RSpec::Matchers, type: :action
 end

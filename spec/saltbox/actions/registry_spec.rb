@@ -9,8 +9,8 @@ RSpec.describe Saltbox::Actions::Registry do
   def problems(klass) = described_class.problems(klass)
 
   it "loads every action under app/actions, sorted, with unique names" do
-    expect(described_class.actions.map(&:action_name)).to eq(%w[cancel_event count_events create_event delete_event list_billing_invoices list_events
-      show_event show_event_notes update_event whoami])
+    expect(described_class.actions.map(&:action_name)).to eq(%w[archive_event cancel_event count_events create_event delete_event export_events
+      list_billing_invoices list_events postpone_event rename_event show_event show_event_notes update_event whoami])
   end
 
   it "finds the actions as the base class's subclasses when the folder holds other files too" do

@@ -24,3 +24,10 @@ en:
     event/show_notes:
       title: Read an event's private notes
       description: Shows an event's private notes.
+  commands:
+    events:
+      fields:
+        reason: Why it moved.
+        title: The event's name.
+      archive:
+        title: Archive an event

@@ -127,15 +127,22 @@ class ActionsTest < ActiveSupport::TestCase
 
   test "checks the committed catalogue and all registry promises" do
     assert_matches_catalogue
-    Dir.mktmpdir("action-tests") do |directory|
-      Saltbox::Actions::Registry.action_files.each do |file|
-        relative = Saltbox::Actions.config.action_paths.relative(file).sub_ext("_test.rb")
-        path = Pathname(directory).join(relative)
+    Dir.mktmpdir("action-tests") do |root|
+      directory = Pathname(root).join("actions")
+      tests = Saltbox::Actions::Registry.action_files.map { Saltbox::Actions.config.action_paths.relative(it).sub_ext("_test.rb") }
+      commands = Saltbox::Actions::Registry.commands.map do |command|
+        Pathname("../commands").join(Pathname(Saltbox::Actions::Registry.source(command)).relative_path_from(Rails.root.join("app/commands")).sub_ext("_test.rb"))
+      end
+      (tests + commands).each do |relative|
+        path = directory.join(relative)
         FileUtils.mkdir_p(path.dirname)
         path.write("")
       end
       assert_valid_action_registry(test_root: directory)
-      FileUtils.rm_f(Pathname(directory).join("whoami_action_test.rb"))
+      FileUtils.rm_f(Pathname(root).join("commands/events/archive_command_test.rb"))
+      assert_raises(Minitest::Assertion) { assert_valid_action_registry(test_root: directory) }
+      FileUtils.touch(Pathname(root).join("commands/events/archive_command_test.rb"))
+      FileUtils.rm_f(directory.join("whoami_action_test.rb"))
       assert_raises(Minitest::Assertion) { assert_valid_action_registry(test_root: directory) }
     end
   end

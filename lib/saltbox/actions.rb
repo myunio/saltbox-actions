@@ -29,6 +29,7 @@ require "saltbox/actions/finder"
 require "saltbox/actions/record_data"
 require "saltbox/actions/front_door"
 require "saltbox/actions/base"
+require "saltbox/actions/command"
 require "saltbox/actions/railtie" if defined?(Rails::Railtie)
 
 module Saltbox
@@ -66,6 +67,7 @@ module Saltbox
     autoload :MCP, "saltbox/actions/mcp"
     autoload :RubyLLMTool, "saltbox/actions/ruby_llm"
     autoload :PaperTrail, "saltbox/actions/paper_trail"
+    autoload :CommandJob, "saltbox/actions/command_job"
 
     class << self
       # @return [Configuration]

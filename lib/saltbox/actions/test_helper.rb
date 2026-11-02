@@ -96,10 +96,13 @@ module Saltbox
       def assert_valid_action_registry(test_root: Rails.root.join("test/actions"))
         refute_empty Registry.check!
         paths = Actions.config.action_paths
-        files = Actions.config.every_file_an_action ? Registry.action_files : Registry.actions.map { Registry.source(it) }
+        files = Actions.config.every_file_an_action ? Registry.action_files : (Registry.actions - Registry.commands).map { Registry.source(it) }
         missing = files.map { |file| [file, paths.relative(file).sub_ext("_test.rb")] }
           .reject { |file, test| [Pathname(test_root), paths.for(file).root.join("../../test/actions")].any? { it.join(test).exist? } }
           .map(&:last)
+        commands = Rails.root.join("app/commands")
+        missing += Registry.commands.map { Pathname(Registry.source(it)).relative_path_from(commands).sub_ext("_test.rb") }
+          .reject { Pathname(test_root).parent.join("commands", it).exist? }
         assert_empty missing, "write #{missing.join(", ")} under #{test_root}"
         invalid = Registry.actions.reject { JSONSchemer.valid_schema?(it.input_schema) }
         assert_empty invalid.map(&:action_name)

@@ -123,6 +123,9 @@ module Saltbox
         # @return [String] the action's key in config/locales/actions.en.yml: event/update for Event::UpdateAction
         def locale_key = name.underscore.delete_suffix("_action")
 
+        # @return [String] the locale file's top key for its title and description
+        def locale_scope = "actions"
+
         # @return [String] the declared title (see Declarations#title), the locale file's,
         #   or one built from the class name: "Update event", "List events"
         def title(value = nil)
@@ -132,7 +135,7 @@ module Saltbox
           noun = "#{action_namespace.humanize(capitalize: false)} #{noun}" if noun && action_namespace
           noun = noun&.pluralize if PLURAL_VERBS.include?(verb)
           default = [verb.humanize, noun, *action_words.drop(1)].compact.join(" ")
-          I18n.t("actions.#{locale_key}.title", default:)
+          I18n.t("#{locale_scope}.#{locale_key}.title", default:)
         end
 
         # Tells an agent when to use the action. Declared in the class, or read
@@ -142,7 +145,7 @@ module Saltbox
         # @return [String, nil]
         def description(value = nil)
           return @declared_description = value.squish if value
-          @declared_description || I18n.t("actions.#{locale_key}.description", default: nil)&.squish
+          @declared_description || I18n.t("#{locale_scope}.#{locale_key}.description", default: nil)&.squish
         end
 
         # @param field [String]

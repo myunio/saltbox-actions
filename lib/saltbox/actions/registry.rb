@@ -15,6 +15,7 @@ module Saltbox
       def self.actions
         @actions ||= begin
           entries = Actions.config.every_file_an_action ? action_files.map { |path| action_at(path) } : descendants
+          entries += commands
           validate!(entries)
           warn_outside(entries)
           entries.sort_by(&:action_name).freeze
@@ -59,6 +60,19 @@ module Saltbox
         paths = Actions.config.action_paths
         named = named_descendants
         named.select { |action| paths.for(source(action)) }.reject { |action| named.any? { it < action } }
+      end
+
+      # The commands in app/commands (see Command): each named subclass of
+      # Command defined there, except abstract ones such as ApplicationCommand.
+      #
+      # @return [Array<Class>]
+      def self.commands
+        root = Rails.root.join("app/commands")
+        return [] unless root.directory?
+        Rails.autoloaders.main.eager_load_dir(root.to_s)
+        Command.descendants.select do |command|
+          command.name&.safe_constantize.equal?(command) && !command.abstract? && source(command)&.start_with?("#{root}/")
+        end
       end
 
       # The base class's subclasses that hold a name now: not anonymous

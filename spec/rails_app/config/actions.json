@@ -1,5 +1,41 @@
 [
   {
+    "name": "archive_event",
+    "title": "Archive an event",
+    "description": "Cancels an event and keeps it on record.",
+    "area": "events",
+    "kind": "destructive",
+    "idempotent": false,
+    "scope": "api:write",
+    "connections": "confirm",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "archive"
+      ],
+      "args": [
+        "id"
+      ]
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "The record's id."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "cancel_event",
     "title": "Cancel event",
     "description": "Cancels an event and says why.",
@@ -245,6 +281,39 @@
     }
   },
   {
+    "name": "export_events",
+    "title": "Export events",
+    "description": "Counts the events the person can see, for a report.",
+    "area": "events",
+    "kind": "read",
+    "idempotent": false,
+    "scope": "api:read",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "export"
+      ],
+      "args": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "published",
+            "cancelled"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "list_billing_invoices",
     "title": "List billing invoices",
     "area": "billing",
@@ -365,6 +434,106 @@
       "required": [
         "data"
       ]
+    }
+  },
+  {
+    "name": "postpone_event",
+    "title": "Postpone event",
+    "description": "Moves an event to a later day.",
+    "area": "events",
+    "kind": "change",
+    "idempotent": true,
+    "scope": "api:write",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "postpone"
+      ],
+      "args": [
+        "id"
+      ]
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "The record's id."
+        },
+        "starts_on": {
+          "type": "string",
+          "description": "The new day",
+          "format": "date"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why it moved."
+        }
+      },
+      "required": [
+        "id",
+        "starts_on"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "rename_event",
+    "title": "Rename event",
+    "description": "Changes an event's title, and its notes for those who may read them.",
+    "area": "events",
+    "kind": "change",
+    "idempotent": true,
+    "scope": "api:write",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "events",
+        "rename"
+      ],
+      "args": [
+        "id"
+      ]
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "The record's id."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "The event's name."
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
     }
   },
   {

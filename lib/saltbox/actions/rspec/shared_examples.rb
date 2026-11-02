@@ -93,12 +93,16 @@ RSpec.shared_examples "a valid action registry" do
     paths = Saltbox::Actions.config.action_paths
     spec_root = Saltbox::Actions::RSpec.config.spec_root
     # Where the action folders hold other files too, each action's own file.
-    files = Saltbox::Actions.config.every_file_an_action ? registry.action_files : registry.actions.map { registry.source(it) }
+    files = Saltbox::Actions.config.every_file_an_action ? registry.action_files : (registry.actions - registry.commands).map { registry.source(it) }
     # An engine's action spec may live in the app's spec folder or in the
     # engine's own: engines/billing/spec/actions beside engines/billing/app/actions.
     missing = files.map { |file| [file, paths.relative(file).sub_ext("_spec.rb")] }
       .reject { |file, spec| [spec_root, paths.for(file).root.join("../../spec/actions")].any? { it.join(spec).exist? } }
       .map(&:last)
+    # A command's spec is in spec/commands, beside spec/actions.
+    commands = Rails.root.join("app/commands")
+    missing += registry.commands.map { Pathname(registry.source(it)).relative_path_from(commands).sub_ext("_spec.rb") }
+      .reject { spec_root.parent.join("commands", it).exist? }
     expect(missing.map(&:to_s)).to be_empty, "write #{missing.join(", ")} under #{spec_root}"
   end
 
