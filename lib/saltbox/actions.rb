@@ -5,6 +5,7 @@ require "json"
 require "digest"
 
 require "saltbox/actions/version"
+require "saltbox/actions/action_paths"
 require "saltbox/actions/configuration"
 require "saltbox/actions/current"
 require "saltbox/actions/error"

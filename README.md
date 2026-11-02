@@ -363,6 +363,7 @@ Put these at the top of an action class when the name cannot give them.
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
 | `returns(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents. By default these come from `config/locales/actions.en.yml`. |
+| `model Customer` | The model, when the namespace is not one. `Admin::Customer::ExportAction` with `model Customer` is named `export_customers`. |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too. |
 | `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
 | `cli "events count"` | The command for a command-line client you build on the catalogue. |
@@ -441,6 +442,49 @@ en:
       fields:
         title: The event's name.
 ```
+
+### Engines
+
+An engine keeps its actions in its own `app/actions` folder. It adds the
+folder in an initializer, the way it adds view or locale paths:
+
+```ruby
+# engines/billing/lib/billing/engine.rb
+module Billing
+  class Engine < ::Rails::Engine
+    isolate_namespace Billing
+
+    initializer "billing.actions" do
+      Saltbox::Actions.config.action_paths.add(root.join("app/actions"), namespace: "billing")
+    end
+  end
+end
+```
+
+Its actions then show up in the actions list, the API and MCP like the
+app's own, in development and production alike.
+
+`namespace:` is the word in their public names, in place of the engine's
+module. `Billing::Invoice::ListAction` is named `list_billing_invoices`,
+with the CLI command `billing-invoices list`. Pick a different word, such
+as `namespace: "pay"`, and the names change without renaming any class.
+Without `namespace:`, names come from the class, and the CLI command
+leaves the module out (`invoices list`).
+
+`namespace:` is for isolated engines, the ones that call
+`isolate_namespace`. A model in an engine that is not isolated keeps its
+module in its name, so a namespace would be added to it
+(`list_billing_billing_invoices`). Leave `namespace:` out for those.
+
+Names and CLI commands must be unique. Two engines with an `Invoice`
+model need a namespace each, or the boot stops and names both classes.
+
+An action's spec can live in the app's `spec/actions` or in the engine's
+own `spec/actions` folder (`test/actions` with Minitest).
+
+If a class inherits from `ApplicationAction` but sits outside every action
+folder, the gem prints a warning naming it. Callers cannot run it until its
+folder is added.
 
 ## Adapters
 
@@ -758,7 +802,7 @@ end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
-`actions_path`, `catalogue_path`, `default_connections`, `enforce_confirm`
+`action_paths` (the folders actions load from), `catalogue_path`, `default_connections`, `enforce_confirm`
 with `confirm` (see Connections), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits

@@ -2,6 +2,13 @@
 
 ## 0.1.0 (unreleased)
 
+- Engines: `config.action_paths` is a list (replacing `actions_path`); an engine adds its
+  folder in an initializer, with an optional `namespace:` for its actions' public names.
+- A warning names `ApplicationAction` subclasses outside every action folder. Overlapping
+  folders (one inside another, or one spelled two ways) load each action once.
+- Boot checks run before sorting, so a namespace that is not a model gets its own message.
+- Duplicate action names and colliding CLI commands stop the boot, naming both classes.
+
 - Input is cast with each field's Active Model type before the schema check, so form strings
   ("12", "", "on", a local date-time) work on every surface; a value not of its type is still refused.
   An impossible date, an integer its column cannot store and a float that is not finite are
