@@ -21,10 +21,10 @@ module Saltbox
 
       # @return [String] the app's name in tool titles, agent instructions and default error messages
       attr_accessor :app_name
-      # @return [String] the app's base action class, whose subclasses under actions_path are its actions
+      # @return [String] the app's base action class, whose subclasses in action_paths are its actions
       attr_accessor :base_class
-      # @return [String] where the actions live, relative to Rails.root
-      attr_accessor :actions_path
+      # @return [ActionPaths] the folders actions load from: app/actions, then any an engine adds
+      attr_reader :action_paths
       # @return [String] the committed catalogue every action is written to, relative to Rails.root
       attr_accessor :catalogue_path
       # @return [String] the class whose renderer draws action views; a controller's name, read when first used
@@ -52,7 +52,7 @@ module Saltbox
       #   unless the #confirm hook approves it; when false, agents on the API,
       #   MCP and a browser page run :confirm actions with nothing checked
       attr_accessor :enforce_confirm
-      # @return [Boolean] whether every file under actions_path is an action ending _action.rb;
+      # @return [Boolean] whether every file in action_paths is an action ending _action.rb;
       #   when false, the actions are the base class's subclasses there, beside other files
       attr_accessor :every_file_an_action
       # @return [Symbol] the error body: :code ({error: {code, message, errors, details}})
@@ -64,7 +64,7 @@ module Saltbox
       def initialize
         @app_name = "the app"
         @base_class = "ApplicationAction"
-        @actions_path = "app/actions"
+        @action_paths = ActionPaths.new(["app/actions"])
         @catalogue_path = "config/actions.json"
         @renderer = "ApplicationController"
         @scopes = SCOPES
@@ -93,6 +93,11 @@ module Saltbox
         @error_mappings = []
         @action_checks = []
         @registry_checks = []
+      end
+
+      # @param paths [Enumerable<String, Pathname>] the folders actions load from, replacing the list
+      def action_paths=(paths)
+        @action_paths = ActionPaths.new(paths)
       end
 
       # @return [Class] the base action class

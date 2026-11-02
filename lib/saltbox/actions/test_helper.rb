@@ -88,12 +88,16 @@ module Saltbox
         assert_equal Registry.catalogue_json, path.read, "the catalogue is out of date: run bin/rails actions:catalogue"
       end
 
-      # Checks the same registry promises as the RSpec shared example.
+      # Checks the same registry promises as the RSpec shared example. An
+      # engine's action test may live under test_root or in the engine's own
+      # test/actions folder.
       def assert_valid_action_registry(test_root: Rails.root.join("test/actions"))
         refute_empty Registry.actions
-        files = Actions.config.every_file_an_action ? Registry.action_files : Registry.actions.map { Object.const_source_location(it.name).first }
-        missing = files.map { Pathname(it).relative_path_from(Registry.root).sub_ext("_test.rb") }
-          .reject { Pathname(test_root).join(it).exist? }
+        paths = Actions.config.action_paths
+        files = Actions.config.every_file_an_action ? Registry.action_files : Registry.actions.map { Registry.source(it) }
+        missing = files.map { |file| [file, paths.relative(file).sub_ext("_test.rb")] }
+          .reject { |file, test| [Pathname(test_root), paths.for(file).root.join("../../test/actions")].any? { it.join(test).exist? } }
+          .map(&:last)
         assert_empty missing, "write #{missing.join(", ")} under #{test_root}"
         invalid = Registry.actions.reject { JSONSchemer.valid_schema?(it.input_schema) }
         assert_empty invalid.map(&:action_name)

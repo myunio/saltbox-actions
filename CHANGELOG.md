@@ -8,11 +8,24 @@
   the caller's areas, if actions have any. `run_change_action` asks first only for an action
   marked `confirm_first`.
 
+- Engines: `config.action_paths` is a list (replacing `actions_path`); an engine adds its
+  folder in an initializer, with an optional `namespace:` for its actions' public names.
+- A warning names `ApplicationAction` subclasses outside every action folder. Overlapping
+  folders (one inside another, or one spelled two ways) load each action once.
+- Boot checks run before sorting, so a namespace that is not a model gets its own message.
+- Duplicate action names and colliding CLI commands stop the boot, naming both classes.
+
 - Input is cast with each field's Active Model type before the schema check, so form strings
   ("12", "", "on", a local date-time) work on every surface; a value not of its type is still refused.
   An impossible date, an integer its column cannot store and a float that is not finite are
   refused by field. Indexed `fields_for` params are not cast yet.
 - Ids and foreign keys take an integer or a string; decimal columns take a number or a string of digits.
+- `Saltbox::Actions::ChangeTracking`, included in `ApplicationRecord`, notes records created,
+  updated or destroyed through callbacks, for `on_changes` and `announce_changes`, without
+  PaperTrail. PaperTrail still notes its versions.
+- A write rolled back by a savepoint inside an action is no longer announced as a change.
+- A change runs in its model's own transaction, so a model in a second database rolls back.
+  Writes on any other connection are not covered.
 
 - `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
   `confirmation_required` unless the app's `config.confirm` hook approves it. Off by

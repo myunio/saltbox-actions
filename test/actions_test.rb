@@ -129,7 +129,7 @@ class ActionsTest < ActiveSupport::TestCase
     assert_matches_catalogue
     Dir.mktmpdir("action-tests") do |directory|
       Saltbox::Actions::Registry.action_files.each do |file|
-        relative = Pathname(file).relative_path_from(Saltbox::Actions::Registry.root).sub_ext("_test.rb")
+        relative = Saltbox::Actions.config.action_paths.relative(file).sub_ext("_test.rb")
         path = Pathname(directory).join(relative)
         FileUtils.mkdir_p(path.dirname)
         path.write("")

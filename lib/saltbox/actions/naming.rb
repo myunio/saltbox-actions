@@ -75,15 +75,31 @@ module Saltbox
         def action_name(value = nil)
           return @declared_name = value.to_s if value
           return declared_name if declared_name
-          noun = model && (PLURAL_VERBS.include?(verb) ? model.model_name.plural : model.model_name.singular)
-          [verb, noun, *action_words.drop(1)].compact.join("_")
+          [verb, name_noun(plural: PLURAL_VERBS.include?(verb)), *action_words.drop(1)].compact.join("_")
         end
 
         # @return [Array<String>] the CLI command's words: the declared ones (see Declarations#cli),
         #   otherwise ["events", "update"], ["event-types", "create"]
         def cli_command
           return declared_cli[:command] if declared_cli
-          [model&.model_name&.route_key&.dasherize, action_words.join("-")].compact
+          noun = action_namespace ? name_noun(plural: true) : model&.model_name&.route_key
+          [noun&.dasherize, action_words.join("-")].compact
+        end
+
+        # @return [String, nil] the namespace its action folder gives its names (see ActionPaths#add)
+        def action_namespace = Actions.config.action_paths.namespace_for(self)
+
+        # The model's part of the action's name. A namespace from the action
+        # folder takes the place of an isolated engine's module: Billing::Invoice
+        # is billing_invoice, or pay_invoice under the namespace "pay".
+        #
+        # @param plural [Boolean]
+        # @return [String, nil]
+        def name_noun(plural:)
+          return unless model
+          names = model.model_name
+          return plural ? names.plural : names.singular unless (namespace = action_namespace)
+          "#{namespace}_#{plural ? names.param_key.pluralize : names.param_key}"
         end
 
         # @return [String, nil] the name declared with action_name
@@ -113,6 +129,7 @@ module Saltbox
           return @declared_title = value if value
           return @declared_title if @declared_title
           noun = model&.model_name&.human&.downcase
+          noun = "#{action_namespace.humanize(capitalize: false)} #{noun}" if noun && action_namespace
           noun = noun&.pluralize if PLURAL_VERBS.include?(verb)
           default = [verb.humanize, noun, *action_words.drop(1)].compact.join(" ")
           I18n.t("actions.#{locale_key}.title", default:)
