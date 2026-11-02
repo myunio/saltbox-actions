@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+- `Caller.system` runs an action as the app itself, from a job, a rake task or the console. It is
+  not an agent: `connections` never bar it, it holds every scope and is never asked to confirm.
+  Its account is `Saltbox::Actions::SystemAccount` unless the app passes one, and the policy sees
+  it like a person, so the app decides what it may do. `Caller#system?` tells it apart. The JSON
+  API controller, MCP and the assistant raise `ArgumentError` for a system caller. `perform_later`
+  carries it to the job. The test helpers add `as_system`.
 - Actions are Active Model objects, named like controllers. `Events::UpdateAction` lives in
   `app/actions/events/update_action.rb`; its model is the namespace, singular, as
   `wrap_parameters` finds it (`Admin::Events` tries `Admin::Event`, then `Event`), and

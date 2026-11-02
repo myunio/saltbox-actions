@@ -27,6 +27,14 @@ class ActionsTest < ActiveSupport::TestCase
     assert_equal "Test agent", as_mcp(@manager).agent
   end
 
+  test "builds the system caller, which the policy decides for" do
+    assert as_system.system?
+    assert_equal Saltbox::Actions::SystemAccount.instance, as_system.account
+    assert_equal @manager, as_system(@manager).account
+    assert_equal "Renamed", run({id: @event.id.to_s, title: "Renamed"}, as: as_system).body.dig("data", "event", "title")
+    assert_refused(:forbidden) { run({id: @event.id.to_s}, as: as_system, action: Events::DeleteAction) }
+  end
+
   test "custom caller factories run in the test context with default and explicit scopes" do
     original = Saltbox::Actions::TestHelper.config
     Saltbox::Actions::TestHelper.instance_variable_set(:@config, Saltbox::Actions::Testing::Configuration.new)

@@ -12,7 +12,7 @@ module Saltbox
           @factories = {}
         end
 
-        # @param surface [Symbol] :screen, :webmcp, :api, :mcp or :assistant
+        # @param surface [Symbol] :screen, :webmcp, :api, :mcp, :assistant or :system
         # @yieldparam account [Object] the person
         # @yieldparam scopes [Array<String>] the token's scopes, for :api and :mcp
         # @yieldreturn [Caller]
@@ -40,6 +40,7 @@ module Saltbox
           when :screen then caller_class.screen(account)
           when :webmcp then caller_class.screen(account, webmcp: true)
           when :assistant then caller_class.assistant(account)
+          when :system then account ? caller_class.system(account) : caller_class.system
           else caller_class.new(account:, surface: surface.to_s, agent: self.class::AGENT, scopes: scopes || Actions.config.scopes.values)
           end
         end

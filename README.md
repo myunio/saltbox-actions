@@ -25,8 +25,15 @@ Here is an action that changes an event in a made-up events app:
 class Events::UpdateAction < ApplicationAction
   def perform
     event.update!(permitted_attributes(event))
-    render :show   # app/views/events/show.json.jbuilder
+    render :show
   end
+end
+```
+
+```ruby
+# app/views/events/show.json.jbuilder
+json.event do
+  json.extract! @event, :id, :title, :starts_on
 end
 ```
 
@@ -83,15 +90,17 @@ And test it, as an agent would call it:
 ```ruby
 # spec/actions/events/update_action_spec.rb
 RSpec.describe Events::UpdateAction do
-  let(:manager) { create(:user, :manager) }
-  let(:event) { create(:event, title: "AGM") }
-
   it "renames the event" do
+    manager = User.create!(email: "ann@example.com", role: "manager")
+    event = Event.create!(title: "AGM")
+
     result = run({id: event.id, title: "Annual meeting"}, as: as_mcp(manager))
-    expect(result.body.dig("data", "event", "title")).to eq("Annual meeting")
+    expect(result.body.dig("event", "title")).to eq("Annual meeting")
   end
 end
 ```
+
+`result.body` is the JSON the view rendered, as a Hash.
 
 Run `bin/rails actions:check` in CI, as you would `bin/rails zeitwerk:check`.
 It checks every action against its model, policy and fields, and names the
@@ -111,7 +120,7 @@ RubyGems yet, so install it from GitHub and pin a commit:
 ```ruby
 # Gemfile
 gem "saltbox-actions", github: "myunio/saltbox-actions", ref: "<commit sha>"
-gem "jbuilder"   # action views
+gem "jbuilder"   # action views; a new Rails app already has it
 gem "pundit"     # optional: or gem "action_policy", or neither
 ```
 
@@ -147,6 +156,229 @@ class ApplicationRecord < ActiveRecord::Base
 end
 ```
 
+## From a Devise app to a first MCP connection
+
+This walkthrough starts from a Rails 8.1 app with Devise and RSpec, a `User`
+model, and a `Task` scaffold that belongs to a user:
+
+```sh
+bin/rails g scaffold Task title:string done:boolean user:references
+bin/rails db:migrate
+```
+
+Add `has_many :tasks` to `User`.
+
+At the end, an AI agent signed in with a token can list and change the
+person's own tasks, and nobody else's.
+
+**1. Add the gems.**
+
+```ruby
+# Gemfile
+gem "saltbox-actions", github: "myunio/saltbox-actions", ref: "<commit sha>"
+gem "pundit"
+gem "mcp"
+```
+
+Run `bundle install`, then `bin/rails g pundit:install`.
+
+**2. Make the base class.**
+
+```ruby
+# app/actions/application_action.rb
+class ApplicationAction < Saltbox::Actions::Base
+  include Saltbox::Actions::Authorization::Pundit
+end
+```
+
+**3. Write the policy.** Each person may see and change only their own
+tasks:
+
+```ruby
+# app/policies/task_policy.rb
+class TaskPolicy < ApplicationPolicy
+  def index? = user.present?
+  def show? = owner?
+  def update? = owner?
+  def destroy? = owner?
+
+  def permitted_attributes = %i[title done]
+
+  class Scope < ApplicationPolicy::Scope
+    def resolve = scope.where(user:)
+  end
+
+  private
+
+  # Asked with the Task class too, before any task loads, to decide whether
+  # the action is listed at all: any signed-in person may try.
+  def owner? = record.is_a?(Class) ? user.present? : record.user_id == user.id
+end
+```
+
+The gem asks each rule twice. First with the model class, before any
+record loads, to decide whether to offer the action at all. Then with the
+record, when the action runs. A rule that reads the record must answer for
+the class too, as `owner?` does.
+
+**4. Generate the actions.**
+
+```sh
+bin/rails g action Tasks::List
+bin/rails g action Tasks::Update
+```
+
+They render the scaffold's own `tasks/index.json.jbuilder` and
+`tasks/show.json.jbuilder`. The scaffold's views link each task with
+`task_url`, so tell the routes your host, or the links say `example.org`:
+
+```ruby
+# config/routes.rb
+default_url_options host: "tasks.example.com", protocol: "https"
+```
+
+In development, use `host: "localhost:3000"`.
+
+**5. Add a token people can revoke.** Devise signs people in to screens,
+not agents. Give each connection its own token, stored as a digest:
+
+```sh
+bin/rails g model AccessToken user:references name:string token_digest:string:uniq revoked_at:datetime
+bin/rails db:migrate
+```
+
+```ruby
+# app/models/access_token.rb
+class AccessToken < ApplicationRecord
+  belongs_to :user
+
+  scope :active, -> { where(revoked_at: nil) }
+
+  # Makes a token and returns its secret. Only a digest is stored, so the
+  # secret is shown this once.
+  def self.issue(user, name:)
+    secret = SecureRandom.base58(32)
+    create!(user:, name:, token_digest: digest(secret))
+    secret
+  end
+
+  # The active token for an "Authorization: Bearer <secret>" header, or nil.
+  def self.find_by_bearer(header)
+    secret = header.to_s.delete_prefix("Bearer ")
+    active.find_by(token_digest: digest(secret)) if secret.present?
+  end
+
+  def self.digest(secret) = OpenSSL::Digest::SHA256.hexdigest(secret)
+
+  def revoke! = update!(revoked_at: Time.current)
+end
+```
+
+**6. Serve MCP.**
+
+```ruby
+# app/endpoints/mcp_endpoint.rb
+require "saltbox/actions/mcp"
+
+class McpEndpoint
+  def call(env)
+    token = AccessToken.find_by_bearer(env["HTTP_AUTHORIZATION"])
+    return [401, {"www-authenticate" => "Bearer"}, []] unless token
+
+    caller = ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: token.name)
+    Saltbox::Actions::MCP.call(env, caller:, name: "tasks", allowed_hosts: ["tasks.example.com"])
+  end
+end
+```
+
+```ruby
+# config/routes.rb
+mount McpEndpoint.new, at: "/mcp"
+```
+
+`allowed_hosts` lists the hosts the server answers on, besides `localhost`
+and `127.0.0.1`.
+
+**7. Make a token.** In `bin/rails console`:
+
+```ruby
+AccessToken.issue(User.find_by!(email: "ada@example.com"), name: "Claude Code")
+# => "QWwTY9LxEN7TaWokBE2WmpBiH4pbPKPR"
+```
+
+**8. Check it.** With `bin/rails server` running, list the person's tasks
+as an agent would:
+
+```sh
+curl http://localhost:3000/mcp \
+  -H "Authorization: Bearer QWwTY9LxEN7TaWokBE2WmpBiH4pbPKPR" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"run_read_action","arguments":{"name":"list_tasks"}}}'
+```
+
+The answer holds Ada's tasks and no one else's. A wrong token gets `401`.
+
+**9. Connect an agent.** For Claude Code, put this in `.mcp.json` at the
+root of a project, and keep that file out of Git, since it holds the token:
+
+```json
+{
+  "mcpServers": {
+    "tasks": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "headers": {"Authorization": "Bearer QWwTY9LxEN7TaWokBE2WmpBiH4pbPKPR"}
+    }
+  }
+}
+```
+
+Then ask it to "list my tasks, then mark Write the agenda as done".
+
+**10. Revoke it.** `AccessToken.find_by!(name: "Claude Code").revoke!`. The
+next request gets `401`.
+
+**11. Test it.** No factories are needed; plain records will do:
+
+```ruby
+# spec/rails_helper.rb, after require "rspec/rails"
+require "saltbox/actions/rspec"
+```
+
+```ruby
+# spec/actions/tasks/update_action_spec.rb
+require "rails_helper"
+
+RSpec.describe Tasks::UpdateAction do
+  let(:ada) { User.create!(email: "ada@example.com", password: "secret123") }
+  let(:bob) { User.create!(email: "bob@example.com", password: "secret123") }
+  let(:task) { ada.tasks.create!(title: "Write the agenda") }
+
+  it "renames the person's own task" do
+    result = run({id: task.id, title: "Send the agenda"}, as: as_mcp(ada))
+    expect(result.body["title"]).to eq("Send the agenda")
+  end
+
+  it "hides another person's task" do
+    expect { run({id: task.id, title: "Mine now"}, as: as_mcp(bob)) }.to be_not_found
+  end
+
+  it "refuses a read-only token" do
+    expect { run({id: task.id, done: true}, as: as_read_only(ada)) }.to be_refused.with(:insufficient_scope)
+  end
+
+  it "refuses a field the policy does not permit" do
+    expect { run({id: task.id, user_id: bob.id}, as: as_screen(ada)) }.to be_refused.with(:forbidden)
+  end
+end
+```
+
+The generated spec uses the gem's shared examples, which assume some
+people may not run the action at all. In an app where everyone may, and
+only ownership differs, replace them with examples like these. Do the same
+for the generated `list_action_spec.rb`, which starts with placeholders.
+
 ## Core concepts
 
 ### Actions
@@ -172,6 +404,14 @@ end
 `app/views/events/show.json.jbuilder`. Instance variables you set in
 `perform` reach the view, as they do from a controller. You can also send a
 body with no view: `render json: {count: 3}`.
+
+Views render outside any request, so a `*_url` helper (`event_url(event)`)
+needs the host from the routes, or it says `example.org`:
+
+```ruby
+# config/routes.rb
+default_url_options host: "events.example.com", protocol: "https"
+```
 
 `perform` must call `authorize` and `policy_scope`, or the action fails, as
 Pundit's `verify_authorized` would. A list action needs only `policy_scope`,
@@ -377,7 +617,8 @@ scopes. The surfaces are:
 - `webmcp`: a browser assistant on the person's page;
 - `api`: a script with a token;
 - `mcp`: an AI agent;
-- `assistant`: your app's own chat.
+- `assistant`: your app's own chat;
+- `system`: the app itself, in a job, a rake task or the console.
 
 Build a caller from a real credential, never from anything the client sends:
 
@@ -387,6 +628,109 @@ ApplicationAction::Caller.assistant(current_user)
 ApplicationAction::Caller.new(account: token.user, surface: "api", agent: "Billing script", scopes: token.scopes)
 ```
 
+### Jobs, rake tasks and the console
+
+Some work has no person behind it: a nightly job that closes old events, a
+rake task, a fix in the console. Run it as the app itself:
+
+```ruby
+Events::UpdateAction.perform_now(caller: ApplicationAction::Caller.system, id: 1, title: "AGM")
+ApplicationAction::Caller.system(agent: "Nightly cleanup")   # named in audit and change notes
+```
+
+The system caller is not an agent. An action's `connections` never bar it,
+even `:never`; it holds every scope, and it is never asked to confirm.
+
+It is not a way around authorization. Its account is
+`Saltbox::Actions::SystemAccount`, and your policy sees it like a person, so
+your policy decides what the app itself may do:
+
+```ruby
+# app/policies/event_policy.rb
+class EventPolicy < ApplicationPolicy
+  def update? = system? || user.manager?
+  def destroy? = !system? && user.manager?
+
+  class Scope < ApplicationPolicy::Scope
+    def resolve = user.is_a?(Saltbox::Actions::SystemAccount) ? scope.all : scope.where(team: user.team)
+  end
+
+  private
+
+  def system? = user.is_a?(Saltbox::Actions::SystemAccount)
+end
+```
+
+A policy written only for people does not let it through. In the
+walkthrough above, `TaskPolicy` lets it list tasks but finds none, and
+refuses it any one task as `not_found`. A rule that calls a person's
+method on it, such as `user.manager?`, raises `NoMethodError`. So does any
+hook of yours that reads `caller.account`, such as `permissions_held`:
+answer for `caller.system?` there. `SystemAccount#id` is `nil`, so an audit
+trail records no person.
+
+If your app has a user that stands for the app, pass it instead:
+`ApplicationAction::Caller.system(User.find_by!(email: "robot@example.com"))`.
+The policy then sees that user.
+
+The JSON API, MCP and the assistant never run a system caller. If
+`resolve_caller` or your MCP endpoint returns one, the request fails with an
+`ArgumentError` before any action runs. Build their callers from the
+request's credential.
+
+`perform_later` takes a system caller too; the job runs as the app.
+
+### The tenant
+
+In a multi-tenant app, each call runs inside one tenant. Set it, and your
+`Current` attributes, in `around_invocation`, from the caller. Every way in
+runs through it: screens, the API, MCP, jobs and the console.
+
+Here each token belongs to one organization, and the MCP endpoint and
+`resolve_caller` pass the token as the caller's `connection`. A screen's
+tenant is already set by the request, and a job's by acts_as_tenant, which
+keeps the tenant a job was enqueued in:
+
+```ruby
+# app/models/current.rb
+class Current < ActiveSupport::CurrentAttributes
+  attribute :user
+end
+
+# config/initializers/actions.rb
+Saltbox::Actions.configure do |config|
+  config.around_invocation do |caller, run|
+    organization = caller.connection&.organization || ActsAsTenant.current_tenant
+    ActsAsTenant.with_tenant(organization) do
+      Current.set(user: (caller.account unless caller.system?)) { run.call(caller) }
+    end
+  end
+end
+```
+
+```ruby
+# app/endpoints/mcp_endpoint.rb, in call
+caller = ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: token.name, connection: token)
+```
+
+A system caller has no token. Set the tenant around it:
+
+```ruby
+Organization.find_each do |organization|
+  ActsAsTenant.with_tenant(organization) do
+    Events::CloseAction.perform_now(caller: ApplicationAction::Caller.system, id: ...)
+  end
+end
+```
+
+Without acts_as_tenant, keep the tenant in `Current` the same way. Rails
+resets `Current` before a job runs, so take the tenant from what the caller
+carries, which travels with the job: its token (`caller.connection`), or
+the person (`caller.account`) when each person belongs to one organization.
+
+If your policy needs a tenant or a person to build an input schema, see
+`schema_principal` under Authorization.
+
 ### Connections
 
 An action's `connections` rule says whether anything other than the
@@ -395,7 +739,7 @@ person's own click may run it:
 - `:allowed`: agents, scripts and assistants may run it.
 - `:confirm`: agents are told to ask the person first. The chat assistant
   never runs it.
-- `:never`: only the person, on a screen.
+- `:never`: only the person, on a screen, or the app itself (`Caller.system`).
 
 The verb gives the rule: `:confirm` for a destructive action, `:allowed` for
 the rest, unless `define_verb` gave the verb its own. Declare it only where
@@ -561,6 +905,29 @@ connection and its `access` must be things Active Job can serialize, such
 as records. A `Data` object such as the `ConnectionAccess` below is not:
 run that caller's actions with `perform_now`, or keep its access in a
 record.
+
+### Calling from a screen
+
+An action returns a `Result`, not a model: its `status`, and its `body`,
+the JSON its view rendered, as a Hash. A JSON screen can send the body as
+it is. An HTML screen redirects on success, and on a refusal shows the form
+again with the action's errors by field:
+
+```ruby
+# app/controllers/tasks_controller.rb
+def update
+  Tasks::UpdateAction.perform_now(caller: ApplicationAction::Caller.screen(current_user), id: @task.id, **task_params)
+  redirect_to tasks_path, notice: "Task updated.", status: :see_other
+rescue Saltbox::Actions::Error::Invalid => error
+  @task.assign_attributes(task_params)
+  error.errors.each { |field, messages| messages.each { @task.errors.add(field, it) } }
+  render :edit, status: :unprocessable_content
+end
+```
+
+Form values work as they are (see Input). Other refusals, such as
+`not_found` or `forbidden`, are best answered once, with `rescue_from
+Saltbox::Actions::Error` in `ApplicationController`.
 
 A subclass of an action keeps its parent's `connections`, `policy_rule`,
 `permission`, `feature`, `featured`, `idempotent`, `attribute :id` and
@@ -1013,43 +1380,78 @@ require "saltbox/actions/rspec"
 Specs under `spec/actions/` get `type: :action`, and `described_class` is the
 action. `run(arguments, as: caller)` runs it the way every surface does.
 
+`run` returns the action's `Result`. Its `body` is what the view rendered.
+Its `as_json` is what the API and MCP send: the same body, unless you set
+`config.result_format = :envelope`, which wraps it with the action's meta:
+
+```ruby
+result = run({id: event.id}, as: as_mcp(manager))
+result.body     # => {"event" => {"id" => 7, "title" => "AGM"}}
+result.as_json  # => the same; with :envelope, {"data" => {"event" => {...}}, "meta" => {"page" => 2}}
+```
+
 **Callers:** `as_screen(user)`, `as_webmcp(user)`, `as_api(user, scopes:)`,
-`as_mcp(user, scopes:)`, `as_assistant(user)` and `as_read_only(user)`. By
-default each builds a plain caller. To build them from your own tokens, set
+`as_mcp(user, scopes:)`, `as_assistant(user)`, `as_read_only(user)` and
+`as_system` (or `as_system(user)`). By default each builds a plain caller. To build them from your own tokens, set
 a factory for each surface:
 
 ```ruby
 Saltbox::Actions::RSpec.configure do |config|
   config.caller_for(:mcp) do |user, scopes:|
-    token = create(:api_token, user:, scopes:)
+    token = ApiToken.create!(user:, scopes:)
     ApplicationAction::Caller.new(account: user, surface: "mcp", agent: "Test agent", scopes: token.scopes)
   end
 end
 ```
 
-**Matchers:**
+**Matchers** come in three sorts. Some run the action, so they take a
+block:
 
 - `be_refused.with(:forbidden)` and `be_not_found`;
 - `have_field_errors(:title)`;
-- `be_invalid_against_schema`, for input the schema refuses;
-- `match_output_schema`, against the schema from `returns`;
 - `announce_changes(event => :update)` (needs change tracking or PaperTrail);
-- `change_audit_trail.on(event).by(user).with(agent: "Test agent")` (needs PaperTrail);
-- `be_runnable_by(caller)` and `be_listed_for(caller)`.
+- `change_audit_trail.on(event).by(user).with(agent: "Test agent")` (needs PaperTrail).
 
-**Shared examples:** `unpermitted_account` is optional. Leave it out when
-everyone who can sign in may run the action.
+```ruby
+expect { run({id: event.id, capacity: "lots"}, as: as_screen(manager)) }.to have_field_errors(:capacity)
+```
+
+Some check a value and run nothing:
+
+- `be_invalid_against_schema` takes raw input and checks it against the
+  input schema, as a client would send it;
+- `match_output_schema` takes a result, or a body, and checks it against
+  the schema from `returns`.
+
+```ruby
+expect({id: event.id, capacity: "lots"}).to be_invalid_against_schema
+expect(run({id: event.id}, as: as_mcp(manager))).to match_output_schema
+```
+
+And two take the action and ask about a caller:
+
+```ruby
+expect(described_class).to be_runnable_by(as_mcp(manager))
+expect(described_class).not_to be_listed_for(as_read_only(manager))
+```
+
+**Shared examples** are optional. The generated spec uses them, and they
+suit an app where roles decide who may run an action. In an app where
+everyone may, and only ownership differs, write plain examples instead, as
+in the walkthrough's step 11. In the shared examples, `unpermitted_account`
+is optional too. Leave it out when everyone who can sign in may run the
+action.
 
 ```ruby
 RSpec.describe Events::UpdateAction do
-  let(:permitted_account) { create(:user, :manager) }
-  let(:unpermitted_account) { create(:user) }
-  let(:event) { create(:event) }
+  let(:permitted_account) { User.create!(email: "ann@example.com", role: "manager") }
+  let(:unpermitted_account) { User.create!(email: "bo@example.com", role: "member") }
+  let(:event) { Event.create!(title: "AGM", team: permitted_account.team) }
   let(:arguments) { {id: event.id, title: "AGM"} }
 
   it_behaves_like "refuses callers the action does not allow"
   it_behaves_like "hides records the caller cannot see" do
-    let(:hidden_arguments) { {id: create(:event, :other_team).id} }
+    let(:hidden_arguments) { {id: Event.create!(title: "Offsite", team: Team.create!).id} }
   end
 
   it "refuses a bad capacity" do
@@ -1086,7 +1488,7 @@ class Events::UpdateActionTest < ActiveSupport::TestCase
     event = events(:agm)
     result = run({id: event.id.to_s, title: "Annual meeting"},
       as: as_screen(users(:manager)))
-    assert_equal "Annual meeting", result.body.dig("data", "event", "title")
+    assert_equal "Annual meeting", result.body.dig("event", "title")
   end
 
   test "refuses a read-only token" do
@@ -1104,7 +1506,7 @@ class Events::UpdateActionTest < ActiveSupport::TestCase
 end
 ```
 
-All six caller helpers work as they do in RSpec. Set your own factories
+All seven caller helpers work as they do in RSpec. Set your own factories
 with `Saltbox::Actions::TestHelper.configure` and `config.caller_for`.
 Factories run in the test, so they can use fixtures and test helpers.
 Pass `action:` to `run` to call a different class or action name.
@@ -1186,7 +1588,7 @@ Saltbox::Actions.configure do |config|
   # Sent to MCP agents after the gem's sentence on record data.
   config.instructions = "Events keeps a team's events. Use find_action for anything not listed."
 
-  # Run each call inside your own context: tenant, time zone, a fresh user.
+  # Run each call inside your own context: tenant, time zone, a fresh user (see The tenant).
   config.around_invocation { |caller, run| Current.set(user: caller.account) { run.call(caller) } }
 
   # Hear about every changed record, inside the transaction (see Change tracking).
