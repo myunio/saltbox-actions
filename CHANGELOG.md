@@ -2,11 +2,28 @@
 
 ## 0.1.0 (unreleased)
 
-- Authorization is optional. With no adapter, every action is allowed and the boot check asks
-  for no policy. Adapters report their boot problems through `authorization_problems`; the
+- Booting never touches the database. With eager loading, the boot checks only what each action
+  declares (name, verb, kind, connections, unique names and CLI commands). `rails actions:check`
+  runs every other check (policy rules, fields, summaries, `check_action` and `check_registry`), as
+  do the registry shared example and `assert_valid_action_registry`. It and `actions:catalogue`
+  say they need the database when they cannot connect. An app that does not run
+  `rails actions:check` in CI (or the registry spec or test) now boots with a missing policy
+  rule, a policy field that is not a column or a bad summary, and finds out only at run time,
+  when a caller first hits that action.
+- A create or update's input schema is built with the real caller on first use, inside
+  `around_invocation`, and cached per list of permitted fields, so callers whose policy permits
+  different fields see different schemas. A model field the caller may not set is refused as
+  forbidden. `input_schema`, `writable_fields` and `definition` take an optional caller.
+- `schema_principal` is used only where there is no caller: the committed catalogue,
+  `actions:check` and the registry spec, the generator's field list, and the schema matchers
+  without `as:`. `be_invalid_against_schema` and `assert_invalid_against_schema` take `as:` a
+  caller. `input_types` and `Registry.runnable` are gone.
+
+- Authorization is optional. With no adapter, every action is allowed and `actions:check` asks
+  for no policy. Adapters report their problems through `authorization_problems`; the
   README documents the adapter contract with a plain-model example.
 - A list action needs only `policy_scope`, as Pundit's `verify_policy_scoped` on `index`.
-- `rails g action` checks the action against the boot check before writing any file, writes
+- `rails g action` checks the action as `actions:check` does before writing any file, writes
   nothing on a problem, and puts back every file it wrote when the catalogue step fails; either
   failure exits 1. A new change action declares
   `connections :confirm` (was `:allowed`) unless the app sets `default_connections`. The spec

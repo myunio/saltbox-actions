@@ -21,7 +21,7 @@ module Saltbox
       def permitted_attributes(record)
         raise ArgumentError, "#{self.class.name} takes no permitted fields: only create and update actions do" unless self.class.writes_fields?
         allowed = permitted_attribute_names(record)
-        sent = self.class.writable_fields.select { |name, _| params.key?(name) }
+        sent = self.class.writable_fields(actor).select { |name, _| params.key?(name) }
         forbidden = sent.reject { |_, field| allowed.include?(field.key) }.keys
         refuse_forbidden_fields!(forbidden) if forbidden.any?
         sent.to_h do |name, field|
@@ -51,7 +51,7 @@ module Saltbox
       # @param fields [Array<String>] the fields sent that the person may not change
       # @raise [Error::Forbidden]
       def refuse_forbidden_fields!(fields)
-        raise Error::Forbidden.new("You can't change #{fields.to_sentence}.", errors: fields.index_with { ["you can't change this"] })
+        raise Error::Forbidden.fields(fields)
       end
     end
   end

@@ -41,8 +41,10 @@ module Saltbox
         error
       end
 
-      def assert_invalid_against_schema(arguments, action: action_class)
-        assert_raises(Error::Invalid) { Arguments.for(action).validate!(arguments) }
+      # Without `as:` it checks the catalogue's schema, built for
+      # Configuration#schema_principal; pass a caller when the policy needs a person.
+      def assert_invalid_against_schema(arguments, action: action_class, as: nil)
+        assert_raises(Error::Invalid) { Arguments.check(action, arguments, as) }
       end
 
       def assert_matches_output_schema(result, schema: action_class.output_schema)
@@ -92,7 +94,7 @@ module Saltbox
       # engine's action test may live under test_root or in the engine's own
       # test/actions folder.
       def assert_valid_action_registry(test_root: Rails.root.join("test/actions"))
-        refute_empty Registry.actions
+        refute_empty Registry.check!
         paths = Actions.config.action_paths
         files = Actions.config.every_file_an_action ? Registry.action_files : Registry.actions.map { Registry.source(it) }
         missing = files.map { |file| [file, paths.relative(file).sub_ext("_test.rb")] }

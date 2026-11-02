@@ -18,17 +18,17 @@ module Saltbox
     # - scoped_records(model): the records the person may pick, for a reference;
     # and, on the class:
     # - permitted?(account): whether the person's role allows the action at all;
-    # - authorization_problems: what the boot check reports, such as a missing policy;
+    # - authorization_problems: what rails actions:check reports, such as a missing policy;
     # - permitted_attribute_names_for(principal, record), for the input schema;
     # - authorization_errors: the library's refusal, answered as forbidden.
     #
-    # Without an adapter, every action is allowed and the boot check asks
+    # Without an adapter, every action is allowed and rails actions:check asks
     # for no policy.
     module Authorization
       autoload :Pundit, "saltbox/actions/authorization/pundit"
       autoload :ActionPolicy, "saltbox/actions/authorization/action_policy"
 
-      # The boot check for an adapter whose rules live in policy classes,
+      # The rails actions:check check for an adapter whose rules live in policy classes,
       # one per model. The adapter defines policy_class, policy_rule?(rule)
       # and policy_label.
       module Policies

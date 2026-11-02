@@ -36,7 +36,7 @@ module Saltbox
         def self.exit_on_failure? = true
 
         # Checks the name, then the action the templates would write, as the
-        # boot check will: its model, its policy and rule when the base class
+        # rails actions:check will: its model, its policy and rule when the base class
         # has an authorization adapter, and its fields. Runs before any file
         # is written.
         #
@@ -49,7 +49,7 @@ module Saltbox
           raise Thor::Error, "#{verb} is not a verb in the table: pass --kind read, change or destructive" unless table_verb? || options[:kind]
           problems = Registry.problems(probe)
           return remember_files if problems.empty?
-          raise Thor::Error, "#{action_class_name} would not pass the boot check, so nothing was written:\n" \
+          raise Thor::Error, "#{action_class_name} would not pass rails actions:check, so nothing was written:\n" \
             "#{problems.map { "  - #{it}" }.join("\n")}"
         end
 

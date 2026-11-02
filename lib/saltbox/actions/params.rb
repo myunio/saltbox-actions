@@ -34,7 +34,7 @@ module Saltbox
 
       def declared!(key)
         return unless @action
-        return if @action.input_schema.fetch("properties").key?(key.to_s)
+        return if @action.declares_input?(key)
         hint = (key.to_s == "id") ? "argument :id" : "it"
         raise ArgumentError, "#{@action.action_name} reads params[:#{key}] but declares no #{(hint == "it") ? "input #{key}" : hint}"
       end
