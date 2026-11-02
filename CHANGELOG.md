@@ -8,7 +8,8 @@
   fields and the records a reference may pick. A missing namespaced policy fails closed
   (Pundit's `NotDefinedError`, ActionPolicy's `NotFound`) and `rails actions:check` names it,
   as it names a reference field whose namespaced scope is missing.
-  ActionPolicy lookups in a namespace no longer fall back to the model's own policy.
+  ActionPolicy lookups in a namespace no longer fall back to the model's own policy, and skip a
+  `policy_class` the model or record defines; Pundit's `policy` helper asks the namespace too.
   `policy_namespace :staff` declares another namespace, `policy_namespace false` the model's own
   policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method.
 - That module is part of the action's name: `Admin::Projects::ListAction` is `list_admin_projects`,

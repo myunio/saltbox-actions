@@ -82,12 +82,15 @@ module Saltbox
           super(policy_class ? record : self.class.policy_target(record), query || self.class.policy_query!, policy_class:)
         end
 
+        # Pundit's policy, in the action's policy namespace.
+        def policy(record) = super(self.class.policy_target(record))
+
         # Pundit's policy_scope, in the action's policy namespace.
         def policy_scope(scope, policy_scope_class: nil)
           super(policy_scope_class ? scope : self.class.policy_target(scope), policy_scope_class:)
         end
 
-        def permitted_attribute_names(record) = policy(self.class.policy_target(record)).permitted_attributes.map(&:to_s)
+        def permitted_attribute_names(record) = policy(record).permitted_attributes.map(&:to_s)
 
         def scoped_records(model) = ::Pundit.policy_scope!(account, self.class.policy_target(model))
       end

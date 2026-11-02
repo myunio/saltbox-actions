@@ -1291,13 +1291,20 @@ the model's fields.
 An action in a module its model is not in asks that module's policy, as
 Pundit's `authorize [:admin, event]` does. `Admin::Events::UpdateAction`
 asks `Admin::EventPolicy#update?`: before any record loads, when it loads
-and authorizes the record, in `policy_scope`, for its fields, and for the
-records a `belongs_to` field may pick. If `Admin::EventPolicy` does not
-exist, the action fails instead of asking `EventPolicy`, and
+and authorizes the record, in `policy_scope` and `policy`, for its fields,
+and for the records a `belongs_to` field may pick. If `Admin::EventPolicy`
+does not exist, the action fails instead of asking `EventPolicy`, and
 `rails actions:check` names the policy to add. ActionPolicy looks it up the
 same way and never falls back to `EventPolicy`. To use another namespace,
 declare it: `policy_namespace :staff`, or `policy_namespace false` for the
 model's own policy.
+
+A model that names its policy with `policy_class` stays inside the
+namespace too. With Pundit the name is looked up there, as
+`authorize [:admin, event]` does. ActionPolicy skips `policy_class` in a
+namespace, since it would name a policy outside it, and still looks up a
+`policy_name` inside it. A policy the action's own code passes, Pundit's
+`policy_class:` or ActionPolicy's `with:`, is used as given.
 
 The policy is the one list of the fields a person may set. A create or
 update takes the model's columns that it permits, and an action whose

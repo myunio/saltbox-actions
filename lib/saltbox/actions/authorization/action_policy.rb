@@ -23,14 +23,24 @@ module Saltbox
         module Namespace
           private
 
-          # @raise [ActionPolicy::NotFound] for a namespace no module has, so no policy can be in it
-          def authorization_namespace
-            return if self.class.policy_namespace.empty?
-            self.class.policy_namespace_module ||
-              raise(::ActionPolicy::NotFound.new(self.class.model, "No module #{self.class.policy_namespace.join("/").camelize} holds policies"))
+          # In a policy namespace the policy is found there by name only
+          # (namespaced_policy), for authorize!, allowed_to?, authorized_scope
+          # and fields alike. A policy the action's own code passes as with:
+          # is used as given.
+          #
+          # @raise [ActionPolicy::NotFound] when the namespace has no policy for the record
+          def policy_for(record:, with: nil, allow_nil: false, **)
+            return super if with || self.class.policy_namespace.empty?
+            with = self.class.namespaced_policy(record)
+            return if with.nil? && allow_nil
+            with || raise(::ActionPolicy::NotFound.new(record, "Couldn't find a policy for #{record.inspect} in #{self.class.policy_namespace.join("/").camelize}"))
+            super
           end
 
-          def authorization_strict_namespace = true
+          # A cached policy (ActionPolicy's Memoized and ThreadMemoized) is
+          # kept per namespace, so Events::ShowAction's never answers
+          # Admin::Events::ShowAction.
+          def policy_for_cache_key(namespace: self.class.policy_namespace.join("/"), **) = super
         end
 
         included do
@@ -99,13 +109,24 @@ module Saltbox
           # @return [Array<Class<Exception>>]
           def authorization_errors = [::ActionPolicy::Unauthorized]
 
-          private
-
-          # A model's policy in the action's policy namespace, strictly, or nil.
-          def namespaced_policy(model)
-            namespace = policy_namespace_module
-            return if namespace.nil? && policy_namespace.any?
-            ::ActionPolicy.lookup(model, namespace:, strict_namespace: true, allow_nil: true)
+          # @api private
+          # A record's, a model's or a relation's policy, or nil. In a policy
+          # namespace it is found there by name, strictly: ActionPolicy's
+          # lookup chain without the policy_class a model or record may
+          # define, which would name a policy outside it. policy_name is
+          # still looked up inside the namespace.
+          #
+          # @param record [Object]
+          # @return [Class, nil]
+          def namespaced_policy(record)
+            return ::ActionPolicy.lookup(record, strict_namespace: true, allow_nil: true) if policy_namespace.empty?
+            namespace = policy_namespace_module or return
+            chain = ::ActionPolicy::LookupChain
+            (chain.chain - [chain::INSTANCE_POLICY_CLASS, chain::CLASS_POLICY_CLASS]).each do |probe|
+              policy = probe.call(record, namespace:, strict_namespace: true)
+              return policy if policy&.name&.start_with?("#{namespace.name}::")
+            end
+            nil
           end
         end
 
