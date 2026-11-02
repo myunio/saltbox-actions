@@ -16,7 +16,7 @@ class EventPolicy
   def view_notes? = user.can?("events.notes")
 
   def permitted_attributes
-    fields = %i[title starts_on capacity status parent_id]
+    fields = %i[title starts_on capacity price featured doors_open_at status parent_id]
     fields << :notes if view_notes?
     fields
   end

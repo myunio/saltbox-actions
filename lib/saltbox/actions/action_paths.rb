@@ -69,6 +69,10 @@ module Saltbox
       # @return [Path, nil] the folder holding the file, the deepest when folders nest
       def for(file) = select { it.covers?(file) }.max_by { it.root.to_s.length }
 
+      # @param file [String] a file inside one of the folders
+      # @return [Pathname] its path inside its folder: event/update_action.rb
+      def relative(file) = Pathname(file).relative_path_from(self.for(file).root)
+
       # @param action [Class]
       # @return [String, nil] the namespace of the folder its file is in
       def namespace_for(action)

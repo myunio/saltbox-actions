@@ -28,7 +28,10 @@
       "type": "object",
       "properties": {
         "id": {
-          "type": "string",
+          "type": [
+            "string",
+            "integer"
+          ],
           "description": "The record's id."
         },
         "reason": {
@@ -153,6 +156,24 @@
             "null"
           ]
         },
+        "price": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ],
+          "pattern": "^[+-]?(\\d+\\.?\\d*|\\.\\d+)$"
+        },
+        "featured": {
+          "type": "boolean"
+        },
+        "doors_open_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
         "status": {
           "type": "string",
           "enum": [
@@ -164,6 +185,7 @@
         "parent": {
           "type": [
             "string",
+            "integer",
             "null"
           ]
         },
@@ -209,7 +231,10 @@
       "type": "object",
       "properties": {
         "id": {
-          "type": "string",
+          "type": [
+            "string",
+            "integer"
+          ],
           "description": "The record's id."
         }
       },
@@ -371,7 +396,10 @@
       "type": "object",
       "properties": {
         "id": {
-          "type": "string",
+          "type": [
+            "string",
+            "integer"
+          ],
           "description": "The record's id."
         }
       },
@@ -410,7 +438,10 @@
       "type": "object",
       "properties": {
         "id": {
-          "type": "string",
+          "type": [
+            "string",
+            "integer"
+          ],
           "description": "The record's id."
         }
       },
@@ -449,7 +480,10 @@
       "type": "object",
       "properties": {
         "id": {
-          "type": "string",
+          "type": [
+            "string",
+            "integer"
+          ],
           "description": "The record's id."
         },
         "title": {
@@ -469,6 +503,24 @@
             "null"
           ]
         },
+        "price": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ],
+          "pattern": "^[+-]?(\\d+\\.?\\d*|\\.\\d+)$"
+        },
+        "featured": {
+          "type": "boolean"
+        },
+        "doors_open_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
         "status": {
           "type": "string",
           "enum": [
@@ -480,6 +532,7 @@
         "parent": {
           "type": [
             "string",
+            "integer",
             "null"
           ]
         },
