@@ -61,6 +61,9 @@ module Saltbox
         def say_next
           say "Write the action's description and its fields' words in config/locales/actions.en.yml, " \
             "then rerun bin/rails actions:catalogue.", :green
+          return unless verb == "list" && probe.summary.nil?
+          say "Agents get each #{model.model_name.human.downcase}'s full view. To send them a short one, declare " \
+            "`summary #{model_name}, :id, ...` in #{base_class}.", :yellow
         end
 
         private
