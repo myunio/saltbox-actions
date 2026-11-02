@@ -1334,9 +1334,13 @@ the declaring class's, after it. So it never inherits a way out of them:
 - with `policy_namespace :staff` in `ApplicationAction`,
   `Events::ListAction` asks `Staff::EventPolicy` and
   `Admin::Events::ListAction` asks `Staff::Admin::EventPolicy`;
-- with `policy_namespace :staff` in a base class `Admin::BaseAction`,
+- with `policy_namespace :staff` in a base class `Admin::ApplicationAction`,
   `Admin::Events::ListAction` asks `Staff::EventPolicy`, and
   `Admin::Reports::ExportAction` on `Event` asks `Staff::Reports::EventPolicy`.
+
+A back office's base class goes in `app/actions/admin/application_action.rb`,
+as `Admin::ApplicationController` goes beside its controllers. A file named
+`application_action.rb` holds shared code, not an action, in any folder.
 
 A model that names its policy with `policy_class` stays inside the
 namespace too. With Pundit the name is looked up there, as

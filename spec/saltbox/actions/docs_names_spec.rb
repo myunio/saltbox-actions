@@ -47,16 +47,16 @@ RSpec.describe "Names in the README and CHANGELOG" do
      action: "Events::ListAction", model: "Event", parent: ["ApplicationAction", :staff], gives: {expected_policy_name: "Staff::EventPolicy"}},
     {doc: "README.md", says: "`Admin::Events::ListAction` asks `Staff::Admin::EventPolicy`",
      action: "Admin::Events::ListAction", model: "Event", parent: ["ApplicationAction", :staff], gives: {expected_policy_name: "Staff::Admin::EventPolicy"}},
-    {doc: "README.md", says: "with `policy_namespace :staff` in a base class `Admin::BaseAction`, `Admin::Events::ListAction` asks `Staff::EventPolicy`",
-     action: "Admin::Events::ListAction", model: "Event", parent: ["Admin::BaseAction", :staff], gives: {expected_policy_name: "Staff::EventPolicy"}},
+    {doc: "README.md", says: "with `policy_namespace :staff` in a base class `Admin::ApplicationAction`, `Admin::Events::ListAction` asks `Staff::EventPolicy`",
+     action: "Admin::Events::ListAction", model: "Event", parent: ["Admin::ApplicationAction", :staff], gives: {expected_policy_name: "Staff::EventPolicy"}},
     {doc: "README.md", says: "and `Admin::Reports::ExportAction` on `Event` asks `Staff::Reports::EventPolicy`",
-     action: "Admin::Reports::ExportAction", model: "Event", declared: true, parent: ["Admin::BaseAction", :staff], gives: {expected_policy_name: "Staff::Reports::EventPolicy"}},
+     action: "Admin::Reports::ExportAction", model: "Event", declared: true, parent: ["Admin::ApplicationAction", :staff], gives: {expected_policy_name: "Staff::Reports::EventPolicy"}},
     {doc: "CHANGELOG.md", says: "`Admin::Projects::ListAction` asks `Admin::ProjectPolicy`",
      action: "Admin::Projects::ListAction", model: "Project", gives: {expected_policy_name: "Admin::ProjectPolicy"}},
     {doc: "CHANGELOG.md", says: "`policy_namespace :staff` in a base class makes `Admin::Projects::ListAction` ask `Staff::Admin::ProjectPolicy`",
      action: "Admin::Projects::ListAction", model: "Project", parent: ["ApplicationAction", :staff], gives: {expected_policy_name: "Staff::Admin::ProjectPolicy"}},
-    {doc: "CHANGELOG.md", says: "the same in `Admin::BaseAction` makes it ask `Staff::ProjectPolicy`",
-     action: "Admin::Projects::ListAction", model: "Project", parent: ["Admin::BaseAction", :staff], gives: {expected_policy_name: "Staff::ProjectPolicy"}},
+    {doc: "CHANGELOG.md", says: "the same in `Admin::ApplicationAction` makes it ask `Staff::ProjectPolicy`",
+     action: "Admin::Projects::ListAction", model: "Project", parent: ["Admin::ApplicationAction", :staff], gives: {expected_policy_name: "Staff::ProjectPolicy"}},
     {doc: "CHANGELOG.md", says: "`Admin::ExportAction` on `Project` is `export_admin_projects` and asks `Admin::ProjectPolicy`",
      action: "Admin::ExportAction", model: "Project", declared: true, gives: {action_name: "export_admin_projects", expected_policy_name: "Admin::ProjectPolicy"}},
     {doc: "CHANGELOG.md", says: "`Reports::ExportAction` on `Customer` is `export_reports_customers` and asks `Reports::CustomerPolicy`",
@@ -72,6 +72,7 @@ RSpec.describe "Names in the README and CHANGELOG" do
     {doc: "CHANGELOG.md", says: "`Admin::Projects::ListAction` is `list_admin_projects`, with the CLI command `admin-projects list` and the title \"List admin projects\"",
      action: "Admin::Projects::ListAction", model: "Project", gives: {action_name: "list_admin_projects", cli_command: %w[admin-projects list], title: "List admin projects"}},
     {doc: "CHANGELOG.md", says: "`show_admin_project`", action: "Admin::Projects::ShowAction", model: "Project", gives: {action_name: "show_admin_project"}},
+    {doc: "CHANGELOG.md", says: "is refused as \"update_note does not take user_id.", action: "Notes::UpdateAction", model: "Note", gives: {action_name: "update_note"}},
     {doc: "CHANGELOG.md", says: "it is still `update_event`", action: "Events::UpdateAction", model: "Event", gives: {action_name: "update_event"}}
   ]
 
@@ -95,8 +96,11 @@ RSpec.describe "Names in the README and CHANGELOG" do
     end
   end
 
+  # A name in backticks, quotes or a path; file names (update_action.rb) and
+  # Active Record methods (update_all) are not action names.
   it "has an example here for each action name the README and CHANGELOG give" do
-    named = docs.values.join.scan(/`((?:#{Saltbox::Actions::Naming::VERBS.keys.join("|")})_[a-z_]+)`/).flatten.uniq
-    expect(named - %w[update_all delete_all insert_all] - examples.filter_map { it.dig(:gives, :action_name) }).to eq([])
+    named = docs.values.join.scan(/[`"\/]((?:#{Saltbox::Actions::Naming::VERBS.keys.join("|")})_[a-z_]+)\b/).flatten.uniq
+    named = named.grep_v(/_action(_spec|_test)?\z/) - %w[update_all delete_all insert_all update_column]
+    expect(named - examples.filter_map { it.dig(:gives, :action_name) }).to eq([])
   end
 end

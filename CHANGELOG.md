@@ -21,8 +21,8 @@
   subclasses in its modules and below them; a subclass adds the modules its name has beyond the
   declaring class's, so `policy_namespace :staff` in a base class makes
   `Admin::Projects::ListAction` ask `Staff::Admin::ProjectPolicy`, the same in
-  `Admin::BaseAction` makes it ask `Staff::ProjectPolicy`, and an `Admin::` subclass of an action
-  that declares `false` still asks `Admin::ProjectPolicy`.
+  `Admin::ApplicationAction` makes it ask `Staff::ProjectPolicy`, and an `Admin::` subclass of an
+  action that declares `false` still asks `Admin::ProjectPolicy`.
 - Every module around the action counts, except the one that names its model and the model's own
   modules. So these are renamed and ask a namespaced policy, failing closed until it exists or
   the action declares `policy_namespace false`:

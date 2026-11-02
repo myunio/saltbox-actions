@@ -139,7 +139,7 @@ RSpec.describe "Namespaced policies" do
 
     it "gives a model-less base class's namespace to its subclasses below it, adding only the modules beyond its own" do
       stub_const("Admin::EventPolicy", admin_policy)
-      admin_base = define("Admin::BaseAction") { policy_namespace :admin }
+      admin_base = define("Admin::ApplicationAction") { policy_namespace :admin }
       child = define("Admin::Events::ExportAllAction", admin_base).tap { it.class_eval(&counting) }
       expect(child).to have_attributes(policy_namespace: [:admin], policy_class: Admin::EventPolicy)
       expect { invoke.call(child, {}, as_api(manager)) }.to be_refused.with(:forbidden)
@@ -150,7 +150,7 @@ RSpec.describe "Namespaced policies" do
     end
 
     it "holds a base class's policy_namespace false below it, and never beside it" do
-      admin_base = define("Admin::BaseAction") { policy_namespace false }
+      admin_base = define("Admin::ApplicationAction") { policy_namespace false }
       expect(define("Admin::Events::ExportAllAction", admin_base).tap { it.class_eval(&counting) }.policy_class).to eq(public_policy)
       events_base = define("Admin::Events::BaseAction") { policy_namespace false }
       beside = define("Admin::Billing::Invoices::ListAction", events_base)

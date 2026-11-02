@@ -59,7 +59,7 @@ module Saltbox
           # never inherits a way out of them:
           # - ApplicationAction's `policy_namespace :staff` makes
           #   Admin::Projects::ListAction ask Staff::Admin::ProjectPolicy;
-          # - Admin::BaseAction's `policy_namespace :staff` makes
+          # - Admin::ApplicationAction's `policy_namespace :staff` makes
           #   Admin::Projects::ListAction ask Staff::ProjectPolicy, and
           #   Admin::Reports::ExportAction on Project ask Staff::Reports::ProjectPolicy;
           # - an Admin:: subclass of Projects::ExportAction, which declares

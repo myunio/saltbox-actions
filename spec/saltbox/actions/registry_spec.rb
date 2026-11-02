@@ -13,6 +13,18 @@ RSpec.describe Saltbox::Actions::Registry do
       postpone_event show_event show_event_notes update_event whoami])
   end
 
+  it "takes an application_action.rb in any folder, such as a back office's base class, as shared code" do
+    Dir.mktmpdir do |root|
+      %w[admin/application_action.rb admin/application_action/scoping.rb admin/events/list_action.rb].each do |file|
+        FileUtils.mkdir_p(File.dirname(File.join(root, file)))
+        FileUtils.touch(File.join(root, file))
+      end
+      with_settings(action_paths: [root]) do
+        expect(described_class.action_files).to eq([File.join(root, "admin/events/list_action.rb")])
+      end
+    end
+  end
+
   it "finds the actions as the base class's subclasses when the folder holds other files too" do
     with_settings(every_file_an_action: false) do
       described_class.reset!
