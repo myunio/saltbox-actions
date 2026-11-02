@@ -12,7 +12,7 @@ RSpec.describe "Booting without a database" do
   it "boots with eager loading on, running the boot checks without touching the database" do
     output, status = boot
     expect(status).to be_success, output
-    expect(output).to include("Booted with 11 actions")
+    expect(output).to include("Booted with 12 actions")
   end
 
   it "says rails actions:check needs the database when it cannot connect" do

@@ -12,6 +12,7 @@ RSpec.describe "Namespaced policies" do
       def index? = user.can?("events.admin")
       def show? = index?
       def update? = index?
+      def export? = index?
       def permitted_attributes = %i[title notes parent_id]
     end.tap { it.const_set(:Scope, Class.new(EventPolicy::Scope) { def resolve = @scope.all }) }
   end
@@ -56,6 +57,69 @@ RSpec.describe "Namespaced policies" do
       expect(list.policy_class).to be_nil
       expect { invoke.call(list, {}, as_api(manager)) }.to raise_error(missing_policy)
       expect(Saltbox::Actions::Registry.problems(list).join).to include("add Admin::EventPolicy")
+    end
+  end
+
+  # Every module an action is in that its model is not in is part of its
+  # policy namespace, a single module too. A declared namespace holds for
+  # the class that declared it and its subclasses in the same modules; a
+  # subclass in other modules adds its own after it.
+  shared_examples "the modules around an action" do
+    def define(name, parent = base, &body) = stub_const(name, Class.new(parent, &body || proc {}))
+    def count(klass, caller) = invoke.call(klass, {}, as_api(caller)).body["count"]
+
+    let(:counting) do
+      proc do
+        def perform
+          skip_authorization
+          render json: {count: policy_scope(Event).count}
+        end
+      end
+    end
+
+    it "asks a single module's policy when the model is not in it" do
+      stub_const("Admin::EventPolicy", admin_policy)
+      export = define("Admin::ExportAction") { model Event }.tap { it.class_eval(&counting) }
+      expect(export).to have_attributes(action_name: "export_admin_events", policy_namespace: [:admin], policy_class: Admin::EventPolicy)
+      expect { invoke.call(export, {}, as_api(manager)) }.to be_refused.with(:forbidden)
+      expect(count(export, admin)).to eq(2)
+    end
+
+    it "fails closed for a single module without its policy, until the action declares policy_namespace false" do
+      report = define("Reports::ExportAction") { model Event }.tap { it.class_eval(&counting) }
+      expect(report).to have_attributes(action_name: "export_reports_events", policy_namespace: [:reports], policy_class: nil)
+      expect { invoke.call(report, {}, as_api(manager)) }.to raise_error(missing_policy)
+      expect(Saltbox::Actions::Registry.problems(report).join).to include("add Reports::EventPolicy")
+      report.policy_namespace false
+      expect(report.policy_class).to eq(public_policy)
+    end
+
+    it "says an action looks nested when its outer module names a model, and still fails closed" do
+      nested = define("Events::Invoices::ListAction") { model Billing::Invoice }
+      expect(nested.policy_class).to be_nil
+      expect(Saltbox::Actions::Registry.problems(nested).join).to include("add Events::Billing::InvoicePolicy")
+        .and include("If Events groups actions under the Event model, declare policy_namespace false to ask Billing::InvoicePolicy")
+    end
+
+    it "re-derives an inherited policy_namespace false in a subclass in other modules" do
+      stub_const("Admin::EventPolicy", admin_policy)
+      parent = define("Events::ExportAllAction") { policy_namespace false }.tap { it.class_eval(&counting) }
+      child = define("Admin::Events::ExportAllAction", parent)
+      expect(parent.policy_class).to eq(public_policy)
+      expect(child).to have_attributes(policy_namespace: [:admin], policy_class: Admin::EventPolicy)
+      expect { invoke.call(child, {}, as_api(manager)) }.to be_refused.with(:forbidden)
+      expect(count(child, admin)).to eq(2)
+      expect(define("Events::ExportOtherAction", parent).policy_namespace).to eq([])
+    end
+
+    it "puts a base class's declared namespace before the action's own modules" do
+      stub_const("Staff::Admin::EventPolicy", admin_policy)
+      staff = define("StaffAction") { policy_namespace :staff }
+      child = define("Admin::Events::ExportAllAction", staff).tap { it.class_eval(&counting) }
+      expect(child).to have_attributes(policy_namespace: %i[staff admin], policy_class: Staff::Admin::EventPolicy)
+      expect { invoke.call(child, {}, as_api(manager)) }.to be_refused.with(:forbidden)
+      expect(count(child, admin)).to eq(2)
+      expect(define("Events::ExportAllAction", staff).policy_namespace).to eq([:staff])
     end
   end
 
@@ -158,6 +222,15 @@ RSpec.describe "Namespaced policies" do
       expect(list.policy_class).to eq(EventPolicy)
     end
 
+    context "with the modules around an action" do
+      let(:base) { ApplicationAction }
+      let(:admin_policy) { admin_event_policy }
+      let(:public_policy) { EventPolicy }
+      let(:missing_policy) { Pundit::NotDefinedError }
+
+      it_behaves_like "the modules around an action"
+    end
+
     it "keeps the model's own policy for an action in its model's namespace" do
       expect(Events::ListAction.policy_class).to eq(EventPolicy)
       expect(Billing::Invoices::ListAction.policy_class).to eq(Billing::InvoicePolicy)
@@ -187,6 +260,7 @@ RSpec.describe "Namespaced policies" do
         def index? = user.can?("events.admin")
         def show? = index?
         def update? = index?
+        def export? = index?
         def permitted_attributes = %i[title notes parent_id]
         relation_scope { |relation| relation }
       }
@@ -259,6 +333,14 @@ RSpec.describe "Namespaced policies" do
         end
       }
       expect { invoke.call(chosen, {id: ours.id}, as_api(admin)) }.to be_refused.with(:forbidden)
+    end
+
+    context "with the modules around an action" do
+      let(:base) { PolicyAction }
+      let(:public_policy) { EventPolicy }
+      let(:missing_policy) { ActionPolicy::NotFound }
+
+      it_behaves_like "the modules around an action"
     end
 
     it "keeps its own policy when an app caches policies per thread" do

@@ -9,7 +9,7 @@ RSpec.describe Saltbox::Actions::Registry do
   def problems(klass) = described_class.problems(klass)
 
   it "loads every action under app/actions, sorted, with unique names" do
-    expect(described_class.actions.map(&:action_name)).to eq(%w[cancel_event count_events create_event delete_event list_billing_invoices list_events
+    expect(described_class.actions.map(&:action_name)).to eq(%w[cancel_event count_events create_event delete_event list_billing_events list_billing_invoices list_events
       postpone_event show_event show_event_notes update_event whoami])
   end
 

@@ -38,10 +38,6 @@ module Saltbox
       module Policies
         extend ActiveSupport::Concern
 
-        included do
-          class_attribute :_policy_namespace, instance_accessor: false, instance_predicate: false
-        end
-
         class_methods do
           # The namespace the action's policy is looked up in, as Pundit's
           # authorize [:admin, project] names one. It is the action's outer
@@ -53,15 +49,26 @@ module Saltbox
           # rails actions:check names the policy to add.
           #
           # Declare another when the class's modules are not the right one:
-          # a symbol or a module, or false for the model's own policy.
-          # Inherited, as policy_rule is.
+          # a symbol or a module, or false for the model's own policy. The
+          # declaration holds for the class that declares it and its
+          # subclasses in the same modules. A subclass in other modules adds
+          # its own after it, so it never inherits a way out of them:
+          # ApplicationAction's `policy_namespace :staff` makes
+          # Admin::Projects::ListAction ask Staff::Admin::ProjectPolicy, and
+          # an Admin:: subclass of an action that declares false asks
+          # Admin::ProjectPolicy.
           #
           # @param value [Symbol, String, Module, false, nil] declares it: :admin, Admin, or false
           # @return [Array<Symbol>] such as [:admin]; [] for the model's own policy
           def policy_namespace(value = nil)
-            return _policy_namespace || outer_namespace.map(&:to_sym) if value.nil?
-            words = value.is_a?(Module) ? value.name.underscore.split("/") : value.to_s.split("/")
-            self._policy_namespace = (value == false) ? [] : words.map(&:to_sym)
+            unless value.nil?
+              words = value.is_a?(Module) ? value.name.underscore.split("/") : value.to_s.split("/")
+              return @declared_policy_namespace = (value == false) ? [] : words.map(&:to_sym)
+            end
+            own = outer_namespace.map(&:to_sym)
+            declarer = ancestors.find { it.instance_variable_defined?(:@declared_policy_namespace) } or return own
+            declared = declarer.instance_variable_get(:@declared_policy_namespace)
+            (declarer == self || declarer.outer_namespace == outer_namespace) ? declared : [*declared, *own]
           end
 
           # @api private
@@ -102,7 +109,7 @@ module Saltbox
             end
             if policy_class.nil? && policy_namespace.any?
               problems << "#{model.name} has no #{policy_label} policy in #{policy_namespace.join("/")}: " \
-                "add #{expected_policy_name}, or declare policy_namespace (see the README)"
+                "add #{expected_policy_name}, or declare policy_namespace (see the README)#{nested_hint}"
             elsif policy_class.nil?
               problems << "#{model.name} has no #{policy_label} policy: add #{expected_policy_name}, or include another authorization adapter (see the README)"
             elsif !policy_rule?(policy_query)
@@ -117,6 +124,16 @@ module Saltbox
           private
 
           def missing_rule = "#{model.name} is its model: name the policy rule, policy_rule :show? or another"
+
+          # Events::Attendees::ListAction on Attendee may be nested under
+          # Event, or Events may be an area like Admin: the class name cannot
+          # tell, so the action fails closed and the check says both.
+          def nested_hint
+            outer = outer_namespace.map(&:camelize).join("::")
+            parent = Naming.model_for(outer) if outer.present? && policy_namespace == outer_namespace.map(&:to_sym)
+            return "" unless parent && parent != model
+            ". If #{outer} groups actions under the #{parent.name} model, declare policy_namespace false to ask #{model.name}Policy"
+          end
         end
       end
 

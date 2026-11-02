@@ -113,7 +113,7 @@ RSpec.describe Saltbox::Actions::Summary do
   end
 
   it "summarizes a renamed list action's records handed over with collection:" do
-    upcoming = list(name: "Reports::ListUpcomingAction", perform: proc do
+    upcoming = list(name: "Events::ListUpcomingAction", perform: proc do
       authorize Event
       render :index, collection: policy_scope(Event).where(status: "published")
     end) do

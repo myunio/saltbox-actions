@@ -34,14 +34,14 @@ RSpec.describe "Declared names" do
   end
 
   it "names the missing policy rule when a named action with a model runs, as rails actions:check does" do
-    unruled = named("Reports::PeekAction") do
+    unruled = named("Events::PeekAction") do
       action_name "peek_events"
       kind :read
       model Event
       def perform = render(json: {})
     end
     expect { Saltbox::Actions::Invocation.call(name: unruled, caller: as_screen(manager), arguments: {}) }
-      .to raise_error(ArgumentError, "Reports::PeekAction: Event is its model: name the policy rule, policy_rule :show? or another")
+      .to raise_error(ArgumentError, "Events::PeekAction: Event is its model: name the policy rule, policy_rule :show? or another")
   end
 
   it "holds a named action to its own boot checks: a declared kind, and its model's policy if it names one" do
@@ -56,7 +56,7 @@ RSpec.describe "Declared names" do
     expect(problems.call(read)).to be_empty
     expect(read.connections).to eq(:allowed)
 
-    tally = named("Reports::TallyAction") do
+    tally = named("Events::TallyAction") do
       action_name "tally"
       kind :read
       connections :allowed

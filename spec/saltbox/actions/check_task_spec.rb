@@ -14,7 +14,7 @@ RSpec.describe "rails actions:check" do
   end
 
   it "passes every action of the dummy app" do
-    expect { check }.to output("All 11 actions pass.\n").to_stdout
+    expect { check }.to output("All 12 actions pass.\n").to_stdout
   end
 
   it "fails naming the action and the fix for a policy without the action's rule" do

@@ -47,6 +47,15 @@ RSpec.describe "Actions from an engine" do
     end
   end
 
+  it "names an engine's action on a host model with the folder's namespace once, and asks the engine's policy" do
+    expect(Billing::Events::ListAction).to have_attributes(action_name: "list_billing_events",
+      cli_command: %w[billing-events list], title: "List billing events", policy_class: Billing::EventPolicy)
+    expect(registry.catalogue(as_api(billing_clerk)).pluck("name")).to include("list_billing_events")
+    with_paths(["app/actions", Saltbox::Actions::ActionPaths::Path.new(path: engine_folder, namespace: "pay")]) do
+      expect(Billing::Events::ListAction).to have_attributes(action_name: "list_pay_events", cli_command: %w[pay-events list])
+    end
+  end
+
   it "names them from the class, as any namespaced model, when the folder has no namespace" do
     with_paths(["app/actions", engine_folder]) do
       expect(Billing::Invoices::ListAction).to have_attributes(action_name: "list_billing_invoices", cli_command: %w[invoices list])
@@ -81,8 +90,9 @@ RSpec.describe "Actions from an engine" do
   end
 
   it "warns about an action outside every folder, such as an engine's before it adds its folder" do
+    [Billing::Events::ListAction, Billing::Invoices::ListAction].each(&:name)
     with_paths(["app/actions"]) do
-      expect { registry.actions }.to output(/Billing::Invoices::ListAction inherits from ApplicationAction but is outside the action folders \(app\/actions\)/).to_stderr
+      expect { registry.actions }.to output(/Billing::Events::ListAction, Billing::Invoices::ListAction inherit from ApplicationAction but are outside the action folders \(app\/actions\)/).to_stderr
       expect(registry.actions).not_to include(Billing::Invoices::ListAction)
     end
   end
