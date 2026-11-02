@@ -19,8 +19,6 @@ module Saltbox
     # and, on the class:
     # - permitted?(account): whether the person's role allows the action at all;
     # - authorization_problems: what rails actions:check reports, such as a missing policy;
-    # - policy_missing?: whether the action's policy does not exist, which
-    #   leaves it out of every actions list;
     # - supplies_fields?: whether the model's policy says which fields a person
     #   may set; when it does, it is the one list of a create's or update's
     #   fields, and an action may not also name them with `accepts`;
@@ -40,6 +38,9 @@ module Saltbox
       module Policies
         extend ActiveSupport::Concern
 
+        # Guards each action's one warning that its policy is missing.
+        WARNING = Mutex.new
+
         class_methods do
           # The namespace the action's policy is looked up in, as Pundit's
           # authorize [:admin, project] names one. It is the action's outer
@@ -53,24 +54,25 @@ module Saltbox
           # Declare another when the class's modules are not the right one:
           # a symbol or a module, or false for the model's own policy. The
           # declaration holds for the class that declares it and its
-          # subclasses in the same modules. A subclass in other modules adds
-          # its own after it, so it never inherits a way out of them:
-          # ApplicationAction's `policy_namespace :staff` makes
-          # Admin::Projects::ListAction ask Staff::Admin::ProjectPolicy, and
-          # an Admin:: subclass of an action that declares false asks
-          # Admin::ProjectPolicy.
+          # subclasses in its modules and below them. A subclass adds the
+          # outer modules its name has beyond the declaring class's, so it
+          # never inherits a way out of them:
+          # - ApplicationAction's `policy_namespace :staff` makes
+          #   Admin::Projects::ListAction ask Staff::Admin::ProjectPolicy;
+          # - Admin::BaseAction's `policy_namespace :staff` makes
+          #   Admin::Projects::ListAction ask Staff::ProjectPolicy, and
+          #   Admin::Reports::ExportAction on Project ask Staff::Reports::ProjectPolicy;
+          # - an Admin:: subclass of Projects::ExportAction, which declares
+          #   false, asks Admin::ProjectPolicy.
           #
           # @param value [Symbol, String, Module, false, nil] declares it: :admin, Admin, or false
           # @return [Array<Symbol>] such as [:admin]; [] for the model's own policy
+          # @raise [ArgumentError] for a value that names no module, such as ""
           def policy_namespace(value = nil)
-            unless value.nil?
-              words = value.is_a?(Module) ? value.name.underscore.split("/") : value.to_s.split("/")
-              return @declared_policy_namespace = (value == false) ? [] : words.map(&:to_sym)
-            end
-            own = outer_namespace.map(&:to_sym)
-            declarer = ancestors.find { it.instance_variable_defined?(:@declared_policy_namespace) } or return own
-            declared = declarer.instance_variable_get(:@declared_policy_namespace)
-            (declarer == self || declarer.outer_namespace == outer_namespace) ? declared : [*declared, *own]
+            return @declared_policy_namespace = namespace_words(value) unless value.nil?
+            declarer = ancestors.find { it.instance_variable_defined?(:@declared_policy_namespace) }
+            return outer_namespace.map(&:to_sym) unless declarer
+            [*declarer.instance_variable_get(:@declared_policy_namespace), *outer_namespace_below(declarer).map(&:to_sym)]
           end
 
           # @api private
@@ -100,20 +102,19 @@ module Saltbox
             end
           end
 
+          # @api private
           # Whether the action's policy does not exist, as when
           # Reports::ExportAction on Event has no Reports::EventPolicy. Such an
           # action is left out of every actions list, MCP's and the
           # assistant's included, so the others stay listed; running it still
           # fails, and rails actions:check names the policy. The first time,
-          # it warns.
+          # it warns, through the Rails logger once Rails has one.
           #
           # @return [Boolean]
           def policy_missing?
             return false unless model && policy_class.nil?
-            @policy_missing_warned ||= begin
-              warn "saltbox-actions: #{name} is left out of every actions list: #{missing_policy_problem}"
-              true
-            end
+            warn_policy_missing
+            true
           end
 
           # @return [Array<String>] a missing policy or rule, and the fix
@@ -138,25 +139,56 @@ module Saltbox
 
           private
 
+          def namespace_words(value)
+            return [] if value == false
+            words = (value.is_a?(Module) ? value.name.to_s.underscore : value.to_s).split("/", -1)
+            return words.map(&:to_sym) if words.any? && words.none?(&:blank?)
+            raise ArgumentError, "#{name}: policy_namespace #{value.inspect} names no module: " \
+              "declare a symbol such as :admin, a module, or false for the model's own policy"
+          end
+
+          # The outer namespace of the modules the action's name has beyond
+          # the declaring class's; all of it when the action is not inside them.
+          def outer_namespace_below(declarer)
+            modules = name.to_s.deconstantize.split("::")
+            above = declarer.name.to_s.deconstantize.split("::")
+            (modules.first(above.size) == above) ? outer_modules(modules.drop(above.size)) : outer_namespace
+          end
+
+          def warn_policy_missing
+            first = WARNING.synchronize { !@policy_missing_warned && (@policy_missing_warned = true) }
+            return unless first
+            message = "saltbox-actions: #{name} is left out of every actions list: #{missing_policy_problem}"
+            logger = Rails.logger if defined?(Rails) && Rails.respond_to?(:logger)
+            logger ? logger.warn(message) : warn(message)
+          end
+
           def missing_rule = "#{model.name} is its model: name the policy rule, policy_rule :show? or another"
 
           def missing_policy_problem
-            if policy_namespace.any?
-              "#{model.name} has no #{policy_label} policy in #{policy_namespace.join("/")}: " \
-                "add #{expected_policy_name}, or declare policy_namespace (see the README)#{nested_hint}"
+            if policy_namespace.empty?
+              return "#{model.name} has no #{policy_label} policy: add #{expected_policy_name}, or include another authorization adapter (see the README)"
+            end
+            missing = "#{model.name} has no #{policy_label} policy in #{policy_namespace.join("/")}"
+            outer, parent = nested_under
+            if parent
+              "#{missing}. If #{outer} groups actions under the #{parent.name} model and everyone #{model.name}Policy allows " \
+                "may run them, declare policy_namespace false; otherwise add #{expected_policy_name}"
             else
-              "#{model.name} has no #{policy_label} policy: add #{expected_policy_name}, or include another authorization adapter (see the README)"
+              "#{missing}: add #{expected_policy_name}, or declare policy_namespace (see the README)"
             end
           end
 
           # Events::Attendees::ListAction on Attendee may be nested under
-          # Event, or Events may be an area like Admin: the class name cannot
-          # tell, so the action fails closed and the check says both.
-          def nested_hint
+          # Event, or Events may be a back office named like a model: the
+          # class name cannot tell, so the action fails closed, and the check
+          # says what false would let in.
+          #
+          # @return [Array(String, Class), nil] the outer module and the model it names
+          def nested_under
             outer = outer_namespace.map(&:camelize).join("::")
             parent = Naming.model_for(outer) if outer.present? && policy_namespace == outer_namespace.map(&:to_sym)
-            return "" unless parent && parent != model
-            ". If #{outer} groups actions under the #{parent.name} model, declare policy_namespace false to ask #{model.name}Policy"
+            [outer, parent] if parent && parent != model
           end
         end
       end
@@ -172,6 +204,7 @@ module Saltbox
           # @return [Array<String>]
           def authorization_problems = []
 
+          # @api private
           # @return [Boolean] false: without a policy, nothing is missing
           def policy_missing? = false
 

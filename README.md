@@ -636,9 +636,9 @@ A class name cannot tell a back office from a group of actions (`Reports`,
 namespace's policy. Until that policy exists, the action fails, and
 `rails actions:check` names the policy to add. If the outer module also
 names a model, as `Events` names `Event`, the check says the action may be
-nested. Add the policy it names, or declare `policy_namespace false` to ask
-the model's own policy (`AttendeePolicy`). The name stays
-`list_events_attendees`.
+nested. If everyone `AttendeePolicy` allows may run it, declare
+`policy_namespace false` to ask that policy; otherwise add
+`Events::AttendeePolicy`. The name stays `list_events_attendees`.
 
 "Agents: confirm" tells the agent to ask the person first. The server
 checks it only when `enforce_confirm` is on (see Connections).
@@ -967,8 +967,8 @@ give them.
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
 | `returns(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
-| `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_customers`. |
-| `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy. It holds for subclasses in the same modules (see Authorization). |
+| `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_reports_customers` and asks `Admin::Reports::CustomerPolicy`. |
+| `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy. It holds for subclasses in its modules and below them (see Authorization). |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too, and its `model` and `policy_rule` if it has a model: a declared name gives neither. |
 | `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
 | `cli "events count"` | The command for a command-line client you build on the catalogue. |
@@ -1326,14 +1326,17 @@ declare it: `policy_namespace :staff`, or `policy_namespace false` for the
 model's own policy.
 
 A declaration holds for the class that makes it, and for its subclasses in
-the same modules. A subclass in other modules adds its own modules after it.
-So it never inherits a way out of them:
+its modules and below them. A subclass adds the modules its name has beyond
+the declaring class's, after it. So it never inherits a way out of them:
 
 - `Admin::Events::ListAllAction < Events::ListAllAction`, whose parent
   declares `policy_namespace false`, asks `Admin::EventPolicy`;
 - with `policy_namespace :staff` in `ApplicationAction`,
   `Events::ListAction` asks `Staff::EventPolicy` and
-  `Admin::Events::ListAction` asks `Staff::Admin::EventPolicy`.
+  `Admin::Events::ListAction` asks `Staff::Admin::EventPolicy`;
+- with `policy_namespace :staff` in a base class `Admin::BaseAction`,
+  `Admin::Events::ListAction` asks `Staff::EventPolicy`, and
+  `Admin::Reports::ExportAction` on `Event` asks `Staff::Reports::EventPolicy`.
 
 A model that names its policy with `policy_class` stays inside the
 namespace too. With Pundit the name is looked up there, as

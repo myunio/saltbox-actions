@@ -142,12 +142,7 @@ module Saltbox
         # looked up in them (Authorization::Policies#policy_namespace).
         #
         # @return [Array<String>]
-        def outer_namespace
-          return [] unless name && model.is_a?(Class)
-          modules = name.deconstantize.split("::")
-          modules.pop if modules.last&.singularize == model.name.demodulize
-          (modules - model.name.deconstantize.split("::")).map(&:underscore)
-        end
+        def outer_namespace = name ? outer_modules(name.deconstantize.split("::")) : []
 
         # @api private
         # The outer modules in the action's name. A namespace from the action
@@ -245,6 +240,16 @@ module Saltbox
         end
 
         private
+
+        # The outer namespace among these modules of the action's name: the
+        # resource namespace, when it is the last of them, and the model's
+        # own modules are left out.
+        def outer_modules(modules)
+          return [] unless model.is_a?(Class)
+          modules = modules.dup
+          modules.pop if modules.last&.singularize == model.name.demodulize
+          (modules - model.name.deconstantize.split("::")).map(&:underscore)
+        end
 
         def built_title
           noun = model&.model_name&.human&.downcase

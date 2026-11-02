@@ -38,9 +38,19 @@ RSpec.describe "An action whose policy is missing" do
       expect { missing.perform_now(caller: as_api(manager)) }.to raise_error(missing_policy)
     end
 
-    it "warns once per action, naming the policy to add" do
-      expect { 2.times { registry.catalogue(as_api(manager)) } }
-        .to output(/\Asaltbox-actions: Reports::ExportAction is left out of every actions list: Event has no \w+ policy in reports: add Reports::EventPolicy[^\n]*\n\z/).to_stderr
+    let(:warning) { /\Asaltbox-actions: Reports::ExportAction is left out of every actions list: Event has no \w+ policy in reports: add Reports::EventPolicy[^\n]*\n\z/ }
+
+    it "warns once per action through the Rails logger, naming the policy to add, and stays left out after" do
+      logged = StringIO.new
+      allow(Rails).to receive(:logger).and_return(ActiveSupport::Logger.new(logged))
+      expect { 2.times { registry.catalogue(as_api(manager)) } }.not_to output.to_stderr
+      expect(logged.string).to match(warning)
+      expect([missing.policy_missing?, missing.policy_missing?]).to eq([true, true])
+    end
+
+    it "warns on stderr when Rails has no logger" do
+      allow(Rails).to receive(:logger).and_return(nil)
+      expect { 2.times { registry.catalogue(as_api(manager)) } }.to output(warning).to_stderr
     end
   end
 

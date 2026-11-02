@@ -12,15 +12,17 @@
   JSON API's, MCP's `tools/list` and `find_action`, the assistant's tools), so the other actions
   stay listed. Before, one missing policy made every list raise for every caller. Running the
   action still fails, `rails actions:check` names the policy, and the first list warns once per
-  action. `policy_missing?` is the adapter hook; `None` answers false.
+  action, through the Rails logger once Rails has one.
   ActionPolicy lookups in a namespace no longer fall back to the model's own policy, and skip a
   `policy_class` the model or record defines; Pundit's `policy` helper asks the namespace too.
   `policy_namespace :staff` declares another namespace, `policy_namespace false` the model's own
-  policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method. A
-  declaration holds for subclasses in the same modules; a subclass in other modules adds its own
-  after it, so `policy_namespace :staff` in a base class makes `Admin::Projects::ListAction` ask
-  `Staff::Admin::ProjectPolicy`, and an `Admin::` subclass of an action that declares `false`
-  still asks `Admin::ProjectPolicy`.
+  policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method, and a
+  value that names no module, such as `""`, raises `ArgumentError`. A declaration holds for
+  subclasses in its modules and below them; a subclass adds the modules its name has beyond the
+  declaring class's, so `policy_namespace :staff` in a base class makes
+  `Admin::Projects::ListAction` ask `Staff::Admin::ProjectPolicy`, the same in
+  `Admin::BaseAction` makes it ask `Staff::ProjectPolicy`, and an `Admin::` subclass of an action
+  that declares `false` still asks `Admin::ProjectPolicy`.
 - Every module around the action counts, except the one that names its model and the model's own
   modules. So these are renamed and ask a namespaced policy, failing closed until it exists or
   the action declares `policy_namespace false`:
@@ -34,7 +36,8 @@
     changes).
 
   `rails actions:check` names each missing policy, and says when the outer module names a model
-  (`Events` names `Event`), so the action may be nested and `policy_namespace false` may be meant.
+  (`Events` names `Event`), so the action may be nested: declare `policy_namespace false` only if
+  everyone the model's own policy allows may run it.
 - `Admin::Billing::Invoices::ListAction` finds `Billing::Invoice`: a model lookup drops outer
   modules from the left before trying the top-level model. Such an action was named `list` with no
   policy check; it is `list_admin_billing_invoices` and asks `Admin::Billing::InvoicePolicy`.
