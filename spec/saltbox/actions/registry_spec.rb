@@ -52,6 +52,21 @@ RSpec.describe Saltbox::Actions::Registry do
       .to include(a_string_starting_with("Saltbox::Actions::Rendering#result is a method every action has"))
   end
 
+  it "takes the record's id as a cli argument of an action that declares attribute :id" do
+    archive = action("Events::ArchiveAction") do
+      kind :change
+      attribute :id
+      policy_rule :update?
+      cli "events archive", args: [:id]
+    end
+    expect(archive.declared_cli).to include(args: ["id"])
+  end
+
+  it "refuses a validation of a model field, which is not an attribute of the action" do
+    expect(problems(action("Events::UpdateAction") { validates :title, presence: true }))
+      .to include("validates title, which is not an attribute: the model's own validations check its fields, or declare it with attribute")
+  end
+
   it "refuses validations whose schema would promise what they refuse" do
     expect(problems(action("Events::ExportAction") {
       attribute :format, :string

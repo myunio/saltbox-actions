@@ -227,7 +227,11 @@ module Saltbox
           validators_on(name).reject { |validator| validator.options.key?(:if) || validator.options.key?(:unless) || validator.options.key?(:on) }
         end
 
+        # A callable default fills a left-out value only once the action is
+        # built, after the schema check, so such an attribute is not required:
+        # its presence validation still runs on the default.
         def required_attribute?(name)
+          return false if declared_attributes.dig(name, :default).respond_to?(:call)
           schema_validators(name).any? { it.kind == :presence && !it.options[:allow_nil] && !it.options[:allow_blank] }
         end
 

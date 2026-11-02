@@ -261,6 +261,15 @@ ones that always run also shape the JSON Schema agents read:
 A validation with `if:`, `unless:` or `on:` runs only sometimes, so it is
 left out of the schema; it still runs.
 
+Validations check attributes only. A model field is checked by the model's
+own validations when `perform` saves it, and its errors come back by field
+the same way. `rails actions:check` refuses a validation of a name that is
+not an attribute.
+
+A default may be a lambda, as in Active Model. Such an attribute is never
+required in the schema, since the default fills it after the schema check;
+its validations still run on the default.
+
 `paginated` declares the paging inputs a list takes, as attributes: `page`,
 from 1, and `page_size`, from 1 to `max_per_page`. Page the records with
 your own paging library:

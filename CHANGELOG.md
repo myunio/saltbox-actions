@@ -47,6 +47,10 @@
 - `rails actions:check` refuses a model whose record reader would replace a method every action
   has (`account`, `result`), a string attribute whose `inclusion` lists symbols, and `presence`
   on a boolean. A `find_<record>` that returns `nil` is `not_found`.
+- A `:datetime` attribute reads a local date and time in the app's `Time.zone`, as a datetime
+  column does, in a list too. `cli args: [:id]` works for an action that takes an id. An
+  attribute with a lambda default is not required in the schema. `rails actions:check` refuses
+  a validation of a name that is not an attribute, such as a model field.
 
 - Booting never touches the database. With eager loading, the boot checks only what each action
   declares (name, verb, kind, connections, unique names and CLI commands). `rails actions:check`

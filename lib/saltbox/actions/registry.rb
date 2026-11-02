@@ -220,6 +220,10 @@ module Saltbox
         if reader && conflict && !action.declared_attributes.key?(reader)
           problems << "#{conflict.name || conflict.inspect}##{reader} is a method every action has, so the #{action.model.model_name.human.downcase} it works on gets no reader: name the action's model another way, or declare its kind and attribute :id without a verb that works on one record"
         end
+        checked = action.validators.select { it.respond_to?(:attributes) }.flat_map(&:attributes).map(&:to_s).uniq
+        (checked - action.declared_attributes.keys).each do |name|
+          problems << "validates #{name}, which is not an attribute: the model's own validations check its fields, or declare it with attribute"
+        end
         action.declared_attributes.each do |name, attribute|
           action.validators_on(name).each do |validator|
             if validator.kind == :inclusion && validator.options[:in].is_a?(Array) && validator.options[:in].any?(Symbol) && attribute[:type] == :string

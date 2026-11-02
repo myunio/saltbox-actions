@@ -159,9 +159,10 @@ module Saltbox
         # @param aliases [Array<String>] other commands for the same action
         # @param args [Array<String, Symbol>] declared attributes, taken by position
         # @return [Hash]
-        # @raise [ArgumentError] for an args entry that is not a declared attribute
+        # @raise [ArgumentError] for an args entry that is not a declared attribute, or the id
+        #   of an action that works on one record
         def cli(command, aliases: [], args: [])
-          unknown = args.map(&:to_s) - declared_attributes.keys
+          unknown = args.map(&:to_s) - declared_attributes.keys - (takes_id? ? ["id"] : [])
           raise ArgumentError, "cli args #{unknown.join(", ")} are not attributes of #{action_name}" if unknown.any?
           @declared_cli = {command: command.split, aliases: aliases.map(&:split), args: args.map(&:to_s)}
         end

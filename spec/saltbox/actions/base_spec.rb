@@ -56,6 +56,37 @@ RSpec.describe Saltbox::Actions::Base do
     end
   end
 
+  describe "attributes" do
+    it "read a local date and time in the app's time zone, as a datetime column does, in a list too" do
+      scheduled = action("Events::ScheduleAction") do
+        kind :read
+        policy_rule :index?
+        attribute :at, :datetime
+        attribute :also, :array, of: {at: :datetime}
+
+        def perform
+          authorize Event
+          skip_policy_scope
+          render json: {at: at.iso8601(6), also: also.first["at"].iso8601(6)}
+        end
+      end
+      body = Time.use_zone("America/St_Johns") do
+        run({at: "2026-11-02T18:30:12.123456", also: [{at: "2026-11-02T18:30"}]}, as: as_screen(reader), action: scheduled).body
+      end
+      expect(body).to eq("at" => "2026-11-02T18:30:12.123456-03:30", "also" => "2026-11-02T18:30:00.000000-03:30")
+    end
+
+    it "take a callable default that satisfies their presence validation when left out" do
+      cancelled = action("Events::CancelAction") do
+        attribute :reason, :string, default: -> { "No reason given" }
+        validates :reason, presence: true
+
+        def perform = render(json: {reason:})
+      end
+      expect(run({id: event.id}, as: as_screen(manager), action: cancelled).body).to eq("reason" => "No reason given")
+    end
+  end
+
   describe "inherited declarations" do
     it "carry who may run an action, and how, to its subclasses until they declare their own" do
       parent = action("Events::CancelAction") do

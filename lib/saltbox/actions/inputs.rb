@@ -65,6 +65,19 @@ module Saltbox
         end
       end
 
+      # A date and time read in the app's time zone (Time.zone), as Active
+      # Record reads a datetime column: "2026-11-02T18:30" is half past six
+      # where the app is, not in UTC. A time with an offset keeps its instant.
+      class ZonedDateTime < ActiveModel::Type::DateTime
+        private
+
+        def cast_value(value)
+          super(value.respond_to?(:in_time_zone) ? value.in_time_zone : value)
+        rescue ArgumentError
+          nil
+        end
+      end
+
       class_methods do
         # Declares an input, as Active Model does, and adds it to the input
         # schema. `attribute :id`, with no type, declares the id of the one
@@ -173,6 +186,7 @@ module Saltbox
         when :array then List.new(of.is_a?(Hash) ? of.to_h { |name, item| [name.to_s, cast_type(item)] } : cast_type(of || :string))
         # An integer input is stored nowhere, so it may be as large as a bigint.
         when :integer then ActiveModel::Type.lookup(:integer, limit: 8)
+        when :datetime then ZonedDateTime.new
         else ActiveModel::Type.lookup(type)
         end
       end
