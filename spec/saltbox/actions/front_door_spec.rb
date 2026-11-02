@@ -1,7 +1,9 @@
 RSpec.describe Saltbox::Actions::FrontDoor do
   let(:event) { Event.create!(org_id: 1, title: "Annual general meeting") }
 
-  it "offers mcp_core actions as tools of their own, then find_action and one run tool per kind the caller may run" do
+  it "offers featured actions as tools of their own, then find_action and one run tool per kind the caller may run" do
+    expect(Saltbox::Actions::Registry.catalogue(as_mcp(manager)).select { it["featured"] }.map { it["name"] }).to eq(%w[show_event whoami])
+    expect(Saltbox::Actions::Registry.catalogue(as_mcp(manager)).flat_map(&:keys)).not_to include("mcp_core")
     expect(described_class.tools(as_mcp(manager)).map(&:name)).to eq(%w[show_event whoami find_action run_read_action run_change_action run_destructive_action])
     expect(described_class.tools(as_read_only(manager)).map(&:name)).to eq(%w[show_event whoami find_action run_read_action])
     expect(described_class.tools(as_assistant(manager)).map(&:name)).not_to include("run_destructive_action")

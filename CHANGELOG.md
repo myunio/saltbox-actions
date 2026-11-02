@@ -31,7 +31,8 @@
   returns it. `rails actions:check` refuses an attribute named like the reader.
   `attribute :id` declares a member action for a verb outside the table.
 - `paginated(per_page: 25, max_per_page: 100)` declares `page` and `page_size` as attributes.
-- `featured` replaces `mcp_core`. The catalogue keeps the `mcp_core` key on the wire.
+- `featured` replaces `mcp_core`, in the class and on the wire: the catalogue's `mcp_core` key is
+  now `featured`. A client that reads the catalogue reads the new key.
 - `policy_rule :archive?` replaces the class-level `authorize :archive?`.
 - Titles and descriptions are written in the class. A locale entry wins over the class text,
   as Action Mailer's `default_i18n_subject` does. A field's description comes from the action's

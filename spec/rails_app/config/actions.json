@@ -8,7 +8,7 @@
     "idempotent": false,
     "scope": "api:write",
     "connections": "confirm",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -61,7 +61,7 @@
         "events.delete"
       ]
     ],
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -122,7 +122,7 @@
     "idempotent": false,
     "scope": "api:write",
     "connections": "allowed",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -212,7 +212,7 @@
     "idempotent": true,
     "scope": "api:write",
     "connections": "confirm",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -253,7 +253,7 @@
     "idempotent": true,
     "scope": "api:read",
     "connections": "allowed",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "billing-invoices",
@@ -277,7 +277,7 @@
     "idempotent": true,
     "scope": "api:read",
     "connections": "allowed",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -383,7 +383,7 @@
     "idempotent": true,
     "scope": "api:write",
     "connections": "allowed",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -435,7 +435,7 @@
     "idempotent": true,
     "scope": "api:read",
     "connections": "allowed",
-    "mcp_core": true,
+    "featured": true,
     "cli": {
       "command": [
         "events",
@@ -477,7 +477,7 @@
     "idempotent": true,
     "scope": "api:read",
     "connections": "never",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -519,7 +519,7 @@
     "idempotent": true,
     "scope": "api:write",
     "connections": "allowed",
-    "mcp_core": false,
+    "featured": false,
     "cli": {
       "command": [
         "events",
@@ -618,7 +618,7 @@
     "idempotent": true,
     "scope": "api:read",
     "connections": "allowed",
-    "mcp_core": true,
+    "featured": true,
     "cli": {
       "command": [
         "whoami"

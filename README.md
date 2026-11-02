@@ -529,7 +529,7 @@ give them.
 | `kind :read` | The kind, for a verb outside the table. `:read`, `:change` or `:destructive`. |
 | `policy_rule :archive?` | The policy rule, when it is not the verb's own. |
 | `idempotent` | Running it twice with the same input changes nothing more, when the verb does not say so. `idempotent false` says it does. |
-| `featured` | Lists it as an MCP tool of its own (see MCP). |
+| `featured` | Lists it as an MCP tool of its own (see MCP). The catalogue marks it `"featured": true`. |
 | `feature "key"` | A feature flag. While it is off, callers get `not_found`. |
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
 | `returns(schema)` | The JSON Schema of the body it renders. |
