@@ -2,6 +2,18 @@
 
 ## 0.1.0 (unreleased)
 
+- Booting never touches the database. With eager loading, the boot checks only what each action
+  declares (name, verb, kind, connections, unique names and CLI commands). `rails actions:check`
+  runs every other check (policy rules, fields, summaries, `check_action` and `check_registry`), as
+  do the registry shared example and `assert_valid_action_registry`. It and `actions:catalogue`
+  say they need the database when they cannot connect.
+- A create or update's input schema is built with the real caller on first use, inside
+  `around_invocation`, and cached per list of permitted fields, so callers whose policy permits
+  different fields see different schemas. A model field the caller may not set is refused as
+  forbidden. `input_schema`, `writable_fields` and `definition` take an optional caller.
+- `schema_principal` is used only by the committed catalogue and `actions:check`. `input_types`
+  and `Registry.runnable` are gone.
+
 - `find_action` with no query lists every action the caller can run from its surface, a page
   at a time (`page`, `page_size`: 50 by default, at most 100), sorted by area then name, with
   `config.area_order` to put some areas first. When nothing matches, its hint names
