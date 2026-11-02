@@ -48,6 +48,31 @@ RSpec.describe "Confirming a :confirm action" do
     expect(event.reload.status).not_to eq("cancelled")
   end
 
+  it "asks again on each call of a reused Invocation, so one approval never covers another call" do
+    other = Event.create!(org_id: 1, title: "Picnic")
+    asked = []
+    approve { |invocation, _action| asked << invocation.arguments["id"] and invocation.arguments["id"] == event.id.to_s }
+    invocation = Saltbox::Actions::Invocation.new(Event::CancelAction, as_mcp(manager))
+    with_settings(enforce_confirm: true) do
+      invocation.call({id: event.id.to_s})
+      expect { invocation.call({id: other.id.to_s}) }.to be_refused.with(:confirmation_required)
+    end
+    expect(other.reload.status).to eq("draft")
+    expect(asked).to eq([event.id.to_s, other.id.to_s])
+  end
+
+  it "asks again on a retry after an approved call fails" do
+    answers = [true, false]
+    approve { answers.shift }
+    invocation = Saltbox::Actions::Invocation.new(Event::CancelAction, as_mcp(manager))
+    with_settings(enforce_confirm: true) do
+      expect { invocation.call({id: "0"}) }.to be_not_found
+      expect { invocation.call({id: event.id.to_s}) }.to be_refused.with(:confirmation_required)
+    end
+    expect(answers).to be_empty
+    expect(event.reload.status).to eq("draft")
+  end
+
   it "asks only once the person is allowed and the input is valid" do
     approve { raise "asked" }
     with_settings(enforce_confirm: true) do

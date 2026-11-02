@@ -73,6 +73,8 @@ module Saltbox
         Actions.within(@caller) do |fresh|
           @caller = fresh
           @invocation_id = SecureRandom.uuid_v7
+          # Approvals are for this call's arguments only.
+          @confirmed = Set.new
           Current.set(invocation: self, invocation_id: @invocation_id) do
             refuse!
             if expected_kind && @action.kind != expected_kind
@@ -92,7 +94,8 @@ module Saltbox
 
       # Refuses a :confirm action the app's Configuration#confirm hook does
       # not approve, when Configuration#enforce_confirm is on and an agent
-      # calls. An action approved once in this invocation is not asked again.
+      # calls. An action approved once in this call is not asked again; the
+      # next call on the same Invocation asks afresh.
       # Caller#confirm! calls it for an action named inside another.
       #
       # @param action [Class]
@@ -100,7 +103,6 @@ module Saltbox
       # @raise [Error::ConfirmationRequired, Error]
       def confirm!(action)
         return unless Actions.config.enforce_confirm && @caller.agent? && action.connections == :confirm
-        @confirmed ||= Set.new
         return if @confirmed.include?(action)
         approved = Actions.config.confirm.call(self, action)
         raise Error::ConfirmationRequired.new(details: {"action" => action.action_name}) unless approved == true

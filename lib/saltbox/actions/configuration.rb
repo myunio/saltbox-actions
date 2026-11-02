@@ -149,7 +149,8 @@ module Saltbox
       # check and the input's, outside the change's transaction; called from
       # Caller#confirm! inside it.
       #
-      # @yieldparam invocation [Invocation] the call: its action, caller and arguments
+      # @yieldparam invocation [Invocation] the call: its action, caller and arguments;
+      #   from Caller#confirm!, the outer action's arguments
       # @yieldparam action [Class] the :confirm action to approve; the
       #   invocation's own, or the one Caller#confirm! names
       # @yieldreturn [Boolean]
