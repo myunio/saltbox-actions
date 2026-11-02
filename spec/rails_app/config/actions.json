@@ -16,9 +16,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -70,11 +75,11 @@
       ],
       "args": [
         "status"
-      ],
-      "columns": [
-        "count"
       ]
     },
+    "summary": [
+      "count"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -123,13 +128,13 @@
         "events",
         "create"
       ],
-      "args": [],
-      "columns": [
-        "id",
-        "title",
-        "starts_on"
-      ]
+      "args": []
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -214,9 +219,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -249,9 +259,14 @@
         "events",
         "list"
       ],
-      "args": [],
-      "columns": []
+      "args": []
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -263,10 +278,70 @@
             "cancelled"
           ],
           "description": "Only events with this status."
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
         }
       },
       "required": [],
       "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "starts_on": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "starts_on",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "events"
+          ]
+        },
+        "meta": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "data"
+      ]
     }
   },
   {
@@ -286,9 +361,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -323,9 +403,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -360,9 +445,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -449,8 +539,7 @@
       "command": [
         "whoami"
       ],
-      "args": [],
-      "columns": []
+      "args": []
     },
     "input_schema": {
       "type": "object",

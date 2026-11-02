@@ -58,7 +58,9 @@ module Saltbox
       # an agent or script acting for them may do.
       # - A person on a screen may run anything their policy allows.
       # - Every other caller follows the action's `connections` declaration.
-      # - The chat assistant never runs a :confirm action.
+      # - The chat assistant never runs a :confirm action. Any other agent may,
+      #   unless Configuration#enforce_confirm is on: then Invocation also asks
+      #   the app's Configuration#confirm hook.
       # - A browser assistant on the page (WebMCP) never runs a destructive action.
       #
       # @param action [Class]
@@ -71,6 +73,26 @@ module Saltbox
         when :confirm then surface != "assistant"
         else false
         end
+      end
+
+      # Checks, inside a running action, that this caller may also do what
+      # another action does, under its rules: for an action whose input can
+      # reach what a stricter action guards, such as a create that can also
+      # publish.
+      #
+      # @example
+      #   actor.confirm!(Event::PublishAction) if params[:state] == "published"
+      #
+      # @param action [Class]
+      # @return [void]
+      # @raise [Error::HumanRequired] when its `connections` declaration bars this caller
+      # @raise [Error::ConfirmationRequired] when it is :confirm, Configuration#enforce_confirm
+      #   is on, and the app's Configuration#confirm hook does not approve it
+      # @raise [ArgumentError] outside a running action
+      def confirm!(action)
+        invocation = Current.invocation or raise ArgumentError, "confirm! checks a caller inside a running action"
+        raise Error::HumanRequired unless agent_allowed?(action)
+        invocation.confirm!(action)
       end
 
       # The caller as it stands now, reloaded by the app's around_invocation

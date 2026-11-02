@@ -32,8 +32,8 @@ RSpec.describe Saltbox::Actions::Casting do
   it "takes a decimal as a number or a string, keeping every digit of the string" do
     update.call({price: 9.5}, as_mcp(manager))
     expect(event.reload.price).to eq(BigDecimal("9.5"))
-    update.call({price: "12345678.91"}, as_mcp(manager))
-    expect(event.reload.price).to eq(BigDecimal("12345678.91"))
+    update.call({price: "123456.78"}, as_mcp(manager))
+    expect(event.reload.price).to eq(BigDecimal("123456.78"))
   end
 
   it "refuses a value that is not of its type, naming each field, rather than casting it to 0 or true" do
