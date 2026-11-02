@@ -11,7 +11,31 @@
   ActionPolicy lookups in a namespace no longer fall back to the model's own policy, and skip a
   `policy_class` the model or record defines; Pundit's `policy` helper asks the namespace too.
   `policy_namespace :staff` declares another namespace, `policy_namespace false` the model's own
-  policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method.
+  policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method. A
+  declaration holds for subclasses in the same modules; a subclass in other modules adds its own
+  after it, so `policy_namespace :staff` in a base class makes `Admin::Projects::ListAction` ask
+  `Staff::Admin::ProjectPolicy`, and an `Admin::` subclass of an action that declares `false`
+  still asks `Admin::ProjectPolicy`.
+- Every module around the action counts, except the one that names its model and the model's own
+  modules. So these are renamed and ask a namespaced policy, failing closed until it exists or
+  the action declares `policy_namespace false`:
+  - a single module: `Admin::ExportAction` on `Project` is `export_admin_projects` and asks
+    `Admin::ProjectPolicy`; `Reports::ExportAction` on `Customer` is `export_reports_customers`
+    and asks `Reports::CustomerPolicy`;
+  - a nested resource: `Events::Attendees::ListAction` on `Attendee` is `list_events_attendees`
+    and asks `Events::AttendeePolicy`;
+  - an area module: `Crm::Organizations::ListAction` on a top-level `Organization` is
+    `list_crm_organizations` and asks `Crm::OrganizationPolicy` (on `Crm::Organization` nothing
+    changes).
+
+  `rails actions:check` names each missing policy, and says when the outer module names a model
+  (`Events` names `Event`), so the action may be nested and `policy_namespace false` may be meant.
+- `Admin::Billing::Invoices::ListAction` finds `Billing::Invoice`: a model lookup drops outer
+  modules from the left before trying the top-level model. Such an action was named `list` with no
+  policy check; it is `list_admin_billing_invoices` and asks `Admin::Billing::InvoicePolicy`.
+- An isolated engine's action on a host model keeps one namespace in its name:
+  `Billing::Projects::ListAction` in a folder named `billing` is `list_billing_projects`, and asks
+  `Billing::ProjectPolicy`.
 - That module is part of the action's name: `Admin::Projects::ListAction` is `list_admin_projects`,
   with the CLI command `admin-projects list` and the title "List admin projects", so it no longer
   collides with `Projects::ListAction`, and a summarized admin list points agents at

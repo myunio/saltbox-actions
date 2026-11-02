@@ -606,7 +606,8 @@ So `Events::ListAction` is named `list_events`, and
 `Events::ShowNotesAction` is named `show_event_notes`. The model is the
 namespace, singular, as `wrap_parameters` finds a controller's model:
 `Events` gives `Event`, and `Admin::Events` gives `Admin::Event`, or else
-`Event`. Rails spellings such as `DestroyAction` or `IndexAction` stop the
+`Event`. `Admin::Billing::Invoices` tries `Admin::Billing::Invoice`,
+`Admin::Invoice`, `Billing::Invoice`, then `Invoice`. Rails spellings such as `DestroyAction` or `IndexAction` stop the
 boot, because the names are public: agents and scripts call them. So does
 an action inside its model's own namespace, such as `Event::UpdateAction`.
 
@@ -615,6 +616,29 @@ An action in a module its model is not in, such as a back office's
 `list_admin_events`, with the CLI command `admin-events list`. It never
 collides with `Events::ListAction`, and it asks `Admin::EventPolicy`, not
 `EventPolicy` (see [Authorization](#authorization)).
+
+Every module around the action counts, except the one that names the model
+(`Events`) and the model's own modules (`Billing` for `Billing::Invoice`):
+
+| Action | Model | Name | Policy |
+|---|---|---|---|
+| `Events::ListAction` | `Event` | `list_events` | `EventPolicy` |
+| `Billing::Invoices::ListAction` | `Billing::Invoice` | `list_billing_invoices` | `Billing::InvoicePolicy` |
+| `Admin::Events::ListAction` | `Event` | `list_admin_events` | `Admin::EventPolicy` |
+| `Admin::ExportAction` | `Event` (declared) | `export_admin_events` | `Admin::EventPolicy` |
+| `Reports::ExportAction` | `Customer` (declared) | `export_reports_customers` | `Reports::CustomerPolicy` |
+| `Events::Attendees::ListAction` | `Attendee` | `list_events_attendees` | `Events::AttendeePolicy` |
+| `Crm::Organizations::ListAction` | `Organization` | `list_crm_organizations` | `Crm::OrganizationPolicy` |
+| `Crm::Organizations::ListAction` | `Crm::Organization` | `list_crm_organizations` | `Crm::OrganizationPolicy` |
+
+The class name cannot tell a back office from an area that groups actions
+(`Reports`, `Crm`) or a resource nested under another (`Events::Attendees`),
+so each asks its own namespace's policy. Until that policy exists the action
+fails, and `rails actions:check` names the policy to add. When the outer
+module names a model too, as `Events` names `Event`, the check also says the
+action may be nested. Add the namespaced policy, or declare
+`policy_namespace false` on the action to ask the model's own policy
+(`AttendeePolicy`); the name stays `list_events_attendees`.
 
 "Agents: confirm" tells the agent to ask the person first. The server
 checks it only when `enforce_confirm` is on (see Connections).
@@ -1298,6 +1322,16 @@ does not exist, the action fails instead of asking `EventPolicy`, and
 same way and never falls back to `EventPolicy`. To use another namespace,
 declare it: `policy_namespace :staff`, or `policy_namespace false` for the
 model's own policy.
+
+A declaration holds for the class that makes it and its subclasses in the
+same modules. A subclass in other modules adds its own after it, so it never
+inherits a way out of them:
+
+- `Admin::Events::ListAllAction < Events::ListAllAction`, whose parent
+  declares `policy_namespace false`, asks `Admin::EventPolicy`;
+- with `policy_namespace :staff` in `ApplicationAction`,
+  `Events::ListAction` asks `Staff::EventPolicy` and
+  `Admin::Events::ListAction` asks `Staff::Admin::EventPolicy`.
 
 A model that names its policy with `policy_class` stays inside the
 namespace too. With Pundit the name is looked up there, as
