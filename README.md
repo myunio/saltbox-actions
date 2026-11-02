@@ -431,6 +431,78 @@ There is also `"renders its declared output schema"`, and
 that every action loads, has a spec file and a valid input schema, and that
 the committed catalogue is up to date.
 
+## Testing with Minitest
+
+Load the helper in `test/test_helper.rb`:
+
+```ruby
+require "saltbox/actions/test_helper"
+```
+
+Include it in each action test and set `self.action_class`. Use your app's
+own fixtures or records for the person and event:
+
+```ruby
+class Event::UpdateActionTest < ActiveSupport::TestCase
+  include Saltbox::Actions::TestHelper
+
+  self.action_class = Event::UpdateAction
+
+  test "renames the event" do
+    event = events(:agm)
+    result = run({id: event.id.to_s, title: "Annual meeting"},
+      as: as_screen(users(:manager)))
+    assert_equal "Annual meeting", result.body.dig("data", "event", "title")
+  end
+
+  test "refuses a read-only token" do
+    assert_refused :insufficient_scope do
+      run({id: events(:agm).id.to_s}, as: as_read_only(users(:manager)))
+    end
+  end
+
+  test "names a field the person may not change" do
+    assert_field_errors :notes do
+      run({id: events(:agm).id.to_s, notes: "private"},
+        as: as_screen(users(:manager)))
+    end
+  end
+end
+```
+
+All six caller helpers work as they do in RSpec. Set your own factories
+with `Saltbox::Actions::TestHelper.configure` and `config.caller_for`.
+Factories run in the test, so they can use fixtures and test helpers.
+Pass `action:` to `run` to call a different class or action name.
+A call to `run` with no caller still runs the Minitest test itself.
+
+The helper also has these checks:
+
+- `assert_invalid_against_schema(arguments)` checks raw input.
+- `assert_matches_output_schema(result)` checks the schema from `returns`.
+- `assert_runnable_by(caller)` and `assert_listed_for(caller)` check access.
+- `assert_announces_changes(event => :update) { run(...) }` checks change events.
+- `assert_changes_audit_trail(on: event, by: user) { run(...) }` needs PaperTrail.
+- `assert_matches_catalogue` checks the committed catalogue.
+- `assert_valid_action_registry` checks that every action loads, has a test
+  under `test/actions/` and a valid input schema, and matches the catalogue.
+  Pass `test_root:` if your tests live elsewhere.
+
+Put the registry check in one test:
+
+```ruby
+class ActionRegistryTest < ActiveSupport::TestCase
+  include Saltbox::Actions::TestHelper
+
+  test "all actions are checked" do
+    assert_valid_action_registry
+  end
+end
+```
+
+`assert_refused` returns the error, so you can also check its message and
+details. A missing refusal, wrong code or missing field fails the test.
+
 ### Generators
 
 ```sh
@@ -439,9 +511,15 @@ bin/rails g action Event::Archive --kind change   # any other verb
 bin/rails actions:catalogue                       # rewrite config/actions.json
 ```
 
-The generator writes the action, its locale entry and its spec. To change
-the templates, copy them to `lib/templates/action/action.rb.tt` and
-`lib/templates/rspec/action/action_spec.rb.tt`.
+The generator writes the action, its locale entry and a test for the app's
+test framework. Minitest apps get `test/actions/event/update_action_test.rb`;
+RSpec apps get `spec/actions/event/update_action_spec.rb`. Fill in the
+record helpers with your app's fixtures or records. No factory gem or role
+names are required.
+
+To change the templates, copy them to `lib/templates/action/action.rb.tt`
+and `lib/templates/test_unit/action/action_test.rb.tt` (Minitest) or
+`lib/templates/rspec/action/action_spec.rb.tt` (RSpec).
 
 `config/actions.json` is the **catalogue**: every action as callers see it.
 Commit it, so a change to any action's name or input shows up in review.
@@ -498,7 +576,7 @@ small Rails app in `spec/rails_app`, with Pundit and ActionPolicy:
 
 ```sh
 bundle install
-bundle exec rspec
+bundle exec rake             # RSpec and Minitest
 bundle exec standardrb
 bundle exec rake catalogue   # rewrite the test app's actions.json
 ```
