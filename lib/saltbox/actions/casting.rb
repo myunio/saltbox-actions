@@ -4,7 +4,7 @@ module Saltbox
     # schema checks, with the Active Model type of each input, as Active
     # Record does when it is given params:
     # - an empty field ("") becomes what the type makes of it: nil for a
-    #   number, date, boolean or enum, and "" for a string;
+    #   number, date, boolean or enum column, and "" for a string;
     # - "12" becomes 12 for an integer, and "1.5" 1.5 for a float;
     # - "1", "true" and "on" become true for a boolean, and "0", "false" and
     #   "off" false;

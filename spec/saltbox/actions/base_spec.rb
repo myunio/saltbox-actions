@@ -33,6 +33,53 @@ RSpec.describe Saltbox::Actions::Base do
       Event.create!(org_id: 2, title: "Hidden")
       expect { run({id: "Hidden"}, as: as_screen(reader), action: by_title) }.to be_not_found
     end
+
+    it "is not found when find_<record> returns nil" do
+      by_title = action("Events::ShowAction") do
+        def perform = render(:show)
+
+        private
+
+        def find_event(events) = events.find_by(title: id)
+      end
+      expect { run({id: "Nothing"}, as: as_screen(reader), action: by_title) }.to be_not_found
+    end
+
+    it "keeps a parent's own reader in its subclasses" do
+      parent = action("Events::ShowAction") do
+        def perform = render(json: {title: event})
+
+        def event = super.title.upcase
+      end
+      child = Class.new(parent) { define_singleton_method(:name) { "Events::ShowAction" } }
+      expect(run({id: event.id}, as: as_screen(reader), action: child).body).to eq("title" => "AGM")
+    end
+  end
+
+  describe "inherited declarations" do
+    it "carry who may run an action, and how, to its subclasses until they declare their own" do
+      parent = action("Events::CancelAction") do
+        connections :never
+        permission "events.manage"
+        policy_rule :update?
+        featured
+        idempotent
+      end
+      child = Class.new(parent) { define_singleton_method(:name) { "Events::CancelAction" } }
+      expect(child).to have_attributes(connections: :never, permissions: ["events.manage"], declared_query: :update?, featured?: true, idempotent?: true)
+      child.connections :confirm
+      expect([child.connections, parent.connections]).to eq(%i[confirm never])
+    end
+
+    it "carry attribute :id and accepts" do
+      parent = action("Events::ArchiveAction") do
+        kind :change
+        attribute :id
+        accepts :title
+      end
+      child = Class.new(parent) { define_singleton_method(:name) { "Events::ArchiveAction" } }
+      expect(child).to have_attributes(declares_id?: true, accepted_fields: ["title"])
+    end
   end
 
   describe "validations" do

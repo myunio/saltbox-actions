@@ -46,6 +46,22 @@ RSpec.describe Saltbox::Actions::Registry do
       .to include("attribute event has the name of the reader for the event it works on: rename the attribute")
   end
 
+  it "refuses a model whose record reader would replace a method every action has" do
+    stub_const("Result", Class.new(ActiveRecord::Base) { self.table_name = "events" })
+    expect(problems(action("Results::ShowAction")))
+      .to include(a_string_starting_with("Saltbox::Actions::Rendering#result is a method every action has"))
+  end
+
+  it "refuses validations whose schema would promise what they refuse" do
+    expect(problems(action("Events::ExportAction") {
+      attribute :format, :string
+      validates :format, inclusion: {in: %i[csv json]}
+      attribute :archived, :boolean
+      validates :archived, presence: true
+    })).to include("format is a string, and its inclusion lists symbols, so every value is refused: list strings",
+      "archived is a boolean, and presence refuses false: validate inclusion: {in: [true, false]}")
+  end
+
   it "refuses accepts under a policy that says which fields a person may set, and on an action with no model" do
     expect(problems(action("Events::UpdateAction") { accepts :title }))
       .to include("EventPolicy#permitted_attributes says which fields a person may set: remove accepts, so the policy is the one list")

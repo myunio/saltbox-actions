@@ -29,7 +29,7 @@ module Rspec
 
       def resource_name = class_path.map(&:camelize).join("::")
 
-      def model = resource_name.classify.constantize
+      def model = Saltbox::Actions::Naming.model_for(resource_name)
 
       # @return [String] "an event", "an account"
       def a_record

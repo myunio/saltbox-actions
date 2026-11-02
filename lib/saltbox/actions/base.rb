@@ -77,27 +77,54 @@ module Saltbox
         # @param input [Hash]
         # @return [InvocationJob, false] the enqueued job, or false when enqueuing failed
         def perform_later(caller:, **input)
-          InvocationJob.perform_later(name, input.deep_stringify_keys, InvocationJob.serialize_caller(caller))
+          InvocationJob.perform_later(action_name, input.deep_stringify_keys, InvocationJob.serialize_caller(caller))
         end
 
         # The name of the method that reads a member action's record: event
         # for Event, invoice for an isolated engine's Billing::Invoice.
         #
-        # @return [String, nil] nil for an action that works on no one record
+        # @return [String, nil] nil for an action that works on no one record, or a class with no name
         def record_name
-          model.model_name.param_key if takes_id? && model.is_a?(Class) && model < ActiveRecord::Base
+          model.model_name.param_key if name && takes_id? && model.is_a?(Class) && model < ActiveRecord::Base
         end
 
-        # Defines the member record's reader the first time the action is
-        # built, once its model is known. It lives in a module of its own, as
-        # Active Model's attribute methods do, so the action may override it.
+        # Defines the member record's reader once the model is known: when
+        # the registry loads, or else the first time the action is built. It
+        # lives in a module of its own, as Active Model's attribute methods
+        # do, so the action may override it and call super. A subclass keeps
+        # its parent's reader. A name every action already answers to, such
+        # as account or result, gets no reader: rails actions:check refuses
+        # the action (record_reader_conflict).
         #
         # @return [void]
         def define_record_reader
           return if @record_reader_defined
+          superclass.define_record_reader if superclass < Base
           reader = record_name
-          include(Module.new { define_method(reader) { member_record } }) if reader
+          existing = instance_method(reader).owner if reader && (method_defined?(reader) || private_method_defined?(reader))
+          include(RecordReader.new(reader)) if reader && (existing.nil? || existing == self)
           @record_reader_defined = true
+        end
+
+        # @return [Module, nil] what already answers to the record reader's name, when the
+        #   gem, an adapter or Ruby does (account for an Account, result for a Result)
+        def record_reader_conflict
+          reader = record_name
+          return if reader.nil?
+          return unless method_defined?(reader) || private_method_defined?(reader)
+          owner = instance_method(reader).owner
+          return if owner.is_a?(RecordReader)
+          return if owner.is_a?(Class) && owner < Base
+          owner
+        end
+      end
+
+      # The module that holds a member action's record reader.
+      class RecordReader < Module
+        # @param name [String] the reader's name, such as event
+        def initialize(name)
+          super()
+          define_method(name) { member_record }
         end
       end
 
@@ -160,6 +187,7 @@ module Saltbox
         finder = :"find_#{name}"
         scope = policy_scope(self.class.model)
         record = respond_to?(finder, true) ? send(finder, scope) : scope.find(id)
+        raise ActiveRecord::RecordNotFound.new("#{finder} found no record", self.class.model.name) if record.nil?
         authorize(record)
         instance_variable_set(:"@#{name}", record)
         @_member_record = record

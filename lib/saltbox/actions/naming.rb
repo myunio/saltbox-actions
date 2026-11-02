@@ -217,18 +217,24 @@ module Saltbox
           [verb.humanize, noun, *action_words.drop(1)].compact.join(" ")
         end
 
-        # Walks out of the namespace as wrap_parameters does: Admin::Events
-        # tries Admin::Event, then Event.
-        def inferred_model
-          parts = name.deconstantize.split("::")
-          until parts.empty?
-            found = parts.join("::").classify.safe_constantize
-            return found if found.is_a?(Class)
-            break if parts.size == 1
-            parts.delete_at(-2)
-          end
-          nil
+        def inferred_model = Naming.model_for(name.deconstantize)
+      end
+
+      # The model a resource namespace names, found as wrap_parameters finds a
+      # controller's: singular, walking out of the namespace, so
+      # Admin::Events tries Admin::Event, then Event.
+      #
+      # @param namespace [String] such as "Admin::Events"
+      # @return [Class, nil]
+      def self.model_for(namespace)
+        parts = namespace.split("::")
+        until parts.empty?
+          found = parts.join("::").classify.safe_constantize
+          return found if found.is_a?(Class)
+          break if parts.size == 1
+          parts.delete_at(-2)
         end
+        nil
       end
     end
   end

@@ -202,7 +202,8 @@ end
 The reader is named after the model: `event` for `Event`, `event_type` for
 `Event::Type`, and `invoice` for an isolated engine's `Billing::Invoice`.
 When the record is found another way, define `find_<record>`. It gets the
-person's scope, and `authorize` still runs:
+person's scope to search, and `authorize` still runs on what it returns. A
+`nil` is answered as `not_found`:
 
 ```ruby
 private
@@ -212,7 +213,11 @@ def find_event(events)
 end
 ```
 
-An attribute may not take the reader's name; `rails actions:check` says so.
+An attribute may not take the reader's name, and neither may a method every
+action has: an `Account` or a `Result` model gives a reader that would
+replace `account` or `result`. `rails actions:check` refuses both, so name
+such an action's model another way (`model`), or declare `kind` and
+`attribute :id` and look the record up in `perform`.
 
 ### Input
 
@@ -270,7 +275,8 @@ them, so form params work as they are:
 - `"12"` becomes `12` for an integer. `"1"`, `"true"` or `"on"` becomes `true`
   for a boolean, and `"0"`, `"false"` or `"off"` becomes `false`.
 - An empty field (`""`) becomes `nil` for a number, a date, a boolean or an
-  enum. A string keeps `""`.
+  enum column. A string keeps `""`; a string limited with `inclusion` takes
+  it only with `allow_blank: true`, as a select's empty choice needs.
 - A form's local date-time, `"2026-11-02T18:30"`, becomes a time in the app's
   time zone. A fraction of a second is kept.
 - An id may be an integer or a string.
@@ -543,7 +549,14 @@ Events::ExportAction.perform_later(caller:, format: "csv")
 lost access in between is refused. A refusal is logged and the job is
 dropped, not retried. The caller travels with the job, so its person, its
 connection and its `access` must be things Active Job can serialize, such
-as records.
+as records. A `Data` object such as the `ConnectionAccess` below is not:
+run that caller's actions with `perform_now`, or keep its access in a
+record.
+
+A subclass of an action keeps its parent's `connections`, `policy_rule`,
+`permission`, `feature`, `featured`, `idempotent`, `attribute :id` and
+`accepts`, as `class_attribute` does, until it declares its own. Its name,
+title, description and `cli` are its own.
 
 ### Lists for agents
 

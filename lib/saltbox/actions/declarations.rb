@@ -16,10 +16,21 @@ module Saltbox
     # - `summary`: the fields a list sends agents, and the CLI's columns.
     # - `cli`: the CLI's whole command.
     # - `returns`: the JSON Schema of the body it renders.
+    #
+    # What decides who may run an action (connections, policy_rule,
+    # permission, feature) and how agents treat it (idempotent, featured) is
+    # inherited, as class_attribute is: a subclass runs under its parent's
+    # rules until it declares its own. What names it (action_name, title,
+    # description, cli, kind, summary, returns) belongs to its own class.
     module Declarations
       extend ActiveSupport::Concern
 
       CONNECTIONS = %i[allowed confirm never].freeze
+
+      included do
+        class_attribute :_connections, :_declared_query, :_idempotent, :_featured, :_feature, :_permissions,
+          instance_accessor: false, instance_predicate: false
+      end
 
       class_methods do
         # Whether a caller other than a person on the app's screens may run the
@@ -38,16 +49,16 @@ module Saltbox
         # @return [Symbol, nil] nil only for an action whose kind is unknown
         def connections(rule = nil)
           unless rule
-            return @connections if @connections
+            return _connections if _connections
             return verb_rule[:connections] if verb_rule&.key?(:connections)
             return kind && ((kind == :destructive) ? :confirm : :allowed)
           end
           raise ArgumentError, "connections is :allowed, :confirm or :never, not #{rule.inspect}" unless CONNECTIONS.include?(rule)
-          @connections = rule
+          self._connections = rule
         end
 
-        # @return [Symbol, nil] the rule declared with `connections` in this class
-        def declared_connections = @connections
+        # @return [Symbol, nil] the rule declared with `connections`, in this class or a parent
+        def declared_connections = _connections
 
         # Declares the kind of an action whose verb is not in the verb table.
         #
@@ -68,10 +79,10 @@ module Saltbox
         #
         # @param rule [Symbol]
         # @return [Symbol]
-        def policy_rule(rule) = @declared_query = rule
+        def policy_rule(rule) = self._declared_query = rule
 
         # @return [Symbol, nil] the rule declared with `policy_rule`
-        def declared_query = @declared_query
+        def declared_query = _declared_query
 
         # Declares whether calling the action again with the same input
         # changes nothing more than the first call did, when its verb's
@@ -79,11 +90,11 @@ module Saltbox
         #
         # @param value [Boolean]
         # @return [Boolean]
-        def idempotent(value = true) = @idempotent = value
+        def idempotent(value = true) = self._idempotent = value
 
         # @return [Boolean] the declared value; otherwise the verb's, or true for any other read
         def idempotent?
-          return @idempotent unless @idempotent.nil?
+          return _idempotent unless _idempotent.nil?
           verb_rule ? verb_rule.fetch(:idempotent) : kind == :read
         end
 
@@ -91,10 +102,10 @@ module Saltbox
         # through find_action. Keep these to about fifteen.
         #
         # @return [void]
-        def featured = @featured = true
+        def featured = self._featured = true
 
         # @return [Boolean] whether the action is an MCP tool of its own
-        def featured? = @featured || false
+        def featured? = _featured || false
 
         # The feature flag the action needs. While the flag is off for the
         # caller, every caller gets not_found and the actions list leaves the
@@ -103,9 +114,9 @@ module Saltbox
         # @param key [String, nil]
         # @return [String, nil]
         def feature(key = nil)
-          return @feature unless key
+          return _feature unless key
           Actions.config.validate_feature.call(key)
-          @feature = key
+          self._feature = key
         end
 
         # Declares a record's summary: the fields a list action sends agents
@@ -173,8 +184,8 @@ module Saltbox
         #   permission "events.manage", any_of("comments.update", "comments.delete")
         def permission(*requirements)
           raise ArgumentError, "permission needs a key or :everyone" if requirements.empty?
-          return @permissions = [] if requirements == [:everyone]
-          @permissions = requirements.map { it.is_a?(Array) ? it : it.to_s }
+          return self._permissions = [] if requirements == [:everyone]
+          self._permissions = requirements.map { it.is_a?(Array) ? it : it.to_s }
         end
 
         # @param keys [Array<String, Symbol>] two or more keys
@@ -185,7 +196,7 @@ module Saltbox
         end
 
         # @return [Array<String, Array<String>>, nil] the declared requirements, [] for everyone, nil when undeclared
-        def permissions = @permissions
+        def permissions = _permissions
 
         # @return [Array<String>, nil] every key the declaration names
         def permission_keys = permissions&.flatten&.uniq

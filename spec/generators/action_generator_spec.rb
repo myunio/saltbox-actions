@@ -58,6 +58,11 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     expect(destination.join("app/actions/events/update_action.rb").read).to eq(action)
   end
 
+  it "finds the model outside an admin namespace, as the action will" do
+    generate("Admin::Events::Update")
+    expect(destination.join("app/actions/admin/events/update_action.rb").read).to include("class Admin::Events::UpdateAction", "event.update!")
+  end
+
   it "declares no connections, leaving them to the verb" do
     generate("Events::Delete")
     action = destination.join("app/actions/events/delete_action.rb").read

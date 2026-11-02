@@ -27,6 +27,10 @@ module Saltbox
       include ActiveModel::API
       include ActiveModel::Attributes
 
+      included do
+        class_attribute :_declares_id, :_accepted_fields, instance_accessor: false, instance_predicate: false, default: nil
+      end
+
       # The types an attribute takes. A time is a time of day, "HH:MM"; a hash
       # takes any keys, which the action checks itself.
       TYPES = %i[string integer decimal boolean date datetime time array hash].freeze
@@ -83,7 +87,7 @@ module Saltbox
         def attribute(name, type = nil, of: nil, nullable: false, description: nil, **options)
           name = name.to_s
           @inputs = nil
-          return @declares_id = true if name == "id" && type.nil?
+          return self._declares_id = true if name == "id" && type.nil?
           type ||= :string
           raise ArgumentError, "#{name} is a method every action has: name the attribute another way" if reserved_name?(name)
           raise ArgumentError, "#{name} takes a type: one of #{TYPES.join(", ")}" unless TYPES.include?(type)
@@ -100,7 +104,7 @@ module Saltbox
         end
 
         # @return [Boolean] whether the action declares `attribute :id`
-        def declares_id? = @declares_id || false
+        def declares_id? = _declares_id || false
 
         # Names the model fields the action takes, for an app whose
         # authorization adapter does not say which fields a person may set.
@@ -114,11 +118,11 @@ module Saltbox
         # @return [Array<String>]
         def accepts(*fields)
           @inputs = nil
-          @accepted_fields = fields.map(&:to_s).freeze
+          self._accepted_fields = fields.map(&:to_s).freeze
         end
 
         # @return [Array<String>] the fields named with `accepts`
-        def accepted_fields = @accepted_fields || []
+        def accepted_fields = _accepted_fields || []
 
         # Declares the paging inputs a list takes, as attributes the action
         # reads like any other: page, from 1, and page_size, up to

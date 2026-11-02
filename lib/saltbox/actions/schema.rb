@@ -234,13 +234,16 @@ module Saltbox
         def attribute_schema(name, attribute)
           validators = schema_validators(name)
           inclusion = validators.find { it.kind == :inclusion && it.options[:in].is_a?(Array) }
-          schema = Schema.for_attribute(attribute[:type], nullable: attribute[:nullable], enum: inclusion&.options&.fetch(:in), of: attribute[:of])
+          # allow_blank lets a form's empty choice ("") through, so the schema lists it too.
+          enum = inclusion && (inclusion.options[:in] + (inclusion.options[:allow_blank] ? [""] : [])).uniq
+          schema = Schema.for_attribute(attribute[:type], nullable: attribute[:nullable], enum:, of: attribute[:of])
           validators.each do |validator|
             case validator.kind
             when :length
               keys = (attribute[:type] == :array) ? %w[minItems maxItems] : %w[minLength maxLength]
-              schema[keys.first] = validator.options[:is] || validator.options[:minimum]
-              schema[keys.last] = validator.options[:is] || validator.options[:maximum]
+              low, high = validator.options.values_at(:minimum, :maximum).map { validator.options[:is] || it }
+              schema[keys.first] = low if low.is_a?(Integer)
+              schema[keys.last] = high if high.is_a?(Integer)
             when :numericality
               NUMBER_BOUNDS.each { |option, keyword| schema[keyword] = validator.options[option] if validator.options[option].is_a?(Numeric) }
             end

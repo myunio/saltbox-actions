@@ -18,13 +18,15 @@ module Saltbox
       # @return [Hash] what the job needs to build the caller again
       def self.serialize_caller(caller) = caller.to_h.compact.merge(class: caller.class.name).deep_stringify_keys
 
-      # @param action [String] the action's class name
+      # @param action [String] the action's public name, found in the registry
       # @param input [Hash]
       # @param caller [Hash] from serialize_caller
       # @return [Result]
+      # @raise [ArgumentError] when the caller's class is not a Caller
       def perform(action, input, caller)
-        fields = caller.except("class").symbolize_keys
-        Invocation.call(name: action.constantize, caller: caller.fetch("class").constantize.new(**fields), arguments: input)
+        caller_class = caller.fetch("class").safe_constantize
+        raise ArgumentError, "#{caller["class"]} is not a Saltbox::Actions::Caller" unless caller_class.is_a?(Class) && caller_class <= Caller
+        Invocation.call(name: Registry.fetch(action), caller: caller_class.new(**caller.except("class").symbolize_keys), arguments: input)
       end
     end
   end

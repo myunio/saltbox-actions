@@ -88,6 +88,15 @@ RSpec.describe Saltbox::Actions::Schema do
     %i[params errors authorize id].each do |name|
       expect { Class.new(ApplicationAction) { attribute name, :string } }.to raise_error(ArgumentError, "#{name} is a method every action has: name the attribute another way")
     end
+    bounded = Class.new(ApplicationAction) do
+      def self.name = "Events::ExportAction"
+      attribute :label, :string
+      validates :label, length: {minimum: 2, maximum: -> { 5 }}
+      attribute :style, :string
+      validates :style, inclusion: {in: %w[short long]}, allow_blank: true
+    end
+    expect(bounded.input_schema["properties"]).to include("label" => {"type" => "string", "minLength" => 2},
+      "style" => {"type" => "string", "enum" => ["short", "long", ""]})
     export = Class.new(ApplicationAction) do
       def self.name = "Events::ExportAction"
       attribute :format, :string

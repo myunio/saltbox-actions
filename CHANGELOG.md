@@ -41,6 +41,12 @@
   `perform_later` runs it through Active Job (`Saltbox::Actions::InvocationJob`), checking
   everything again when the job runs and dropping it on a refusal.
 - `Error::Invalid.for(errors)` turns Active Model errors into a `validation_failed` refusal.
+- A subclass of an action inherits its `connections`, `policy_rule`, `permission`, `feature`,
+  `featured`, `idempotent`, `attribute :id` and `accepts`, as `class_attribute` does. Before, a
+  subclass lost them, so a parent's `connections :never` or `permission` did not reach it.
+- `rails actions:check` refuses a model whose record reader would replace a method every action
+  has (`account`, `result`), a string attribute whose `inclusion` lists symbols, and `presence`
+  on a boolean. A `find_<record>` that returns `nil` is `not_found`.
 
 - Booting never touches the database. With eager loading, the boot checks only what each action
   declares (name, verb, kind, connections, unique names and CLI commands). `rails actions:check`

@@ -131,9 +131,9 @@ module Saltbox
 
         def resource_name = resource_path.map(&:camelize).join("::")
 
-        def model_name = resource_name.classify
+        def model = Naming.model_for(resource_name)
 
-        def model = model_name.safe_constantize
+        def model_name = model&.name || resource_name.classify
 
         def action_class_name = "#{resource_name}::#{words.map(&:camelize).join}Action"
 

@@ -216,6 +216,19 @@ module Saltbox
         if reader && action.declared_attributes.key?(reader)
           problems << "attribute #{reader} has the name of the reader for the #{action.model.model_name.human.downcase} it works on: rename the attribute"
         end
+        conflict = action.record_reader_conflict
+        if reader && conflict && !action.declared_attributes.key?(reader)
+          problems << "#{conflict.name || conflict.inspect}##{reader} is a method every action has, so the #{action.model.model_name.human.downcase} it works on gets no reader: name the action's model another way, or declare its kind and attribute :id without a verb that works on one record"
+        end
+        action.declared_attributes.each do |name, attribute|
+          action.validators_on(name).each do |validator|
+            if validator.kind == :inclusion && validator.options[:in].is_a?(Array) && validator.options[:in].any?(Symbol) && attribute[:type] == :string
+              problems << "#{name} is a string, and its inclusion lists symbols, so every value is refused: list strings"
+            elsif validator.kind == :presence && attribute[:type] == :boolean
+              problems << "#{name} is a boolean, and presence refuses false: validate inclusion: {in: [true, false]}"
+            end
+          end
+        end
         if action.accepted_fields.any? && !action.writes_fields?
           problems << "accepts names fields of the action's model, and it has none: declare model, or remove accepts"
         end
