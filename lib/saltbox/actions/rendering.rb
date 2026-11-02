@@ -7,6 +7,11 @@ module Saltbox
     # the template just as they do from a controller. Views are rendered with
     # the configured controller's renderer (Configuration#renderer), the Rails
     # way to render outside a request.
+    #
+    # A list action whose model has a summary renders it for an agent (any
+    # caller but a person on a screen) in place of the view: each record in
+    # the model's plural instance variable (@events), under data and the
+    # model's plural, with the meta beside it. Screens get the view.
     module Rendering
       # Instance variables the base class and its adapters set for themselves;
       # views never see them. Any starting @_ are left out too.
@@ -25,6 +30,8 @@ module Saltbox
         raise AbstractController::DoubleRenderError if performed?
         body = if !json.equal?(NO_JSON)
           json.as_json
+        elsif (records = summarized_records)
+          summaries(records, meta)
         else
           JSON.parse(Actions.config.renderer_class.render(template: template_path(template), formats: [:json], assigns: view_assigns, locals:))
         end
@@ -52,6 +59,22 @@ module Saltbox
         model = self.class.model
         raise ArgumentError, "#{self.class.name} has no model: name the template" unless model
         "#{model.model_name.collection}/#{template}"
+      end
+
+      # @return [Enumerable, nil] the records to summarize for this caller, or nil to render the view
+      def summarized_records
+        return unless actor.agent? && self.class.summarizes_list?
+        name = :"@#{self.class.model.model_name.plural}"
+        instance_variable_get(name) if instance_variable_defined?(name)
+      end
+
+      # The same JSON in either result format: {"data": {"events": [...]}, "meta": {...}}.
+      # The envelope format wraps the body in data and adds the meta itself.
+      def summaries(records, meta)
+        summary = self.class.summary
+        body = {self.class.model.model_name.plural => records.map { summary.call(it) }}
+        return body if Actions.config.result_format == :envelope
+        {"data" => body, "meta" => meta&.as_json}.compact
       end
 
       # @return [Hash{String => Object}] the action's own instance variables

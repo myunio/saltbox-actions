@@ -48,9 +48,20 @@ module Saltbox
           {"name" => action_name, "title" => title, "description" => description, "area" => area,
            "kind" => kind.to_s, "idempotent" => idempotent?, "scope" => scope, "connections" => connections.to_s,
            "permissions" => permissions&.grep(String), "permissions_any_of" => permissions&.grep(Array)&.presence,
-           "mcp_core" => mcp_core?, "cli" => {"command" => cli_command, "aliases" => declared_cli&.fetch(:aliases)&.presence,
-                                              "args" => cli_args, "columns" => cli_columns}.compact,
-           "input_schema" => input_schema, "output_schema" => output_schema}.compact
+           "mcp_core" => mcp_core?, "cli" => {"command" => cli_command, "aliases" => declared_cli&.fetch(:aliases)&.presence, "args" => cli_args}.compact,
+           "summary" => summary&.names, "input_schema" => input_schema, "output_schema" => output_schema}.compact
+        end
+
+        # Tells an agent what a list action sends back, and where to find
+        # the rest: "Returns each event's id and title. Call show_event with
+        # its id for the rest."
+        #
+        # @return [String, nil] nil for an action that does not send summaries
+        def summary_note
+          return unless summarizes_list?
+          note = "Returns each #{model.model_name.human.downcase}'s #{summary.names.to_sentence}."
+          show = Registry.find("show_#{model.model_name.singular}")
+          show ? "#{note} Call #{show.action_name} with its id for the rest." : note
         end
 
         # @return [Array<String>] the CLI command's positional arguments: the declared ones,

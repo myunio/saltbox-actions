@@ -16,9 +16,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -67,11 +72,11 @@
       ],
       "args": [
         "status"
-      ],
-      "columns": [
-        "count"
       ]
     },
+    "summary": [
+      "count"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -120,13 +125,13 @@
         "events",
         "create"
       ],
-      "args": [],
-      "columns": [
-        "id",
-        "title",
-        "starts_on"
-      ]
+      "args": []
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -192,9 +197,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -224,9 +234,14 @@
         "events",
         "list"
       ],
-      "args": [],
-      "columns": []
+      "args": []
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -238,6 +253,11 @@
             "cancelled"
           ],
           "description": "Only events with this status."
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
         }
       },
       "required": [],
@@ -261,9 +281,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -295,9 +320,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -329,9 +359,14 @@
       ],
       "args": [
         "id"
-      ],
-      "columns": []
+      ]
     },
+    "summary": [
+      "id",
+      "title",
+      "starts_on",
+      "status"
+    ],
     "input_schema": {
       "type": "object",
       "properties": {
@@ -396,8 +431,7 @@
       "command": [
         "whoami"
       ],
-      "args": [],
-      "columns": []
+      "args": []
     },
     "input_schema": {
       "type": "object",

@@ -2,6 +2,10 @@
 
 ## 0.1.0 (unreleased)
 
+- `summary` declares the fields a list action sends agents in place of its view, once per model
+  in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
+  the catalogue's `cli.columns` is now the top-level `summary`.
+
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
 
