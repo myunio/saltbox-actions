@@ -148,6 +148,19 @@ module Saltbox
         rescue ArgumentError => error
           problems << error.message
         end
+        problems.concat(summary_problems(action))
+      end
+
+      # @param action [Class] an action with a model
+      # @return [Array<String>] what is wrong with its summary, and the fix
+      def self.summary_problems(action)
+        summary = action.summary
+        return [] unless summary
+        model = action.model
+        problems = summary.fields.filter_map do |name, computed|
+          "#{model.name} has no #{name} for its summary: name an attribute or method, or compute it" unless computed || model.attribute_names.include?(name) || model.method_defined?(name)
+        end
+        problems << "its summary leaves out id, which agents need to call show: add :id" if action.summarizes_list? && !summary.names.include?("id")
         problems
       end
 
