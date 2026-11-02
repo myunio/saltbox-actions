@@ -81,7 +81,7 @@ RSpec.describe Event::UpdateAction do
   let(:event) { create(:event, title: "AGM") }
 
   it "renames the event" do
-    result = run({id: event.id.to_s, title: "Annual meeting"}, as: as_mcp(manager))
+    result = run({id: event.id, title: "Annual meeting"}, as: as_mcp(manager))
     expect(result.body.dig("data", "event", "title")).to eq("Annual meeting")
   end
 end
@@ -133,6 +133,24 @@ work, then calls `render` or `head`. If `perform` skips `authorize` or
 `app/views/events/show.json.jbuilder`. Instance variables you set in
 `perform` reach the view, as they do from a controller. You can also send a
 body with no view: `render json: {count: 3}`.
+
+### Input
+
+Before an action runs, its input is cast and then checked against its JSON
+Schema. The cast works like Active Record's, with each input's Active Model
+type, so form params work as they are:
+
+- `"12"` becomes `12` for an integer, and `"on"` or `"1"` becomes `true` for a
+  boolean.
+- An empty field (`""`) becomes `nil` for a number, a date, a boolean or an
+  enum. A string keeps `""`.
+- A form's local date-time, `"2026-11-02T18:30"`, becomes a time in the app's
+  time zone.
+- An id may be an integer or a string.
+- A decimal may be a number or a string of digits. A string keeps every digit.
+
+A value that is not of its type is refused, with an error on that field.
+Unlike Active Record, `"lots"` never becomes `0`.
 
 ### Names come from the class
 
@@ -412,15 +430,15 @@ RSpec.describe Event::UpdateAction do
   let(:permitted_account) { create(:user, :manager) }
   let(:unpermitted_account) { create(:user) }
   let(:event) { create(:event) }
-  let(:arguments) { {id: event.id.to_s, title: "AGM"} }
+  let(:arguments) { {id: event.id, title: "AGM"} }
 
   it_behaves_like "refuses callers the action does not allow"
   it_behaves_like "hides records the caller cannot see" do
-    let(:hidden_arguments) { {id: create(:event, :other_team).id.to_s} }
+    let(:hidden_arguments) { {id: create(:event, :other_team).id} }
   end
 
   it "refuses a bad capacity" do
-    expect { run({id: event.id.to_s, capacity: "lots"}, as: as_screen(permitted_account)) }
+    expect { run({id: event.id, capacity: "lots"}, as: as_screen(permitted_account)) }
       .to have_field_errors(:capacity)
   end
 end

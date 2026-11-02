@@ -1,0 +1,61 @@
+RSpec.describe Saltbox::Actions::Casting do
+  let(:event) { Event.create!(org_id: 1, title: "AGM", capacity: 40, price: 10, starts_on: Date.new(2026, 11, 2)) }
+  let(:update) { ->(arguments, caller = as_screen(manager)) { Saltbox::Actions::Invocation.call(name: "update_event", caller:, arguments: {id: event.id}.merge(arguments)) } }
+
+  it "takes what an HTML form sends from a screen, as Active Record would" do
+    update.call({"capacity" => "12", "price" => "12.30", "featured" => "on", "doors_open_at" => "2026-11-02T18:30", "status" => "published"})
+    expect(event.reload).to have_attributes(capacity: 12, price: BigDecimal("12.30"), featured: true, status: "published",
+      doors_open_at: Time.zone.parse("2026-11-02 18:30"))
+    update.call({"featured" => "0"})
+    expect(event.reload.featured).to be(false)
+  end
+
+  it "clears a number or a date sent as an empty field, and keeps an empty string as a string" do
+    update.call({"capacity" => "", "price" => "", "starts_on" => "", "doors_open_at" => ""})
+    expect(event.reload).to have_attributes(capacity: nil, price: nil, starts_on: nil, doors_open_at: nil)
+    expect(Saltbox::Actions::Arguments.for(Event::CreateAction).validate!(title: "")).to eq("title" => "")
+  end
+
+  it "treats an empty field that cannot be null as left out" do
+    update.call({"featured" => "", "status" => ""})
+    expect(event.reload).to have_attributes(featured: false, status: "draft")
+  end
+
+  it "takes an integer id and an integer reference, from any surface" do
+    parent = Event.create!(org_id: 1, title: "Conference")
+    update.call({parent: parent.id}, as_mcp(manager))
+    expect(event.reload.parent).to eq(parent)
+    update.call({"parent" => ""})
+    expect(event.reload.parent).to be_nil
+  end
+
+  it "takes a decimal as a number or a string, keeping every digit of the string" do
+    update.call({price: 9.5}, as_mcp(manager))
+    expect(event.reload.price).to eq(BigDecimal("9.5"))
+    update.call({price: "12345678.91"}, as_mcp(manager))
+    expect(event.reload.price).to eq(BigDecimal("12345678.91"))
+  end
+
+  it "refuses a value that is not of its type, naming each field, rather than casting it to 0 or true" do
+    expect { update.call({"capacity" => "lots", "price" => "12,30", "featured" => "maybe", "doors_open_at" => "soon"}) }
+      .to have_field_errors(:capacity, :price, :featured, :doors_open_at)
+    expect(event.reload).to have_attributes(capacity: 40, price: BigDecimal(10), featured: false)
+  end
+
+  it "casts declared arguments, including the items of a list, and drops a form's blank list item" do
+    action = Class.new(ApplicationAction) do
+      def self.name = "Event::ImportAction"
+      kind :change
+      connections :allowed
+      argument :rows, :array, of: {capacity: :integer, paid: :boolean}
+      argument :ids, :array, of: :integer
+      argument :page, :integer
+      argument :amount, :decimal
+    end
+    input = {"rows" => [{"capacity" => "3", "paid" => "1"}], "ids" => ["", "4", "5"], "page" => "2", "amount" => "1.50"}
+    expect(Saltbox::Actions::Arguments.for(action).validate!(input))
+      .to eq("rows" => [{"capacity" => 3, "paid" => true}], "ids" => [4, 5], "page" => 2, "amount" => "1.50")
+    expect { Saltbox::Actions::Arguments.for(action).validate!("page" => "two", "amount" => "1.5.0") }
+      .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to contain_exactly("page", "amount") }
+  end
+end

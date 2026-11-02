@@ -14,17 +14,20 @@ module Saltbox
       TIME = {"type" => "string", "pattern" => "^\\d{2}:\\d{2}$"}.freeze
       COLUMN_TYPES = {
         string: {"type" => "string"}, text: {"type" => "string"}, uuid: {"type" => "string", "format" => "uuid"},
-        integer: {"type" => "integer"}, decimal: {"type" => "number"}, float: {"type" => "number"},
+        integer: {"type" => "integer"}, decimal: {"type" => %w[number string], "pattern" => "^[+-]?(\\d+\\.?\\d*|\\.\\d+)$"},
+        float: {"type" => "number"},
         boolean: {"type" => "boolean"}, date: {"type" => "string", "format" => "date"}, time: TIME,
         datetime: {"type" => "string", "format" => "date-time"}
       }.freeze
-      # A decimal argument also takes a string, since a JSON number can lose
+      # A decimal also takes a string of digits, since a JSON number can lose
       # digits of a large amount and a string keeps every one. A hash takes any
       # keys: the action checks them itself.
-      ARGUMENT_TYPES = COLUMN_TYPES.slice(:string, :integer, :boolean, :date, :time)
-        .merge(decimal: {"type" => %w[number string]}, array: {"type" => "array"}, hash: {"type" => "object"}).freeze
-      # The schema of the id input that names the record an action works on.
-      ID = {"type" => "string"}.freeze
+      ARGUMENT_TYPES = COLUMN_TYPES.slice(:string, :integer, :decimal, :boolean, :date, :time)
+        .merge(array: {"type" => "array"}, hash: {"type" => "object"}).freeze
+      # The schema of a record's id: the id input, or a foreign key sent under
+      # its association's name. Rails code passes integer ids, and an id may
+      # also be a uuid or another string.
+      ID = {"type" => %w[string integer]}.freeze
 
       # One permitted field, under the name callers send: event_type for the
       # event_type_id column.
@@ -33,7 +36,8 @@ module Saltbox
       # @!attribute schema [Hash] the field's JSON Schema
       # @!attribute required [Boolean] whether a create must send it
       # @!attribute reference [Class, nil] the model a foreign key points to
-      Field = Data.define(:key, :schema, :required, :reference)
+      # @!attribute type [ActiveModel::Type::Value] the column's type, which casts what a form sends
+      Field = Data.define(:key, :schema, :required, :reference, :type)
 
       # @param type [Symbol]
       # @param nullable [Boolean]
@@ -50,6 +54,17 @@ module Saltbox
           schema["maxItems"] = Actions.config.max_array_items
         end
         nullable ? nullable(schema) : schema
+      end
+
+      # @param type [Symbol]
+      # @param of [Symbol, Hash, nil] what an array holds
+      # @return [ActiveModel::Type::Value, Array, Hash, nil] what casts an `argument`'s input (Casting.cast)
+      def self.type_for_argument(type, of: nil)
+        case type
+        when :hash then nil
+        when :array then [of.is_a?(Hash) ? of.to_h { |name, item| [name.to_s, type_for_argument(item)] } : type_for_argument(of || :string)]
+        else ActiveModel::Type.lookup(type)
+        end
       end
 
       # The schema of one item in a list of records. Fields other than those
@@ -98,6 +113,13 @@ module Saltbox
           end
         end
 
+        # @return [Hash{String => ActiveModel::Type::Value, Array, Hash}] what casts each input
+        #   before the schema checks it (Casting.cast)
+        def input_types
+          @input_types ||= writable_fields.transform_values(&:type)
+            .merge(arguments.transform_values { it[:type] }).compact.freeze
+        end
+
         # Checks a caller's input before the action runs. Override it in the
         # app's base class to check input another way.
         #
@@ -141,17 +163,17 @@ module Saltbox
           column = model.columns_hash[key]
           return unless column
           required = !column.null && column.default.nil? && column.default_function.nil?
+          type = model.type_for_attribute(key)
           if association&.belongs_to?
-            schema = {"type" => "string"}
-            return [association.name.to_s, Field.new(key:, schema: column.null ? Schema.nullable(schema) : schema, required:, reference: association.klass)]
+            return [association.name.to_s, Field.new(key:, schema: column.null ? Schema.nullable(ID) : ID, required:, reference: association.klass, type:)]
           end
           schema = if (values = model.defined_enums[key])
             {"type" => "string", "enum" => values.keys}
           else
-            COLUMN_TYPES.fetch(model.type_for_attribute(key).type) { return }.dup
+            COLUMN_TYPES.fetch(type.type) { return }.dup
           end
           schema["maxLength"] = column.limit if column.type == :string && column.limit
-          [key, Field.new(key:, schema: column.null ? Schema.nullable(schema) : schema, required:, reference: nil)]
+          [key, Field.new(key:, schema: column.null ? Schema.nullable(schema) : schema, required:, reference: nil, type:)]
         end
       end
     end

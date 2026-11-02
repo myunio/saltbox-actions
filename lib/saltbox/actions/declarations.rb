@@ -77,7 +77,8 @@ module Saltbox
         # @param description [String, nil] the input's description, in place of the locale file's
         # @param keywords [Hash] JSON Schema keywords from KEYWORDS: minimum:, max_length:, default:…;
         #   a default is also the value #perform reads when the caller leaves the input out
-        # @return [Hash] {schema:, required:}: the input's JSON Schema, and whether callers must send it
+        # @return [Hash] {schema:, required:, type:}: the input's JSON Schema, whether callers must send it,
+        #   and the Active Model type that casts what a form sends
         # @raise [ArgumentError] when an input other than id has no type, or its type is not in TYPES,
         #   or for a keyword not in KEYWORDS
         #
@@ -87,7 +88,7 @@ module Saltbox
         #   argument :page, :integer, minimum: 1, description: "Page number, from 1"
         def argument(name, type = nil, required: false, nullable: false, enum: nil, of: nil, description: nil, **keywords)
           name = name.to_s
-          @input_schema = nil
+          @input_schema = @input_types = nil
           return arguments[name] = {schema: Schema::ID, required: true} if name == "id" && type.nil?
           raise ArgumentError, "#{name} takes a type: one of #{TYPES.join(", ")}" unless TYPES.include?(type)
           unknown = keywords.keys - KEYWORDS.keys
@@ -95,7 +96,7 @@ module Saltbox
           schema = Schema.for_argument(type, nullable:, enum:, of:)
           schema = {"type" => schema["type"], "description" => description.squish}.merge(schema) if description
           keywords.each { |key, value| schema[KEYWORDS.fetch(key)] = value.as_json }
-          arguments[name] = {schema:, required:}
+          arguments[name] = {schema:, required:, type: Schema.type_for_argument(type, of:)}
         end
 
         # @return [Hash{String => Hash}] declared inputs by name, including the parent class's
