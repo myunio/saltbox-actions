@@ -121,6 +121,34 @@ RSpec.describe Saltbox::Actions::Summary do
     expect { Saltbox::Actions::Invocation.call(name: show, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s}) }.to raise_error(ArgumentError, /render collection: is for a list action with a summary/)
   end
 
+  it "sends a decimal column as text, as its schema says" do
+    Event.last.update!(price: "12.34")
+    priced = list { summary :id, :price }
+    result = Saltbox::Actions::Invocation.call(name: priced, caller: as_mcp(manager))
+    expect(result.as_json.dig("data", "events", 0, "price")).to eq("12.34")
+    expect(priced.summary_output_schema.dig("properties", "data", "properties", "events", "items", "properties", "price"))
+      .to eq("type" => %w[number string null])
+    expect(result).to match_output_schema(priced.summary_output_schema)
+  end
+
+  it "refuses a record or relation in a summarized list's meta, for every caller" do
+    leaky = list(perform: proc do
+      authorize Event
+      @events = policy_scope(Event)
+      render :index, meta: {page: 1, records: [@events.first], all: @events}
+    end)
+    [as_mcp(manager), as_screen(manager)].each do |caller|
+      expect { list_events(caller, action: leaky) }
+        .to raise_error(ArgumentError, "Event::ListAction sends agents Event's summary: meta.records[0] holds a Event; meta is plain data, such as paging")
+    end
+  end
+
+  it "checks a field's JSON, so a value that serializes to an object is refused" do
+    sneaky = Class.new(String) { def as_json(*) = {"org_id" => 1} }
+    expect { list_events(as_mcp(manager), action: list { summary :id, title: ->(_event) { sneaky.new("AGM") } }) }
+      .to raise_error(ArgumentError, /summary title is a .*: a summary field holds text/)
+  end
+
   it "refuses a field whose value is not plain, so no other attribute rides inside it" do
     smuggling = list { summary :id, record: ->(event) { event } }
     expect { list_events(as_mcp(manager), action: smuggling) }.to raise_error(ArgumentError, /summary record is a Event: a summary field holds text/)

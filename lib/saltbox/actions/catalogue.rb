@@ -87,11 +87,20 @@ module Saltbox
 
         private
 
-        # A column's type, or any plain value for a method or a computed field.
+        # A column's type as its value's as_json sends it, or any plain value
+        # for a method or a computed field. A decimal is sent as text, which
+        # keeps every digit, and a time column as a full timestamp.
         def summary_field_schema(name)
           column = model.columns_hash[name] unless summary.fields[name]
           return Summary::PLAIN_SCHEMA unless column
-          schema = model.defined_enums.key?(name) ? {"type" => "string"} : Schema::COLUMN_TYPES.fetch(model.type_for_attribute(name).type) { return Summary::PLAIN_SCHEMA }
+          type = model.type_for_attribute(name).type
+          schema = if model.defined_enums.key?(name) || type == :time
+            {"type" => "string"}
+          elsif type == :decimal
+            {"type" => %w[number string]}
+          else
+            Schema::COLUMN_TYPES.fetch(type) { return Summary::PLAIN_SCHEMA }
+          end
           column.null ? Schema.nullable(schema) : schema
         end
       end

@@ -38,7 +38,7 @@ module Saltbox
       #   or another action passes collection:
       def render(template = nil, status: :ok, json: NO_JSON, meta: nil, collection: NO_COLLECTION, **locals)
         raise AbstractController::DoubleRenderError if performed?
-        records = summarized_records(json, collection)
+        records = summarized_records(json, collection, meta)
         body = if records
           summaries(records, meta)
         elsif !json.equal?(NO_JSON)
@@ -73,8 +73,9 @@ module Saltbox
       end
 
       # @return [Enumerable, nil] the records to summarize for this caller, or nil to render as asked
-      # @raise [ArgumentError] when a list action with a summary would send agents anything else
-      def summarized_records(json, collection)
+      # @raise [ArgumentError] when a list action with a summary would send agents anything else:
+      #   json:, no records, or a record or relation in its meta
+      def summarized_records(json, collection, meta)
         action = self.class
         unless action.summarizes_list?
           raise ArgumentError, "render collection: is for a list action with a summary; #{action.name} has none" unless collection.equal?(NO_COLLECTION)
@@ -88,6 +89,7 @@ module Saltbox
         unless records.respond_to?(:map) && !records.is_a?(Hash)
           raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: set #{variable} to its records, or render collection:"
         end
+        plain_meta!(meta)
         records if actor.agent?
       end
 
@@ -98,6 +100,18 @@ module Saltbox
         body = {self.class.model.model_name.plural => records.map { summary.call(it) }}
         return body if Actions.config.result_format == :envelope
         {"data" => body, "meta" => meta&.as_json}.compact
+      end
+
+      # A summarized list's meta is the app's own plain data, such as paging:
+      # a record or a relation in it would reach agents around the summary.
+      def plain_meta!(value, path = "meta")
+        case value
+        when ActiveRecord::Base, ActiveRecord::Relation
+          raise ArgumentError, "#{self.class.name} sends agents #{self.class.model.name}'s summary: #{path} holds a #{value.class}; " \
+            "meta is plain data, such as paging"
+        when Hash then value.each { |key, item| plain_meta!(item, "#{path}.#{key}") }
+        when Array then value.each_with_index { |item, index| plain_meta!(item, "#{path}[#{index}]") }
+        end
       end
 
       # @return [Hash{String => Object}] the action's own instance variables
