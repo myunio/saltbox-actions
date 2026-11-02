@@ -209,6 +209,39 @@ person's own click may run it:
 
 A browser assistant (`webmcp`) never runs a destructive action.
 
+By default, nothing on the server checks that an agent asked before a
+`:confirm` action. The agent is only told to. To make the server check, turn
+on `enforce_confirm` and say how a person approves:
+
+```ruby
+Saltbox::Actions.configure do |config|
+  config.enforce_confirm = true
+  config.confirm do |invocation, action|
+    Approval.granted?(invocation.caller.account, action.action_name, invocation.arguments)
+  end
+end
+```
+
+With it on, an agent on the API, MCP or a browser page gets
+`confirmation_required` for a `:confirm` action, until the hook returns
+`true`. The hook sees the caller, the action and the checked arguments, so it
+can ask the person in your app. It can also raise an error of its own, such as
+`Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
+A person on a screen is never asked. Without a hook, every such call is
+refused.
+
+Some actions can reach what a stricter action guards: a create that can also
+publish, say. Check the stricter rule inside `perform`:
+
+```ruby
+actor.confirm!(Event::PublishAction) if params[:status] == "published"
+```
+
+`confirm!` refuses with `human_required` when that action's `connections`
+bar the caller, and with `confirmation_required` when it is `:confirm` and
+not approved. Call it before the action writes anything: a refusal rolls
+back the change, including anything the hook wrote.
+
 ### The order of refusals
 
 Every surface runs an action through `Saltbox::Actions::Invocation`. It
@@ -222,7 +255,9 @@ refuses in the same order every time, so the same call gets the same answer:
 
 Then the input is checked against the action's JSON Schema. A bad field gives
 `validation_failed`, with errors by field name. A record the person cannot
-see gives `not_found`, so its existence never shows.
+see gives `not_found`, so its existence never shows. With `enforce_confirm`
+on, a `:confirm` action the app has not approved gives
+`confirmation_required` before it runs.
 
 A change runs in its own database transaction. If it fails, its writes are
 undone.
@@ -237,6 +272,42 @@ To refuse in your own words, raise an error from `perform`:
 
 ```ruby
 raise ApplicationAction::Error.new("Published events are locked", code: :event_locked, status: :unprocessable_content)
+```
+
+### Limit what a connection reaches
+
+A token's scopes are broad: read, or read and write, across every action. To
+let one connection reach only some actions, give its caller an `access:`
+object that answers `allows?(action)`:
+
+```ruby
+# app/models/connection_access.rb
+ConnectionAccess = Data.define(:action_names) do
+  def allows?(action) = action_names.include?(action.action_name)
+end
+```
+
+Build the caller with it wherever you build one from a token. Here
+`token.action_names` stands for your own record of what the person allowed:
+
+```ruby
+ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: "Claude",
+  scopes: token.scopes, access: ConnectionAccess.new(token.action_names))
+```
+
+The caller then sees only those actions. The catalogue, `find_action` and the
+MCP tools leave the rest out, and a call to one of them is refused with
+`insufficient_scope`. The default message talks about read-only tokens, so
+set `on_access_refused` to say what happened in your words. It is also the
+place to note the refusal:
+
+```ruby
+# config/initializers/actions.rb
+Saltbox::Actions.configure do |config|
+  config.on_access_refused do |caller, action|
+    Saltbox::Actions::Error::InsufficientScope.new("This connection may not use #{action.title}. Allow it in Settings.")
+  end
+end
 ```
 
 ### Declarations
@@ -257,7 +328,8 @@ Put these at the top of an action class when the name cannot give them.
 | `title "..."`, `description "..."` | Text for agents. By default these come from `config/locales/actions.en.yml`. |
 | `model Customer` | The model, when the namespace is not one. `Admin::Customer::ExportAction` with `model Customer` is named `export_customers`. |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too. |
-| `cli_columns :id, :title`, `cli "events count"` | Hints for a command-line client you build on the catalogue. |
+| `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
+| `cli "events count"` | The command for a command-line client you build on the catalogue. |
 
 `argument` takes a type: `:string`, `:integer`, `:decimal`, `:boolean`,
 `:date`, `:time`, `:array` or `:hash`. It also takes `required:`,
@@ -269,6 +341,56 @@ JSON Schema keywords `format`, `minimum`, `maximum`, `min_length`,
 argument :page, :integer, minimum: 1, default: 1, description: "Page number, from 1"
 argument :payments, :array, of: {amount: :decimal, paid_on: :date}
 ```
+
+### Lists for agents
+
+A list's view often sends every field of every record. A person's screen
+needs that; an agent reading a list does not. Declare a model's **summary**
+once, in your base class, and every list of that model sends agents each
+record's summary instead:
+
+```ruby
+# app/actions/application_action.rb
+class ApplicationAction < Saltbox::Actions::Base
+  include Saltbox::Actions::Authorization::Pundit
+
+  summary Event, :id, :title, :starts_on, status: ->(event) { event.status.humanize }
+end
+```
+
+Name the record's own attributes or methods, and compute any other field
+with a lambda that takes the record. Keep `id` in it, so the agent can pick
+a record and run the show action for the rest. Leave links out, such as
+signed file URLs: an agent's transcript keeps everything it reads.
+
+Each field holds one plain value: text, a number, true or false, a date or
+time, or nil. Decimals and dates are sent as text. A record, a hash or a list
+stops the call with an error, so no field the summary leaves out reaches an
+agent inside another. The `meta:` beside it is your own plain data, such as
+paging: hashes, arrays, text, numbers, true or false, dates, times and nil.
+Anything else in it, such as a record or a set of them, stops the call too.
+
+`Event::ListAction` needs no change. It sets `@events` and calls
+`render :index, meta: {page: 2}`. Screens get views. Every other caller (the
+API, MCP, WebMCP and the assistant) gets summaries:
+
+```json
+{"data": {"events": [{"id": 7, "title": "AGM", "starts_on": "2026-07-01", "status": "Published"}]}, "meta": {"page": 2}}
+```
+
+A list action is one whose class name's verb is `list`. If it keeps its
+records under another name, or declares its own `action_name`, hand them
+over with `render :index, collection: @upcoming`. A list with a summary
+always renders a template and always hands over its records: `render json:`,
+or no records, stops the call with an error, rather than sending agents more
+than the summary.
+
+A model with no summary sends the view to everyone. An action can declare its
+own `summary :id, :title` in place of its model's. The catalogue lists the
+summary's fields as `summary`, which a command-line client prints as a table's
+columns, on every action of the model. For a list, its `output_schema`
+describes the summaries agents get, and `find_action` tells agents which
+fields a list returns.
 
 ### Titles and descriptions
 
@@ -311,6 +433,11 @@ with the CLI command `billing-invoices list`. Pick a different word, such
 as `namespace: "pay"`, and the names change without renaming any class.
 Without `namespace:`, names come from the class, and the CLI command
 leaves the module out (`invoices list`).
+
+`namespace:` is for isolated engines, the ones that call
+`isolate_namespace`. A model in an engine that is not isolated keeps its
+module in its name, so a namespace would be added to it
+(`list_billing_billing_invoices`). Leave `namespace:` out for those.
 
 Names and CLI commands must be unique. Two engines with an `Invoice`
 model need a namespace each, or the boot stops and names both classes.
@@ -408,6 +535,10 @@ Saltbox::Actions.configure do |config|
   end
 end
 ```
+
+Each keyword after `invocation` goes to PaperTrail's `controller_info`, so a
+richer agent stamp (the machine, the connection) goes there, with a column on
+`versions` for each.
 
 ## Testing with RSpec
 
@@ -517,15 +648,17 @@ end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
-`action_paths` (the folders actions load from), `catalogue_path`, `default_connections`, `error_format` and
-`result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
+`action_paths` (the folders actions load from), `catalogue_path`, `default_connections`, `enforce_confirm`
+with `confirm` (see Connections), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits
 
 - The unknown-action message always names `/api/v1/actions`, even if you
   mount the controller somewhere else.
 - `returns` is in the catalogue and in specs, but is not yet sent to MCP
-  clients as the tool's output schema.
+  clients as the tool's output schema. On a list with a summary, `returns`
+  describes the view screens get; check an agent's result with
+  `match_output_schema(described_class.summary_output_schema)`.
 - A literal `%` in a default error message must be written `%%`.
 - Configuration is set once, at boot. Changing it while requests run is not
   supported.

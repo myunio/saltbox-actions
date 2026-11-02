@@ -12,10 +12,11 @@ RSpec.describe "Declared names" do
 
   it "takes the declared name, title, description and CLI command in place of the class name's" do
     expect(action).to have_attributes(action_name: "count_events", title: "Count events", kind: :read, model: nil,
-      cli_command: %w[events count], cli_args: %w[status], cli_columns: %w[count])
+      cli_command: %w[events count], cli_args: %w[status])
+    expect(action.summary.names).to eq(%w[count])
     expect(action.description).to start_with("Use this when the person asks how many events")
     expect(action.definition).to include("permissions" => ["events.view"], "permissions_any_of" => [%w[events.manage events.delete]],
-      "cli" => {"command" => %w[events count], "aliases" => [%w[events tally]], "args" => %w[status], "columns" => %w[count]})
+      "cli" => {"command" => %w[events count], "aliases" => [%w[events tally]], "args" => %w[status]}, "summary" => %w[count])
   end
 
   it "describes each argument in its declaration, with JSON Schema keywords after the description" do

@@ -11,6 +11,8 @@ require "json_schemer"
 # Checked: the person without rights is refused; each agent surface is
 # refused or let through as the action's `connections` says; a read-only
 # token cannot change; a browser assistant never runs a destructive action.
+# With Configuration#enforce_confirm on, an agent's :confirm call is refused
+# until the app's confirm hook approves it.
 #
 # @example
 #   it_behaves_like "refuses callers the action does not allow" do
@@ -32,7 +34,13 @@ RSpec.shared_examples "refuses callers the action does not allow" do
       when :confirm then surface != :assistant && !(surface == :webmcp && described_class.kind == :destructive)
       else false
       end
-      outcome = expect { run(arguments, as: public_send(helper, permitted_account)) }
+      caller = public_send(helper, permitted_account)
+      if allowed && described_class.connections == :confirm && Saltbox::Actions.config.enforce_confirm
+        allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { false })
+        expect { run(arguments, as: caller) }.to be_refused.with(:confirmation_required)
+        allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
+      end
+      outcome = expect { run(arguments, as: caller) }
       allowed ? outcome.not_to(be_refused) : outcome.to(be_refused.with(:human_required))
     end
   end

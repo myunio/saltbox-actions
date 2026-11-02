@@ -4,9 +4,24 @@
 
 - Engines: `config.action_paths` is a list (replacing `actions_path`); an engine adds its
   folder in an initializer, with an optional `namespace:` for its actions' public names.
-- A warning names `ApplicationAction` subclasses outside every action folder.
+- A warning names `ApplicationAction` subclasses outside every action folder. Overlapping
+  folders (one inside another, or one spelled two ways) load each action once.
 - Boot checks run before sorting, so a namespace that is not a model gets its own message.
 - Duplicate action names and colliding CLI commands stop the boot, naming both classes.
+
+- `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
+  `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
+  default, which keeps `:confirm` as advice to agents.
+- `Caller#confirm!(action)` applies another action's `connections` rule inside a running action.
+
+- `summary` declares the fields a list action sends agents in place of its view, once per model
+  in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
+  the catalogue's `cli.columns` is now the top-level `summary`. A list's catalogue `output_schema`
+  is its `summary_output_schema`. `render collection:` hands over a list's records; a list with a
+  summary refuses `render json:`, missing records, field values whose JSON is not plain, and
+  meta that is not plain data (hashes, arrays, text, numbers, booleans, dates, times, nil).
+- find_action finds an action only through its title or name, or two or more of the
+  request's words in its description; one shared description word no longer matches.
 
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.

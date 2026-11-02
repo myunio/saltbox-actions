@@ -46,4 +46,14 @@ RSpec.describe "The actions API", type: :request do
     post "/api/v1/actions/delete_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
     expect(response).to have_http_status(:no_content)
   end
+
+  it "refuses a :confirm action the app has not approved, with enforce_confirm on" do
+    with_settings(enforce_confirm: true) do
+      post "/api/v1/actions/cancel_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
+    end
+    expect(response).to have_http_status(:forbidden)
+    expect(response.parsed_body).to eq("error" => {"code" => "confirmation_required",
+                                                   "message" => "The person must approve this in Dummy before it runs.", "details" => {"action" => "cancel_event"}})
+    expect(event.reload.status).to eq("draft")
+  end
 end

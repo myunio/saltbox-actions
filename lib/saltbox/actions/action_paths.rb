@@ -6,7 +6,10 @@ module Saltbox
     #
     # A folder may name a namespace for its actions' public names. It takes
     # the place of an isolated engine's module, so an engine can choose the
-    # word agents and scripts see, or keep it when the module is renamed:
+    # word agents and scripts see, or keep it when the module is renamed.
+    # It is for isolated engines (isolate_namespace): a model in an engine
+    # that is not isolated keeps its module in its name, so the namespace
+    # would be added to it (list_billing_billing_invoices).
     #
     # @example An engine's actions, named list_billing_invoices
     #   module Billing
@@ -24,8 +27,8 @@ module Saltbox
       # One folder: its path (relative to Rails.root, or absolute) and the
       # namespace its actions' names take, if any.
       Path = Data.define(:path, :namespace) do
-        # @return [Pathname] the folder's full path
-        def root = Rails.root.join(path.to_s)
+        # @return [Pathname] the folder's full path, the same however it was spelled
+        def root = Rails.root.join(path.to_s).cleanpath
 
         # @param file [String]
         # @return [Boolean] whether the file is inside the folder

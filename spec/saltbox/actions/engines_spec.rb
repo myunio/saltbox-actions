@@ -53,6 +53,29 @@ RSpec.describe "Actions from an engine" do
     end
   end
 
+  it "loads each action once when one folder is inside another, naming it by the inner folder" do
+    with_paths(["app/actions", engine_folder, Saltbox::Actions::ActionPaths::Path.new(path: "app/actions/event", namespace: "special")]) do
+      expect(registry.actions.count(Event::ListAction)).to eq(1)
+      expect(Event::ListAction.action_name).to eq("list_special_events")
+      expect(Reports::CountEventsAction.action_name).to eq("count_events")
+    end
+  end
+
+  it "loads each action once when one folder is listed relative and absolute" do
+    with_paths(["app/actions", Rails.root.join("app/actions"), "app/actions/", engine_folder]) do
+      expect(registry.actions.size).to eq(registry.actions.uniq.size)
+      expect(registry.actions).to include(Event::ListAction, Billing::Invoice::ListAction)
+    end
+  end
+
+  it "loads each action once from overlapping folders when actions are found as subclasses" do
+    with_settings(every_file_an_action: false) do
+      with_paths(["app/actions", Rails.root.join("app/actions"), "app/actions/event", engine_folder]) do
+        expect(registry.actions.count(Event::ListAction)).to eq(1)
+      end
+    end
+  end
+
   it "refuses a namespace that cannot be part of a name" do
     expect { Saltbox::Actions::ActionPaths.new.add("x", namespace: "Billing") }.to raise_error(ArgumentError, /lowercase/)
   end

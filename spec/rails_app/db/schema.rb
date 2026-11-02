@@ -4,6 +4,7 @@ ActiveRecord::Schema.define(version: 1) do
     t.string :title, null: false, limit: 120
     t.date :starts_on
     t.integer :capacity
+    t.decimal :price, precision: 8, scale: 2
     t.string :status, null: false, default: "draft"
     t.text :notes
     t.integer :parent_id

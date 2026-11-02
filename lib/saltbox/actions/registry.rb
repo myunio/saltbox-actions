@@ -18,8 +18,9 @@ module Saltbox
       # @return [void] forgets the loaded actions, so the next call loads them again
       def self.reset! = @actions = @version = nil
 
-      # @return [Array<Pathname>] the folders actions load from (see Configuration#action_paths)
-      def self.roots = Actions.config.action_paths.map(&:root)
+      # @return [Array<Pathname>] the folders actions load from (see Configuration#action_paths),
+      #   each once however it was spelled
+      def self.roots = Actions.config.action_paths.map(&:root).uniq
 
       # The files in the action folders, without the base class's own file
       # and folder (application_action.rb and application_action/), which hold
@@ -35,6 +36,8 @@ module Saltbox
             "/#{Pathname(path).relative_path_from(root).to_s.delete_suffix(".rb")}/".include?(support)
           end
         end
+        # A folder inside another lists its files twice: each counts once.
+        files = files.uniq
         misnamed = files.reject { it.end_with?("_action.rb") }
         raise ArgumentError, "Every file in #{Actions.config.action_paths} ends _action.rb: rename or move #{misnamed.map { relative(it) }.join(", ")}" if misnamed.any?
         files
@@ -199,6 +202,19 @@ module Saltbox
         rescue ArgumentError => error
           problems << error.message
         end
+        problems.concat(summary_problems(action))
+      end
+
+      # @param action [Class] an action with a model
+      # @return [Array<String>] what is wrong with its summary, and the fix
+      def self.summary_problems(action)
+        summary = action.summary
+        return [] unless summary
+        model = action.model
+        problems = summary.fields.filter_map do |name, computed|
+          "#{model.name} has no #{name} for its summary: name an attribute or method, or compute it" unless computed || model.attribute_names.include?(name) || model.method_defined?(name)
+        end
+        problems << "its summary leaves out id, which agents need to call show: add :id" if action.summarizes_list? && !summary.names.include?("id")
         problems
       end
 
