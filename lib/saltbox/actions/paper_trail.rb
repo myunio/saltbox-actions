@@ -2,10 +2,11 @@ require "paper_trail"
 
 module Saltbox
   module Actions
-    # Uses PaperTrail as the change collection's source: every version a
-    # change writes is noted, so Configuration#on_changes hears of each
-    # record, dependents included. Wrap each run in a PaperTrail request so
-    # each version names the person and the agent.
+    # Uses PaperTrail as a source for the change collection: every version
+    # a change writes is noted, so Configuration#on_changes hears of each
+    # versioned record, dependents included. ChangeTracking does the same
+    # without PaperTrail; with both, each record is noted once. Wrap each run
+    # in a PaperTrail request so each version names the person and the agent.
     #
     # @example config/initializers/actions.rb
     #   Saltbox::Actions::PaperTrail.install!
@@ -21,7 +22,7 @@ module Saltbox
       # @return [void]
       def self.install!
         return if @installed
-        ::PaperTrail::Version.after_create { Invocation.note(item_type, item_id, event) }
+        ::PaperTrail::Version.after_create { Invocation.note(item_type, item_id, event, transaction: self.class.current_transaction) }
         @installed = true
       end
 

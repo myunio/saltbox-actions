@@ -3,8 +3,9 @@ module Saltbox
     # The one path every surface runs an action through. Inside the app's
     # set-up for the caller (Configuration#around_invocation) it refuses in a
     # fixed order, checks the input, and runs the action: a read as it is, a
-    # change inside a transaction that notes every record it changed and hands
-    # them to Configuration#on_changes before commit. The same changes are
+    # change inside its model's transaction that notes every record it
+    # changed (see ChangeTracking) and hands them to Configuration#on_changes
+    # before commit. The same changes are
     # published as the changes.saltbox_actions notification. Every refusal
     # leaves as an Error.
     class Invocation
@@ -41,16 +42,23 @@ module Saltbox
         end
       end
 
-      # Notes one changed record. An audit trail calls it for each entry it
-      # writes (see Saltbox::Actions::PaperTrail). Outside a collection it
-      # does nothing.
+      # Notes one changed record. ChangeTracking calls it for each record
+      # saved or destroyed, and an audit trail may call it for each entry it
+      # writes (see Saltbox::Actions::PaperTrail). A note is dropped if the
+      # transaction it was made in rolls back. Outside a collection it does
+      # nothing.
       #
       # @param item_type [String] the changed record's class name
-      # @param item_id [String]
+      # @param item_id [#to_s]
       # @param event_type [String] create, update, destroy or another event
+      # @param transaction [ActiveRecord::Transaction] the write's
+      #   transaction; pass the model's own in a multi-database app
       # @return [void]
-      def self.note(item_type, item_id, event_type)
-        Current.changes&.push([item_type, item_id, event_type])
+      def self.note(item_type, item_id, event_type, transaction: ActiveRecord::Base.current_transaction)
+        return unless Current.changes
+        change = [item_type, item_id.to_s, event_type]
+        Current.changes.push(change)
+        transaction.after_rollback { Current.changes&.delete_if { it.equal?(change) } } if transaction.open?
       end
 
       # @param action [Class]
@@ -135,7 +143,9 @@ module Saltbox
           next action.perform_now if @action.kind == :read
           # Its own savepoint inside a caller's transaction, so a failure
           # undoes the action's writes even when the caller rescues it.
-          ActiveRecord::Base.transaction(requires_new: true) do
+          # The model's own connection, so a model in a second database
+          # is rolled back too. Writes on any other connection are not.
+          transaction_class.transaction(requires_new: true) do
             result, changes = self.class.collect_changes { action.perform_now }
             Actions.config.on_changes.call(changes, self)
             ActiveSupport::Notifications.instrument("changes.saltbox_actions", action: @action, caller: @caller, changes:)
@@ -144,6 +154,11 @@ module Saltbox
             result
           end
         end)
+      end
+
+      def transaction_class
+        model = @action.model
+        (model.is_a?(Class) && model < ActiveRecord::Base) ? model : ActiveRecord::Base
       end
 
       # The Error callers see for an exception raised inside the action, or
