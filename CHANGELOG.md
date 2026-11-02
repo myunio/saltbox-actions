@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+- Engines: `config.action_paths` is a list (replacing `actions_path`); an engine adds its
+  folder in an initializer, with an optional `namespace:` for its actions' public names.
+- A warning names `ApplicationAction` subclasses outside every action folder.
+- Boot checks run before sorting, so a namespace that is not a model gets its own message.
+- Duplicate action names and colliding CLI commands stop the boot, naming both classes.
+
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
 

@@ -210,6 +210,30 @@
     }
   },
   {
+    "name": "list_billing_invoices",
+    "title": "List billing invoices",
+    "area": "billing",
+    "kind": "read",
+    "idempotent": true,
+    "scope": "api:read",
+    "connections": "allowed",
+    "mcp_core": false,
+    "cli": {
+      "command": [
+        "billing-invoices",
+        "list"
+      ],
+      "args": [],
+      "columns": []
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "list_events",
     "title": "List events",
     "description": "Lists the events the person can see, newest first.",

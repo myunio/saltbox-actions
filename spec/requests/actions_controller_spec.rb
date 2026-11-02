@@ -11,6 +11,11 @@ RSpec.describe "The actions API", type: :request do
     expect(response).to have_http_status(:not_modified)
   end
 
+  it "runs an engine's action like the app's own" do
+    post "/api/v1/actions/list_billing_invoices", params: {arguments: {}}.to_json, headers: headers
+    expect(response.parsed_body.dig("error", "code")).to eq("forbidden")
+  end
+
   it "shows one definition and answers an unknown name" do
     get "/api/v1/actions/update_event", headers: headers
     expect(response.parsed_body.dig("data", "kind")).to eq("change")
