@@ -539,9 +539,20 @@ Agents see a short list of tools, not one per action:
 
 - each action declared `mcp_core`, as a tool of its own (keep these to about
   fifteen);
-- `find_action`, to search all the others;
+- `find_action`, to search all the others; with no query, it lists every
+  action the agent can run, 50 at a time (`page` and `page_size`, at most
+  100);
 - `run_read_action`, `run_change_action` and `run_destructive_action`, to run
   what `find_action` found.
+
+`find_action` marks each action `confirm_first` when it is declared
+`connections :confirm`. The change tool tells the agent to ask before those
+and to go ahead with the rest, saying what it is changing. The remove tool
+always asks first.
+
+If your app sorts actions into areas (`config.area_for`), the list is sorted
+by area, then name. Set `config.area_order = %w[events billing]` to put
+those areas first.
 
 ### In-app assistant
 
