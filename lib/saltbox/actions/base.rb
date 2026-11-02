@@ -95,10 +95,9 @@ module Saltbox
         # @return [void]
         def define_record_reader
           return if @record_reader_defined
-          @record_reader_defined = true
           reader = record_name
-          return if reader.nil?
-          include(Module.new { define_method(reader) { member_record } })
+          include(Module.new { define_method(reader) { member_record } }) if reader
+          @record_reader_defined = true
         end
       end
 

@@ -73,7 +73,8 @@ module Saltbox
         # @param description [String, nil] what agents read, unless the locale file describes it
         # @param default [Object, nil] the value when the caller leaves it out; also listed in the schema
         # @return [void]
-        # @raise [ArgumentError] for a type not in TYPES
+        # @raise [ArgumentError] for a type not in TYPES, or a name the action already uses,
+        #   such as params, render or errors
         #
         # @example A list of records, each with typed fields
         #   attribute :payments, :array, of: {amount: :decimal, paid_on: :date}
@@ -84,6 +85,7 @@ module Saltbox
           @inputs = nil
           return @declares_id = true if name == "id" && type.nil?
           type ||= :string
+          raise ArgumentError, "#{name} is a method every action has: name the attribute another way" if reserved_name?(name)
           raise ArgumentError, "#{name} takes a type: one of #{TYPES.join(", ")}" unless TYPES.include?(type)
           unknown = options.keys - [:default]
           raise ArgumentError, "#{name} takes no #{unknown.join(", ")}: validations shape an attribute's schema" if unknown.any?
@@ -145,6 +147,16 @@ module Saltbox
         def validates_with(...)
           @inputs = nil
           super
+        end
+
+        private
+
+        # A method the action's own classes define (params, render, errors,
+        # authorize, id), which an attribute's reader would replace. Ruby's
+        # own, such as format, an attribute may take, as a model's column may.
+        def reserved_name?(name)
+          return false if declared_attributes.key?(name)
+          (method_defined?(name) || private_method_defined?(name)) && !Object.method_defined?(name) && !Object.private_method_defined?(name)
         end
       end
 

@@ -40,7 +40,7 @@ module Saltbox
       # @return [Array<String>] the areas find_action lists first, in this order;
       #   the rest follow alphabetically, then actions with no area
       attr_accessor :area_order
-      # @return [Integer, #call] the most items an array argument takes
+      # @return [Integer, #call] the most items an array attribute takes
       attr_writer :max_array_items
       # @return [Boolean] whether Invocation refuses a person who lacks an action's
       #   declared permissions; when false they only decide the actions list

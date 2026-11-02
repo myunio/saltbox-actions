@@ -16,6 +16,7 @@ module Saltbox
         @actions ||= begin
           entries = Actions.config.every_file_an_action ? action_files.map { |path| action_at(path) } : descendants
           validate!(entries)
+          entries.each(&:define_record_reader)
           warn_outside(entries)
           entries.sort_by(&:action_name).freeze
         end

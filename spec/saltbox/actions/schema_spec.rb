@@ -85,6 +85,14 @@ RSpec.describe Saltbox::Actions::Schema do
     expect(properties["starts_at"]).to eq("type" => "string", "format" => "date-time")
     expect { Class.new(ApplicationAction) { attribute :page, :integer, minimum: 1 } }
       .to raise_error(ArgumentError, "page takes no minimum: validations shape an attribute's schema")
+    %i[params errors authorize id].each do |name|
+      expect { Class.new(ApplicationAction) { attribute name, :string } }.to raise_error(ArgumentError, "#{name} is a method every action has: name the attribute another way")
+    end
+    export = Class.new(ApplicationAction) do
+      def self.name = "Events::ExportAction"
+      attribute :format, :string
+    end
+    expect(export.input_schema["properties"]).to have_key("format")
   end
 
   it "shapes an attribute's schema with the validations that always run" do

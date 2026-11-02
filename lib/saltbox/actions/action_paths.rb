@@ -70,7 +70,7 @@ module Saltbox
       def for(file) = select { it.covers?(file) }.max_by { it.root.to_s.length }
 
       # @param file [String] a file inside one of the folders
-      # @return [Pathname] its path inside its folder: event/update_action.rb
+      # @return [Pathname] its path inside its folder: events/update_action.rb
       def relative(file) = Pathname(file).relative_path_from(self.for(file).root)
 
       # @param action [Class]
