@@ -18,10 +18,17 @@ module Rspec
 
       # @return [void]
       def write_spec
-        template "action_spec.rb.tt", File.join("spec/actions", *class_path, "#{file_name}_action_spec.rb")
+        template "action_spec.rb.tt", spec_path
+      end
+
+      # @return [void]
+      def say_placeholders
+        say "Fill in the placeholders in #{spec_path}: it raises NotImplementedError until you do.", :yellow
       end
 
       private
+
+      def spec_path = File.join("spec/actions", *class_path, "#{file_name}_action_spec.rb")
 
       def words = file_name.split("_")
 

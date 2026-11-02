@@ -179,7 +179,10 @@ module Saltbox
             @expected.empty? ? @announced.any? : @missing.empty?
           end
 
-          def failure_message = "expected the action to announce #{@missing.inspect}, but it announced #{@announced.inspect}"
+          def failure_message
+            message = "expected the action to announce #{@missing.inspect}, but it announced #{@announced.inspect}"
+            (@announced.empty? && !ChangeTracking.in_use?) ? "#{message}. #{ChangeTracking::NOT_IN_USE}" : message
+          end
 
           def failure_message_when_negated = "expected the action to announce no changes, but it announced #{@announced.inspect}"
 

@@ -134,9 +134,11 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     with_settings(base_class: "OpenAction") do
       generate("Events::Archive", "--kind", "change")
       expect(destination.join("app/actions/events/archive_action.rb").read).to include("class Events::ArchiveAction < OpenAction")
-      generate("Events::Update")
+      output = generate("Events::Update")
       expect(destination.join("app/actions/events/update_action.rb").read)
-        .to include("accepts :org_id, :title, :starts_on, :capacity, :price, :featured, :doors_open_at, :status, :notes, :parent")
+        .to include("  accepts :org_id, :title, :starts_on, :capacity, :price, :featured, :doors_open_at, :status, :notes\n" \
+          "  # A caller may point a reference at any record it can see: accept one only if that is safe.\n  # accepts :parent\n")
+      expect(output).to include("Left parent out of accepts", "Fill in the placeholders in spec/actions/events/update_action_spec.rb")
     end
   end
 

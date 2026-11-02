@@ -8,9 +8,10 @@ class ActionGeneratorTest < ActiveSupport::TestCase
   test "Rails discovers the default test framework hook" do
     assert_equal TestUnit::Generators::ActionGenerator, Rails::Generators.find_by_namespace("test_unit:action")
     Dir.mktmpdir("action-generator") do |destination|
-      capture_io do
+      output, = capture_io do
         Saltbox::Actions::Generators::ActionGenerator.start(["Events::Update", "--no-catalogue"], destination_root: destination)
       end
+      assert_includes output, "Fill in the placeholders in test/actions/events/update_action_test.rb"
       test_file = Pathname(destination).join("test/actions/events/update_action_test.rb")
       assert test_file.exist?, "rails g action must invoke test_unit by default"
       assert Pathname(destination).join("app/actions/events/update_action.rb").exist?

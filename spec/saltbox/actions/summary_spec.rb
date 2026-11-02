@@ -92,14 +92,24 @@ RSpec.describe Saltbox::Actions::Summary do
     end
   end
 
-  it "refuses render json: from a list with a summary, so the summary is never skipped" do
+  it "refuses render json: alone from a list with a summary, so the summary is never skipped" do
     as_json = list(perform: proc do
       authorize Event
       @events = policy_scope(Event)
       render json: {data: {events: @events.as_json}}
     end)
     expect { list_events(as_mcp(manager), action: as_json) }
-      .to raise_error(ArgumentError, "Events::ListAction sends agents Event's summary: render a template with @events or collection:, not json:")
+      .to raise_error(ArgumentError, "Events::ListAction sends agents Event's summary: render a template with @events, " \
+        "or hand over its records with collection:, beside json: if you send one")
+  end
+
+  it "sends screens the json: of a serializer, and agents the summaries of the collection: beside it" do
+    serialized = list(perform: proc do
+      records = policy_scope(Event).order(:id)
+      render json: {events: records.map { {title: it.title, notes: it.notes} }}, collection: records
+    end)
+    expect(list_events(as_screen(manager), action: serialized)).to eq("events" => [{"title" => "AGM", "notes" => "Bring the minutes"}])
+    expect(list_events(as_mcp(manager), action: serialized).dig("data", "events", 0).keys).to eq(%w[id title starts_on status])
   end
 
   it "summarizes a renamed list action's records handed over with collection:" do
