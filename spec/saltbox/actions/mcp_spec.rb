@@ -85,4 +85,16 @@ RSpec.describe Saltbox::Actions::MCP do
     _, _, body = rpc("tools/call", {name: "run_destructive_action", arguments: {name: "delete_event", arguments: {id: event.id.to_s}}})
     expect(body.dig("result", "content", 0, "text")).to eq("Done.")
   end
+
+  it "answers a field the caller may not set with the app's on_forbidden_fields error" do
+    _, _, body = rpc("tools/call", {name: "run_change_action", arguments: {name: "create_event", arguments: {title: "AGM", notes: "x"}}})
+    expect(body.dig("result", "isError")).to be(true)
+    expect(body.dig("result", "structuredContent", "error")).to eq("code" => "forbidden", "message" => "You can't change notes.", "errors" => {"notes" => ["you can't change this"]})
+
+    refusal = ->(_caller, _action, fields) { Saltbox::Actions::Error::Forbidden.new("Ask an organizer to change #{fields.to_sentence}.", details: {"fields" => fields}) }
+    allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
+    _, _, body = rpc("tools/call", {name: "run_change_action", arguments: {name: "create_event", arguments: {title: "AGM", notes: "x"}}})
+    expect(body.dig("result", "structuredContent", "error")).to eq("code" => "forbidden", "message" => "Ask an organizer to change notes.", "details" => {"fields" => ["notes"]})
+    expect(record_data(body.dig("result", "content", 0, "text")).dig("error", "message")).to eq("Ask an organizer to change notes.")
+  end
 end

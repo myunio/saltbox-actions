@@ -10,8 +10,8 @@ module Saltbox
     # - values are passed on exactly as sent (a time stays its "HH:MM"
     #   string), so Active Record parses them itself, in the app's time zone.
     #
-    # The app's base class may override #resolve_reference and
-    # #refuse_forbidden_fields! to say more.
+    # The app's base class may override #resolve_reference to say more. A
+    # refused field is answered by Configuration#on_forbidden_fields.
     module Permitting
       # @param record [ActiveRecord::Base, Class] the record, or its model for a create
       # @return [ActiveSupport::HashWithIndifferentAccess] the fields sent, keyed as the policy names them
@@ -49,9 +49,9 @@ module Saltbox
       end
 
       # @param fields [Array<String>] the fields sent that the person may not change
-      # @raise [Error::Forbidden]
+      # @raise [Error::Forbidden] the one Configuration#on_forbidden_fields returns
       def refuse_forbidden_fields!(fields)
-        raise Error::Forbidden.fields(fields)
+        raise Actions.config.on_forbidden_fields.call(actor, self.class, fields)
       end
     end
   end

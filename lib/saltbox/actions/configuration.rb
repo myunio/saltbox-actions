@@ -86,6 +86,7 @@ module Saltbox
         @after_change = ->(_invocation, _result) {}
         @confirm = ->(_invocation, _action) { false }
         @on_access_refused = ->(_caller, _action) { Error::InsufficientScope.new }
+        @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.fields(fields) }
         @feature_enabled = ->(_key, _caller) { true }
         @validate_feature = ->(_key) {}
         @area_for = ->(_model) {}
@@ -150,6 +151,18 @@ module Saltbox
       # @yieldparam action [Class]
       # @yieldreturn [Error]
       def on_access_refused(&block) = block ? @on_access_refused = block : @on_access_refused
+
+      # Called when a caller sends a field of the action's model they may not
+      # set, whether their input schema leaves it out or the policy refuses
+      # it for the record. Returns the Error to raise, a Forbidden, so the
+      # refusal can say why in your words. The default names each field:
+      # "You can't change notes."
+      #
+      # @yieldparam caller [Caller]
+      # @yieldparam action [Class]
+      # @yieldparam fields [Array<String>] each field sent that the caller may not set
+      # @yieldreturn [Error::Forbidden]
+      def on_forbidden_fields(&block) = block ? @on_forbidden_fields = block : @on_forbidden_fields
 
       # Approves a :confirm action for an agent, when #enforce_confirm is on:
       # the place to ask the person through the app's own channel. Return

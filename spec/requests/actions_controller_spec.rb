@@ -56,4 +56,20 @@ RSpec.describe "The actions API", type: :request do
                                                    "message" => "The person must approve this in Dummy before it runs.", "details" => {"action" => "cancel_event"}})
     expect(event.reload.status).to eq("draft")
   end
+
+  it "names each field the caller may not set, in the app's words when it sets on_forbidden_fields" do
+    post "/api/v1/actions/create_event", params: {arguments: {title: "AGM", notes: "x"}}.to_json, headers: headers
+    expect(response).to have_http_status(:forbidden)
+    expect(response.parsed_body).to eq("error" => {"code" => "forbidden", "message" => "You can't change notes.", "errors" => {"notes" => ["you can't change this"]}})
+
+    refusal = ->(caller, action, fields) {
+      Saltbox::Actions::Error::Forbidden.new("Account #{caller.account.id} can't change #{fields.to_sentence} on #{action.action_name}.",
+        errors: fields.index_with { ["needs events.notes"] }, details: {"needs" => "events.notes"})
+    }
+    allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
+    post "/api/v1/actions/create_event", params: {arguments: {title: "AGM", notes: "x"}}.to_json, headers: headers
+    expect(response).to have_http_status(:forbidden)
+    expect(response.parsed_body).to eq("error" => {"code" => "forbidden", "message" => "Account 1 can't change notes on create_event.",
+                                                   "errors" => {"notes" => ["needs events.notes"]}, "details" => {"needs" => "events.notes"}})
+  end
 end

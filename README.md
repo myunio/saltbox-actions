@@ -650,6 +650,17 @@ tenant is set. Two callers whose policy permits different fields see
 different schemas. A field of the model the caller may not set is refused
 as forbidden: "You can't change notes."
 
+To word that refusal yourself, set `on_forbidden_fields`. It gets the
+caller, the action and the fields they sent but may not set, and returns
+the error to raise:
+
+```ruby
+config.on_forbidden_fields do |caller, action, fields|
+  Saltbox::Actions::Error::Forbidden.new("Your role, #{caller.account.role_name}, can't change #{fields.to_sentence}.",
+    errors: fields.index_with { ["your role can't change this"] })
+end
+```
+
 Some places have no caller: the committed catalogue, `rails actions:check`
 and the registry spec, the generator's field list, and
 `be_invalid_against_schema` or `assert_invalid_against_schema` without `as:`.
