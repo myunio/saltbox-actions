@@ -1,13 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (unreleased)
 
 - `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
   `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
   default, which keeps `:confirm` as advice to agents.
 - `Caller#confirm!(action)` applies another action's `connections` rule inside a running action.
-
-## 0.1.0 (unreleased)
 
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
