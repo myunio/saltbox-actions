@@ -5,6 +5,8 @@ ActiveRecord::Schema.define(version: 1) do
     t.date :starts_on
     t.integer :capacity
     t.decimal :price, precision: 8, scale: 2
+    t.boolean :featured, null: false, default: false
+    t.datetime :doors_open_at
     t.string :status, null: false, default: "draft"
     t.text :notes
     t.integer :parent_id

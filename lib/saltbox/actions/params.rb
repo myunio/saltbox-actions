@@ -1,7 +1,8 @@
 module Saltbox
   module Actions
-    # The input a caller sent, already checked against the action's JSON
-    # Schema. Values stay as JSON sent them: strings, numbers, booleans or nil.
+    # The input a caller sent, already cast (Casting) and checked against the
+    # action's JSON Schema. Values are JSON values: strings, numbers, booleans
+    # or nil.
     # Reading a key the action does not declare raises ArgumentError instead
     # of returning nil, so a typo fails in the action's spec rather than in
     # production.

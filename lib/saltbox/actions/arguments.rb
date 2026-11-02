@@ -4,39 +4,47 @@ require "concurrent/map"
 module Saltbox
   module Actions
     # Checks a caller's input against an action's JSON Schema before the
-    # action runs. It refuses, naming each field:
+    # action runs. It first casts what an HTML form sends, with each input's
+    # Active Model type (Casting), then refuses, naming each field:
     # - a field the schema does not list;
-    # - a value of the wrong type;
+    # - a value of the wrong type, or a number its type cannot hold;
     # - a missing required field.
     class Arguments
       # @param schema [Hash] a closed JSON Schema object
       # @param name [String, nil] the action's name, used in error messages
-      def initialize(schema, name: nil)
+      # @param types [Hash{String => Object}] what casts each input (Casting.cast)
+      def initialize(schema, name: nil, types: {})
         @schema = schema
         @name = name
+        @types = types
       end
 
       # @param action [Class]
       # @return [Arguments] a checker for the action's input schema
-      def self.for(action) = new(action.input_schema, name: action.action_name)
+      def self.for(action) = new(action.input_schema, name: action.action_name, types: action.input_types)
 
       # A null sent for a field that cannot be null counts as left out, since
       # agents often send null for a field they mean to skip.
       #
       # @param arguments [Hash, nil]
-      # @return [Hash{String => Object}] the input with string keys, without those nulls, and each
+      # @return [Hash{String => Object}] the input with string keys, cast, without those nulls, and each
       #   declared default for an argument left out
       # @raise [Error::Invalid] for unknown or invalid arguments
       def validate!(arguments)
         arguments = {} if arguments.nil?
         raise Error::Invalid.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless arguments.is_a?(Hash)
         properties = @schema.fetch("properties")
-        arguments = arguments.deep_stringify_keys.reject { |name, value| value.nil? && properties.key?(name) && !Schema.nullable?(properties[name]) }
+        arguments = arguments.deep_stringify_keys.to_h { |name, value| [name, Casting.cast(value, @types[name])] }
+        arguments = arguments.reject { |name, value| value.nil? && properties.key?(name) && !Schema.nullable?(properties[name]) }
         # Defaults are checked as if sent, so a bad default fails here and a
         # default satisfies a required argument.
         arguments = defaults(properties).merge(arguments)
         failures = schemer.validate(arguments).to_a
-        raise Error::Invalid.new(failures.pluck("error").join("; "), errors: field_errors(failures)) if failures.any?
+        errors = field_errors(failures)
+        out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
+        out_of_range.each { (errors[it] ||= []) << "is out of range" }
+        messages = failures.pluck("error") + out_of_range.map { "value at `/#{it}` is out of range" }
+        raise Error::Invalid.new(messages.join("; "), errors:) if errors.any?
         arguments
       end
 
