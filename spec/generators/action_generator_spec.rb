@@ -88,7 +88,7 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
 
   it "writes nothing when the action would fail the boot check, and prints the fix, not the next steps" do
     output = generate_failing("Event::Archive", "--kind", "change")
-    expect(output).to include("Event::ArchiveAction would not pass the boot check, so nothing was written",
+    expect(output).to include("Event::ArchiveAction would not pass rails actions:check, so nothing was written",
       "EventPolicy#archive? is missing: add it, or authorize another query")
     expect(output).not_to include("Write the action's description")
     expect(Dir.children(destination)).to be_empty

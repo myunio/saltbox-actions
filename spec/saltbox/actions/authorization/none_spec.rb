@@ -21,7 +21,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
 
   let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(name: klass, caller:, arguments:) } }
 
-  it "asks for no policy, rule or rule name at boot" do
+  it "asks for no policy, rule or rule name, at boot or in rails actions:check" do
     with_settings(require_area: false) do
       archive = action("Gathering::ArchiveAction") do
         kind :change
@@ -31,6 +31,9 @@ RSpec.describe Saltbox::Actions::Authorization::None do
       totals = action("Gathering::ShowTotalsAction") { connections :allowed }
       expect(Saltbox::Actions::Registry.problems(archive)).to eq([])
       expect(Saltbox::Actions::Registry.problems(totals)).to eq([])
+      create = action("Gathering::CreateAction") { connections :allowed }
+      expect(Saltbox::Actions::Registry.problems(create)).to eq([])
+      expect(Saltbox::Actions::Registry.problems(create, declared_only: true)).to eq([])
     end
   end
 

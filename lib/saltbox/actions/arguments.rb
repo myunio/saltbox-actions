@@ -6,6 +6,7 @@ module Saltbox
     # Checks a caller's input against an action's JSON Schema before the
     # action runs. It first casts what an HTML form sends, with each input's
     # Active Model type (Casting), then refuses, naming each field:
+    # - a field of the action's model the caller may not set (forbidden);
     # - a field the schema does not list;
     # - a value of the wrong type, or a number its type cannot hold;
     # - a missing required field.
@@ -13,15 +14,35 @@ module Saltbox
       # @param schema [Hash] a closed JSON Schema object
       # @param name [String, nil] the action's name, used in error messages
       # @param types [Hash{String => Object}] what casts each input (Casting.cast)
-      def initialize(schema, name: nil, types: {})
+      # @param forbidden [#call, nil] whether a name the schema does not list is a field
+      #   the caller may not set, refused as forbidden rather than unknown
+      def initialize(schema, name: nil, types: {}, forbidden: nil)
         @schema = schema
         @name = name
         @types = types
+        @forbidden = forbidden
       end
 
       # @param action [Class]
-      # @return [Arguments] a checker for the action's input schema
-      def self.for(action) = new(action.input_schema, name: action.action_name, types: action.input_types)
+      # @param caller [Caller, nil] whose schema; nil for the catalogue's
+      # @return [Arguments] a checker for the action's input schema for that caller
+      def self.for(action, caller = nil)
+        input = action.input(caller)
+        new(input.schema, name: action.action_name, types: input.types, forbidden: action.method(:model_field?))
+      end
+
+      # Checks input against the action's schema for a caller, inside the
+      # caller's set-up, as an invocation does; for the schema matchers.
+      #
+      # @param action [Class]
+      # @param arguments [Hash, nil]
+      # @param caller [Caller, nil] nil for the catalogue's schema
+      # @return [Hash] the checked input
+      # @raise [Error::Invalid, Error::Forbidden]
+      def self.check(action, arguments, caller = nil)
+        return self.for(action).validate!(arguments) unless caller
+        Actions.within(caller) { |fresh| self.for(action, fresh).validate!(arguments) }
+      end
 
       # A null sent for a field that cannot be null counts as left out, since
       # agents often send null for a field they mean to skip.
@@ -34,6 +55,7 @@ module Saltbox
         arguments = {} if arguments.nil?
         raise Error::Invalid.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless arguments.is_a?(Hash)
         properties = @schema.fetch("properties")
+        refuse_forbidden!(arguments.keys.map(&:to_s) - properties.keys)
         arguments = arguments.deep_stringify_keys.to_h { |name, value| [name, Casting.cast(value, @types[name])] }
         arguments = arguments.reject { |name, value| value.nil? && properties.key?(name) && !Schema.nullable?(properties[name]) }
         # Defaults are checked as if sent, so a bad default fails here and a
@@ -52,6 +74,11 @@ module Saltbox
       def self.schemers = @schemers ||= Concurrent::Map.new
 
       private
+
+      def refuse_forbidden!(unlisted)
+        forbidden = @forbidden ? unlisted.select { @forbidden.call(it) } : []
+        raise Error::Forbidden.fields(forbidden) if forbidden.any?
+      end
 
       # A copy for this call: the schema is shared by every caller, and an
       # action may change a value it was given.

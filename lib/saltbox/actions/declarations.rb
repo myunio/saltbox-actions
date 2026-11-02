@@ -90,7 +90,7 @@ module Saltbox
         #   argument :page, :integer, minimum: 1, description: "Page number, from 1"
         def argument(name, type = nil, required: false, nullable: false, enum: nil, of: nil, description: nil, **keywords)
           name = name.to_s
-          @input_schema = @input_types = nil
+          @inputs = nil
           return arguments[name] = {schema: Schema::ID, required: true} if name == "id" && type.nil?
           raise ArgumentError, "#{name} takes a type: one of #{TYPES.join(", ")}" unless TYPES.include?(type)
           unknown = keywords.keys - KEYWORDS.keys

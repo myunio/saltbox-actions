@@ -79,14 +79,14 @@ end
 #     it_behaves_like "a valid action registry"
 #   end
 #
-# Every action loads and passes the boot checks, has a spec file beside the
+# Every action loads and passes rails actions:check, has a spec file beside the
 # others, compiles its input schema, and the committed catalogue matches the
 # code (rewrite it with `bin/rails actions:catalogue`).
 RSpec.shared_examples "a valid action registry" do
   let(:registry) { Saltbox::Actions::Registry }
 
-  it "loads every action and passes the boot checks" do
-    expect(registry.actions).not_to be_empty
+  it "loads every action and passes every check, as rails actions:check runs them" do
+    expect(registry.check!).not_to be_empty
   end
 
   it "has a spec file for every action" do
