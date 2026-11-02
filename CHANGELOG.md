@@ -13,6 +13,8 @@
   is its `summary_output_schema`. `render collection:` hands over a list's records; a list with a
   summary refuses `render json:`, missing records, field values whose JSON is not plain, and
   meta that is not plain data (hashes, arrays, text, numbers, booleans, dates, times, nil).
+- find_action finds an action only through its title or name, or two or more of the
+  request's words in its description; one shared description word no longer matches.
 
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.

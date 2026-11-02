@@ -274,6 +274,42 @@ To refuse in your own words, raise an error from `perform`:
 raise ApplicationAction::Error.new("Published events are locked", code: :event_locked, status: :unprocessable_content)
 ```
 
+### Limit what a connection reaches
+
+A token's scopes are broad: read, or read and write, across every action. To
+let one connection reach only some actions, give its caller an `access:`
+object that answers `allows?(action)`:
+
+```ruby
+# app/models/connection_access.rb
+ConnectionAccess = Data.define(:action_names) do
+  def allows?(action) = action_names.include?(action.action_name)
+end
+```
+
+Build the caller with it wherever you build one from a token. Here
+`token.action_names` stands for your own record of what the person allowed:
+
+```ruby
+ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: "Claude",
+  scopes: token.scopes, access: ConnectionAccess.new(token.action_names))
+```
+
+The caller then sees only those actions. The catalogue, `find_action` and the
+MCP tools leave the rest out, and a call to one of them is refused with
+`insufficient_scope`. The default message talks about read-only tokens, so
+set `on_access_refused` to say what happened in your words. It is also the
+place to note the refusal:
+
+```ruby
+# config/initializers/actions.rb
+Saltbox::Actions.configure do |config|
+  config.on_access_refused do |caller, action|
+    Saltbox::Actions::Error::InsufficientScope.new("This connection may not use #{action.title}. Allow it in Settings.")
+  end
+end
+```
+
 ### Declarations
 
 Put these at the top of an action class when the name cannot give them.
@@ -455,6 +491,10 @@ Saltbox::Actions.configure do |config|
   end
 end
 ```
+
+Each keyword after `invocation` goes to PaperTrail's `controller_info`, so a
+richer agent stamp (the machine, the connection) goes there, with a column on
+`versions` for each.
 
 ## Testing with RSpec
 

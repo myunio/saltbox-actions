@@ -4,6 +4,13 @@ module Saltbox
     # words of a request against each action's title, name and description.
     # Titles and descriptions are written in people's words, so "log my hours"
     # or "mark it done" finds the right action without knowing its name.
+    #
+    # A match counts only when it hits the action's title or name, or its
+    # description holds at least two of the request's words, carrying at least
+    # half the weight of the words any action uses. A request for something
+    # the app does not do then finds nothing, rather than an action whose
+    # description happens to share one word with it; a word no action uses,
+    # such as a person's name, neither helps nor hurts.
     class Finder
       # Words that carry no meaning for choosing an action.
       STOP_WORDS = %w[a an and any are as at be by can could do does for from get give have how i in is it me my of on or our please show some that the this to up was we what when where which who will with would you your].to_set.freeze
@@ -26,9 +33,11 @@ module Saltbox
         terms = self.class.terms(query)
         return [] if terms.empty?
 
-        rarity = terms.to_h { |term| [term, rarity(term)] }
-        @actions.map { |action| [action, score(action, terms, rarity)] }
-          .select { |_, score| score.positive? }
+        used = terms.to_h { |term| [term, @actions.count { uses?(it, term) }] }
+        rarity = used.transform_values { |count| rarity(count) }
+        known = terms.select { |term| used.fetch(term).positive? }
+        @actions.select { |action| relevant?(action, terms, rarity, known) }
+          .map { |action| [action, score(action, terms, rarity)] }
           .sort_by { |action, score| [-score, action.action_name] }
           .first(limit).map(&:first)
       end
@@ -50,6 +59,21 @@ module Saltbox
 
       private
 
+      # Whether some term is in the title or name, or at least two are in the
+      # description and they carry at least half the weight of the terms some
+      # action uses. "say why the meeting was called off" finds cancel_event
+      # through "say" and "why"; "say hello" does not find whoami through
+      # "say" alone.
+      def relevant?(action, terms, rarity, known)
+        found = terms.select { |term| uses?(action, term) }
+        return false if found.empty?
+        words = @words.fetch(action)
+        return true if found.any? { |term| (words.fetch(:title) | words.fetch(:name)).any? { |word| matches?(word, term) } }
+        found.size >= 2 && found.sum { rarity.fetch(it) } * 2 >= known.sum { rarity.fetch(it) }
+      end
+
+      def uses?(action, term) = @words.fetch(action).values.any? { |field| field.any? { |word| matches?(word, term) } }
+
       def score(action, terms, rarity)
         words = @words.fetch(action)
         terms.sum do |term|
@@ -59,10 +83,7 @@ module Saltbox
 
       # A word few actions use says more than one most of them use ("comment"
       # against "card").
-      def rarity(term)
-        used = @words.count { |_, fields| fields.values.any? { |words| words.any? { |word| matches?(word, term) } } }
-        Math.log(1 + @actions.size.to_f / (1 + used))
-      end
+      def rarity(used) = Math.log(1 + @actions.size.to_f / (1 + used))
 
       # Exactly, or by a shared start of four letters or more ("comment" and "comments").
       def matches?(word, term)
