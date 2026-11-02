@@ -64,14 +64,32 @@ module Saltbox
             self._policy_namespace = (value == false) ? [] : words.map(&:to_sym)
           end
 
+          # @api private
           # @return [Symbol] the policy rule the action asks
           # @raise [ArgumentError] for an action with a declared name and no policy_rule, naming the fix
           def policy_query!
             policy_query || raise(ArgumentError, "#{name}: #{missing_rule}")
           end
 
-          # @return [String] the policy's name, found or not: Admin::ProjectPolicy
-          def expected_policy_name = [*policy_namespace.map { it.to_s.camelize }, "#{model.name}Policy"].join("::")
+          # @api private
+          # @param of [Class] the model
+          # @return [String] its policy's name in the action's policy namespace, found or not: Admin::ProjectPolicy
+          def expected_policy_name(of = model) = [*policy_namespace.map { it.to_s.camelize }, "#{of.name}Policy"].join("::")
+
+          # A reference field's records are picked through the policy
+          # namespace too (scoped_records). Checked once the input schema
+          # builds; the adapter answers reference_scope?(model) and
+          # reference_scope_name(model).
+          #
+          # @return [Array<String>] each reference field whose namespaced scope does not exist, and the fix
+          def reference_problems
+            return [] if policy_namespace.empty?
+            writable_fields.filter_map do |name, field|
+              next if field.reference.nil? || reference_scope?(field.reference)
+              "#{name} picks from #{field.reference.name} records through #{reference_scope_name(field.reference)}, which does not exist: " \
+                "add it, or declare policy_namespace (see the README)"
+            end
+          end
 
           # @return [Array<String>] a missing policy or rule, and the fix
           def authorization_problems
@@ -112,6 +130,9 @@ module Saltbox
 
           # @return [Array<String>]
           def authorization_problems = []
+
+          # @return [Array<String>]
+          def reference_problems = []
 
           # @return [Boolean] false: without an adapter, an action names its model fields with `accepts`
           def supplies_fields? = false

@@ -29,6 +29,7 @@ module Saltbox
       end
 
       class << self
+        # @api private
         attr_writer :in_use
 
         # @return [Boolean] whether a model includes it, or PaperTrail's versions are noted

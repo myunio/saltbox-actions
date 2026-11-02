@@ -23,7 +23,12 @@ module Saltbox
         module Namespace
           private
 
-          def authorization_namespace = self.class.policy_namespace_module!
+          # @raise [ActionPolicy::NotFound] for a namespace no module has, so no policy can be in it
+          def authorization_namespace
+            return if self.class.policy_namespace.empty?
+            self.class.policy_namespace_module ||
+              raise(::ActionPolicy::NotFound.new(self.class.model, "No module #{self.class.policy_namespace.join("/").camelize} holds policies"))
+          end
 
           def authorization_strict_namespace = true
         end
@@ -37,15 +42,9 @@ module Saltbox
         end
 
         class_methods do
+          # @api private
           # @return [Module, nil] the policy namespace, as ActionPolicy's authorization_namespace takes it
           def policy_namespace_module = policy_namespace.presence&.then { it.map { it.to_s.camelize }.join("::").safe_constantize }
-
-          # @return [Module, nil]
-          # @raise [ActionPolicy::NotFound] for a namespace no module has, so no policy can be in it
-          def policy_namespace_module!
-            return if policy_namespace.empty?
-            policy_namespace_module || raise(::ActionPolicy::NotFound.new(model, "No module #{policy_namespace.join("/").camelize} holds policies"))
-          end
 
           # @param account [Object]
           # @return [Hash] the policy's authorization context
@@ -63,12 +62,17 @@ module Saltbox
           end
 
           # @return [Class, nil] the model's policy, in the action's policy namespace
-          def policy_class
-            return unless model
-            namespace = policy_namespace_module
-            return if namespace.nil? && policy_namespace.any?
-            ::ActionPolicy.lookup(model, namespace:, strict_namespace: true, allow_nil: true)
-          end
+          def policy_class = model && namespaced_policy(model)
+
+          # @api private
+          # @param model [Class]
+          # @return [Boolean] whether the policy a reference field's records are picked through exists
+          def reference_scope?(model) = !namespaced_policy(model).nil?
+
+          # @api private
+          # @param model [Class]
+          # @return [String]
+          def reference_scope_name(model) = expected_policy_name(model)
 
           # @param rule [Symbol]
           # @return [Boolean] whether the policy answers the rule: defined, aliased, or by its default rule
@@ -94,6 +98,15 @@ module Saltbox
 
           # @return [Array<Class<Exception>>]
           def authorization_errors = [::ActionPolicy::Unauthorized]
+
+          private
+
+          # A model's policy in the action's policy namespace, strictly, or nil.
+          def namespaced_policy(model)
+            namespace = policy_namespace_module
+            return if namespace.nil? && policy_namespace.any?
+            ::ActionPolicy.lookup(model, namespace:, strict_namespace: true, allow_nil: true)
+          end
         end
 
         # ActionPolicy's authorize!. With no rule given, it asks the action's

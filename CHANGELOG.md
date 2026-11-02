@@ -6,14 +6,16 @@
   `authorize [:admin, record]` does: `Admin::Projects::ListAction` asks `Admin::ProjectPolicy`,
   never `ProjectPolicy`, in `permitted?`, the record loader, `authorize`, `policy_scope`, its
   fields and the records a reference may pick. A missing namespaced policy fails closed
-  (Pundit's `NotDefinedError`, ActionPolicy's `NotFound`) and `rails actions:check` names it.
+  (Pundit's `NotDefinedError`, ActionPolicy's `NotFound`) and `rails actions:check` names it,
+  as it names a reference field whose namespaced scope is missing.
   ActionPolicy lookups in a namespace no longer fall back to the model's own policy.
   `policy_namespace :staff` declares another namespace, `policy_namespace false` the model's own
   policy; it replaces the ActionPolicy adapter's overridable `policy_namespace` method.
 - That module is part of the action's name: `Admin::Projects::ListAction` is `list_admin_projects`,
   with the CLI command `admin-projects list` and the title "List admin projects", so it no longer
-  collides with `Projects::ListAction`. `Naming#outer_namespace` gives it. Names of actions inside
-  their model's namespace do not change.
+  collides with `Projects::ListAction`, and a summarized admin list points agents at
+  `show_admin_project`. `Naming#outer_namespace` gives it. Names of actions inside their model's
+  namespace do not change.
 - Errors by field hold each message without the field's name (`{"title" => ["can't be blank"]}`),
   as a record's `errors.as_json` does, so a screen that adds them back shows them once.
 - A fresh development or test process draws its routes before the first render, so its first

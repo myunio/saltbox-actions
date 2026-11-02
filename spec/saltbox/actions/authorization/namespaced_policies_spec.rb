@@ -70,6 +70,16 @@ RSpec.describe "Namespaced policies" do
       end
     end
 
+    it "names a reference field whose records would be picked through a namespaced scope that does not exist" do
+      stub_const("Admin::EventPolicy", Class.new {
+        def initialize(user, record) = @user = user
+        def update? = true
+        def permitted_attributes = %i[title parent_id]
+      })
+      expect(Saltbox::Actions::Registry.problems(update)).to eq(["parent picks from Event records through Admin::EventPolicy::Scope, " \
+        "which does not exist: add it, or declare policy_namespace (see the README)"])
+    end
+
     it "takes a declared namespace in place of the one the class gives" do
       stub_const("Staff::EventPolicy", admin_event_policy)
       list.policy_namespace :staff

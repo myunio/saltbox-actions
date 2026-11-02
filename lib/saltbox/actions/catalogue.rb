@@ -63,7 +63,7 @@ module Saltbox
         def summary_note
           return unless summarizes_list?
           note = "Returns each #{model.model_name.human.downcase}'s #{summary.names.to_sentence}."
-          show = Registry.find("show_#{model.model_name.singular}")
+          show = Registry.find("show_#{name_noun(plural: false)}")
           show ? "#{note} Call #{show.action_name} with its id for the rest." : note
         end
 

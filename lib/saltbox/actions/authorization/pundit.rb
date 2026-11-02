@@ -34,6 +34,17 @@ module Saltbox
           # @return [Class, nil] the model's Pundit policy, in the action's policy namespace
           def policy_class = model && ::Pundit::PolicyFinder.new(policy_target(model)).policy
 
+          # @api private
+          # @param model [Class]
+          # @return [Boolean] whether the scope a reference field's records are picked through exists
+          def reference_scope?(model) = !::Pundit::PolicyFinder.new(policy_target(model)).scope.nil?
+
+          # @api private
+          # @param model [Class]
+          # @return [String]
+          def reference_scope_name(model) = "#{expected_policy_name(model)}::Scope"
+
+          # @api private
           # @param record [Object] a record, a model or a scope
           # @return [Object, Array] what Pundit is asked about: [:admin, record] in the namespace admin,
           #   otherwise the record; an array as given

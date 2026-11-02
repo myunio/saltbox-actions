@@ -200,6 +200,15 @@ RSpec.describe Saltbox::Actions::Summary do
     expect(found[:actions].find { it[:name] == "show_event" }).not_to have_key(:response_description)
   end
 
+  it "points a back-office list at its own show action, never the public one" do
+    admin_list = list(name: "Admin::Events::ListAction")
+    expect(admin_list.summary_note).to eq("Returns each event's id, title, starts_on, and status.")
+    admin_show = Class.new(ApplicationAction) { define_singleton_method(:name) { "Admin::Events::ShowAction" } }
+    allow(Saltbox::Actions::Registry).to receive(:find).and_call_original
+    allow(Saltbox::Actions::Registry).to receive(:find).with("show_admin_event").and_return(admin_show)
+    expect(admin_list.summary_note).to end_with("Call show_admin_event with its id for the rest.")
+  end
+
   it "stops the boot for a field the model lacks, or a list summary without id" do
     expect(Saltbox::Actions::Registry.problems(list { summary :title, :nickname }))
       .to eq(["Event has no nickname for its summary: name an attribute or method, or compute it",
