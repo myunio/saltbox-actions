@@ -5,12 +5,16 @@ module Rspec
   module Generators
     # Writes spec/actions/<model>/<words>_action_spec.rb for `rails g action`,
     # which reaches it through hook_for :test_framework. The spec runs the
-    # gem's refusal ladder and one example of the action's own. An app
-    # overrides the template at lib/templates/rspec/action/action_spec.rb.tt,
-    # to build its people with its own factories.
+    # action for a person on a screen, and for one that works on a record,
+    # checks a record the person cannot see is not found. It assumes no
+    # factories and no roles. An app overrides the template at
+    # lib/templates/rspec/action/action_spec.rb.tt, to build its people with
+    # its own factories.
     class ActionGenerator < ::Rails::Generators::NamedBase
       namespace "rspec:action"
       source_root File.expand_path("templates", __dir__)
+
+      class_option :id, type: :boolean, desc: "Whether the action works on one record named by an id"
 
       # @return [void]
       def write_spec
@@ -35,8 +39,9 @@ module Rspec
 
       def action_class_name = "#{model_name}::#{words.map(&:camelize).join}Action"
 
-      # The new action reads it from its class; a verb in the table says it otherwise.
+      # What `rails g action` says, then the action's class, then the verb table.
       def takes_id?
+        return options[:id] unless options[:id].nil?
         action_class_name.constantize.takes_id?
       rescue NameError
         Saltbox::Actions::Naming::VERBS.dig(verb, :id) == true

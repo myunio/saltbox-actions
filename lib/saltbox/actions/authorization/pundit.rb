@@ -11,6 +11,7 @@ module Saltbox
       module Pundit
         extend ActiveSupport::Concern
         include ::Pundit::Authorization
+        include Policies
 
         # Pundit's own permitted_attributes reads a controller's params; an
         # action's input has already passed its schema (see Permitting).

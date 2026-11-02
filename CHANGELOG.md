@@ -2,6 +2,18 @@
 
 ## 0.1.0 (unreleased)
 
+- Authorization is optional. With no adapter, every action is allowed and the boot check asks
+  for no policy. Adapters report their boot problems through `authorization_problems`; the
+  README documents the adapter contract with a plain-model example.
+- A list action needs only `policy_scope`, as Pundit's `verify_policy_scoped` on `index`.
+- `rails g action` checks the action against the boot check before writing any file, writes
+  nothing on a problem, and stops after a failed catalogue step. A new change action declares
+  `connections :confirm` (was `:allowed`) unless the app sets `default_connections`. The spec
+  template assumes no factories or roles and passes the id for any verb that takes one.
+- The shared example "refuses callers the action does not allow" checks a person without
+  rights only when the spec defines `unpermitted_account`.
+- The README's API controller inherits `ActionController::API`.
+
 - `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
   `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
   default, which keeps `:confirm` as advice to agents.

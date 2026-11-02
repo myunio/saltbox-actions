@@ -37,6 +37,7 @@ module Saltbox
         included do
           include ::ActionPolicy::Behaviour
           include Namespace
+          include Policies
           extend RuleDeclaration
 
           authorize :user, through: :account
