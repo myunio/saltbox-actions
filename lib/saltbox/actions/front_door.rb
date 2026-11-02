@@ -9,6 +9,9 @@ module Saltbox
       # idempotent).
       Tool = Data.define(:name, :title, :description, :input_schema, :annotations)
       FIND = "find_action".freeze
+      # How many actions find_action lists on one page when there is no query, and the most it takes.
+      PAGE_SIZE = 50
+      MAX_PAGE_SIZE = 100
       RUN = {read: "run_read_action", change: "run_change_action", destructive: "run_destructive_action"}.freeze
       RUN_TEXT = {
         read: ["Look something up in %{app}",
@@ -45,8 +48,11 @@ module Saltbox
       #   every other surface gets the same errors in those cases
       def self.call(tool_name, arguments, caller:)
         if tool_name == FIND
-          query = Arguments.new(find_tool.input_schema).validate!(arguments)["query"]
-          return query.nil? ? list(caller) : find(query, caller)
+          arguments = Arguments.new(find_tool.input_schema).validate!(arguments)
+          return list(caller, page: arguments.fetch("page", 1), page_size: arguments.fetch("page_size", PAGE_SIZE)) unless arguments.key?("query")
+          paging = arguments.keys & %w[page page_size]
+          raise Error::Invalid.new("page and page_size list actions only with no query", errors: paging.index_with { ["is only for find_action with no query"] }) if paging.any?
+          return find(arguments.fetch("query"), caller)
         end
         if (kind = RUN.key(tool_name))
           name, action_arguments = run_wrapper!(arguments)
@@ -92,8 +98,12 @@ module Saltbox
       # @return [Tool] the plain-words discovery contract
       def self.find_tool
         Tool.new(name: FIND, title: "Find something to do in #{app}",
-          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, their arguments and which run tool to use. Leave query out to list everything you can do, without arguments.",
-          input_schema: {"type" => "object", "properties" => {"query" => {"type" => "string", "minLength" => 1, "maxLength" => 200, "description" => "The request in plain words, or an action's name"}}, "additionalProperties" => false},
+          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, their arguments and which run tool to use. Leave query out to list everything you can run, a page at a time, without arguments.",
+          input_schema: {"type" => "object", "properties" => {
+            "query" => {"type" => "string", "minLength" => 1, "maxLength" => 200, "description" => "The request in plain words, or an action's name"},
+            "page" => {"type" => "integer", "minimum" => 1, "description" => "With no query: the page of the list, from 1"},
+            "page_size" => {"type" => "integer", "minimum" => 1, "maximum" => MAX_PAGE_SIZE, "description" => "With no query: actions per page, #{PAGE_SIZE} unless set"}
+          }, "additionalProperties" => false},
           annotations: annotations(:read, idempotent: true))
       end
 
@@ -125,16 +135,25 @@ module Saltbox
         end
       end
 
-      # Everything this caller may see, without descriptions or arguments:
-      # find_action with an action's name gives those.
+      # Everything this caller can run from here, a page at a time, without
+      # descriptions or arguments: find_action with an action's name gives
+      # those. Actions only a person may run are left out.
       #
       # @param caller [Caller]
-      # @return [Hash] the actions, sorted by area (see Configuration#area_order) then name
-      def self.list(caller)
+      # @param page [Integer] from 1
+      # @param page_size [Integer]
+      # @return [Hash] one page of actions, sorted by area (see Configuration#area_order) then name,
+      #   with paging meta and a hint naming the next page when there is one
+      def self.list(caller, page:, page_size:)
         Actions.within(caller) do |fresh|
-          available = Registry.actions.select { |action| action.available_to?(fresh) }
-          actions = sorted(available).map { |action| entry(action, fresh).merge(kind: action.kind.to_s, area: action.area).reject { |key, value| key == :area && value.nil? } }
-          {actions: actions, hint: "Call find_action with an action's name for what it does and the arguments it takes."}
+          runnable = sorted(Registry.actions.select { |action| action.runnable_for?(fresh) })
+          actions = runnable.drop((page - 1) * page_size).first(page_size).map do |action|
+            entry(action, fresh).merge(kind: action.kind.to_s, area: action.area).reject { |key, value| key == :area && value.nil? }
+          end
+          next_page = page + 1 if page * page_size < runnable.size
+          hint = "Call find_action with an action's name for what it does and the arguments it takes."
+          hint += " Call find_action with page: #{next_page} for more." if next_page
+          {actions: actions, meta: {page:, page_size:, total: runnable.size, next_page:}, hint: hint}
         end
       end
 
@@ -169,7 +188,7 @@ module Saltbox
       def self.no_match_hint(available)
         areas = sorted(available).filter_map(&:area).map(&:to_s).uniq
         covers = " You can reach #{areas.to_sentence(last_word_connector: " and ")}." if areas.any?
-        "Nothing matched. Try other words, or #{app} may not do this yet.#{covers} Call find_action with no query to list everything you can do."
+        "Nothing matched. Try other words, or #{app} may not do this yet.#{covers} Call find_action with no query to list everything you can run."
       end
 
       def self.app = Actions.config.app_name

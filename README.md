@@ -452,7 +452,8 @@ Agents see a short list of tools, not one per action:
 - each action declared `mcp_core`, as a tool of its own (keep these to about
   fifteen);
 - `find_action`, to search all the others; with no query, it lists every
-  action the person can reach;
+  action the agent can run, 50 at a time (`page` and `page_size`, at most
+  100);
 - `run_read_action`, `run_change_action` and `run_destructive_action`, to run
   what `find_action` found.
 

@@ -25,20 +25,39 @@ RSpec.describe Saltbox::Actions::FrontDoor do
   end
 
   describe "find_action with no query" do
-    def listed(account) = described_class.call("find_action", {}, caller: as_mcp(account))[:actions]
+    def listed(account, caller: as_mcp(account), **paging) = described_class.call("find_action", paging, caller:)[:actions]
 
-    it "lists every action the caller may see, by area then name, without descriptions or arguments" do
+    it "lists every action the caller can run, by area then name, without descriptions or arguments" do
       expect(listed(manager).pluck(:name)).to eq(%w[cancel_event create_event delete_event list_events show_event update_event count_events whoami])
       expect(listed(manager)).to all(satisfy { |entry| !entry.key?(:description) && !entry.key?(:arguments) })
       expect(listed(manager)).to include({name: "delete_event", title: "Delete event", kind: "destructive", area: "events",
         run_with: "run_destructive_action", confirm_first: true}, {name: "whoami", title: "Whoami", kind: "read", run_with: "run_read_action", confirm_first: false})
     end
 
-    it "lists only what the caller's permissions and access reach, marking what only a person may run" do
+    it "lists only what the caller can run from its surface, never what only a person may run" do
       expect(listed(reader).pluck(:name)).to eq(%w[list_events show_event whoami])
-      expect(described_class.call("find_action", {}, caller: as_read_only(manager))[:actions].pluck(:kind).uniq).to eq(%w[read])
-      notes = listed(Account.new(id: 9, permissions: %w[events.view events.notes])).find { |entry| entry[:name] == "show_event_notes" }
-      expect(notes).to include(run_with: nil, message: "Only a person can do this, in Dummy")
+      expect(listed(manager, caller: as_read_only(manager)).pluck(:kind).uniq).to eq(%w[read])
+      expect(listed(Account.new(id: 9, permissions: %w[events.view events.notes])).pluck(:name)).not_to include("show_event_notes")
+      expect(listed(manager, caller: as_assistant(manager)).pluck(:name)).not_to include("cancel_event", "delete_event")
+      expect(listed(manager, caller: as_webmcp(manager)).pluck(:name)).not_to include("delete_event")
+      expect(listed(manager, caller: as_assistant(manager))).to all(satisfy { |entry| entry[:run_with] && !entry.key?(:message) })
+    end
+
+    it "lists a page at a time, saying how to get the next" do
+      first = described_class.call("find_action", {"page_size" => 3}, caller: as_mcp(manager))
+      expect(first[:actions].pluck(:name)).to eq(%w[cancel_event create_event delete_event])
+      expect(first[:meta]).to eq(page: 1, page_size: 3, total: 8, next_page: 2)
+      expect(first[:hint]).to include("Call find_action with page: 2 for more.")
+      last = described_class.call("find_action", {"page" => 3, "page_size" => 3}, caller: as_mcp(manager))
+      expect(last[:actions].pluck(:name)).to eq(%w[count_events whoami])
+      expect(last[:meta]).to include(next_page: nil)
+      expect(last[:hint]).not_to include("page:")
+      expect(described_class.call("find_action", {}, caller: as_mcp(manager))[:meta]).to include(page_size: 50)
+    end
+
+    it "refuses a page size over the most, and paging with a query" do
+      expect { described_class.call("find_action", {"page_size" => 101}, caller: as_mcp(manager)) }.to have_field_errors(:page_size)
+      expect { described_class.call("find_action", {"query" => "events", "page" => 2}, caller: as_mcp(manager)) }.to have_field_errors(:page)
     end
 
     it "gives a plain list, by name, in an app with no areas" do
@@ -56,10 +75,10 @@ RSpec.describe Saltbox::Actions::FrontDoor do
 
   it "names the caller's areas when nothing matches, and only when actions have areas" do
     hint = described_class.call("find_action", {"query" => "payroll"}, caller: as_mcp(manager))[:hint]
-    expect(hint).to eq("Nothing matched. Try other words, or Dummy may not do this yet. You can reach events. Call find_action with no query to list everything you can do.")
+    expect(hint).to eq("Nothing matched. Try other words, or Dummy may not do this yet. You can reach events. Call find_action with no query to list everything you can run.")
     allow(Saltbox::Actions.config).to receive(:area_for).and_return(->(_model) {})
     hint = described_class.call("find_action", {"query" => "payroll"}, caller: as_mcp(manager))[:hint]
-    expect(hint).to eq("Nothing matched. Try other words, or Dummy may not do this yet. Call find_action with no query to list everything you can do.")
+    expect(hint).to eq("Nothing matched. Try other words, or Dummy may not do this yet. Call find_action with no query to list everything you can run.")
   end
 
   it "asks first for a change only when find_action marks it confirm_first, and always before removing" do
