@@ -11,8 +11,10 @@
   `around_invocation`, and cached per list of permitted fields, so callers whose policy permits
   different fields see different schemas. A model field the caller may not set is refused as
   forbidden. `input_schema`, `writable_fields` and `definition` take an optional caller.
-- `schema_principal` is used only by the committed catalogue and `actions:check`. `input_types`
-  and `Registry.runnable` are gone.
+- `schema_principal` is used only where there is no caller: the committed catalogue,
+  `actions:check` and the registry spec, the generator's field list, and the schema matchers
+  without `as:`. `be_invalid_against_schema` and `assert_invalid_against_schema` take `as:` a
+  caller. `input_types` and `Registry.runnable` are gone.
 
 - `find_action` with no query lists every action the caller can run from its surface, a page
   at a time (`page`, `page_size`: 50 by default, at most 100), sorted by area then name, with

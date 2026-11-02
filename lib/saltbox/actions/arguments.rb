@@ -31,6 +31,19 @@ module Saltbox
         new(input.schema, name: action.action_name, types: input.types, forbidden: action.method(:model_field?))
       end
 
+      # Checks input against the action's schema for a caller, inside the
+      # caller's set-up, as an invocation does; for the schema matchers.
+      #
+      # @param action [Class]
+      # @param arguments [Hash, nil]
+      # @param caller [Caller, nil] nil for the catalogue's schema
+      # @return [Hash] the checked input
+      # @raise [Error::Invalid, Error::Forbidden]
+      def self.check(action, arguments, caller = nil)
+        return self.for(action).validate!(arguments) unless caller
+        Actions.within(caller) { |fresh| self.for(action, fresh).validate!(arguments) }
+      end
+
       # A null sent for a field that cannot be null counts as left out, since
       # agents often send null for a field they mean to skip.
       #

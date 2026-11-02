@@ -86,11 +86,14 @@ module Saltbox
         class BeInvalidAgainstSchema
           include ::RSpec::Matchers::Composable
 
-          def initialize(action) = @action = action
+          def initialize(action, caller)
+            @action = action
+            @caller = caller
+          end
 
           def matches?(arguments)
             @arguments = arguments
-            Arguments.for(@action).validate!(arguments)
+            Arguments.check(@action, arguments, @caller)
             false
           rescue Error::Invalid => error
             @error = error
@@ -224,11 +227,14 @@ module Saltbox
         def have_field_errors(*fields) = HaveFieldErrors.new(fields)
 
         # Passes when the action's input schema refuses the arguments, before
-        # any caller is checked.
+        # any caller is checked. Without `as:` it is the catalogue's schema,
+        # built for Configuration#schema_principal; pass a caller when the
+        # policy needs a person, or to check that caller's fields.
         #
         # @example
         #   expect(capacity: "lots").to be_invalid_against_schema
-        def be_invalid_against_schema(action = described_class) = BeInvalidAgainstSchema.new(action)
+        #   expect(capacity: "lots").to be_invalid_against_schema(as: as_screen(manager))
+        def be_invalid_against_schema(action = described_class, as: nil) = BeInvalidAgainstSchema.new(action, as)
 
         # Passes when the result's body matches the schema the action declares with `returns`.
         # For an agent's result from a list with a summary, pass described_class.summary_output_schema.

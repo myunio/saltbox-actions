@@ -236,6 +236,9 @@ module Saltbox
         elsif !action.policy_rule?(action.policy_query)
           problems << "#{policy}##{action.policy_query} is missing: add it, or authorize another query"
         end
+        # The fields and summary are read from the table, which a database
+        # not yet migrated lacks: that is the one fix to name.
+        return problems << "#{model.name}'s table #{model.table_name} does not exist: run bin/rails db:prepare first" unless model.table_exists?
         problems.concat(schema_problems(action))
         problems.concat(summary_problems(action))
       end

@@ -581,10 +581,12 @@ tenant is set. Two callers whose policy permits different fields see
 different schemas. A field of the model the caller may not set is refused
 as forbidden: "You can't change notes."
 
-The committed catalogue and `rails actions:check` have no caller. They build
-the schema for `config.schema_principal`, a person who may set every field.
-Without it the policy is asked with no person. If your policy needs a person
-or a tenant, set it:
+Some places have no caller: the committed catalogue, `rails actions:check`
+and the registry spec, the generator's field list, and
+`be_invalid_against_schema` or `assert_invalid_against_schema` without `as:`.
+They build the schema for `config.schema_principal`, a person who may set
+every field. Without it the policy is asked with no person. If your policy
+needs a person or a tenant, set it:
 
 ```ruby
 config.schema_principal { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }

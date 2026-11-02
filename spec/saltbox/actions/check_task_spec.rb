@@ -2,6 +2,9 @@ require "rake"
 
 RSpec.describe "rails actions:check" do
   before(:all) { Rails.application.load_tasks unless Rake::Task.task_defined?("actions:check") }
+  # The registry loads the action files itself; eager loading the whole
+  # app here would hide a missing load from the other specs.
+  before { allow(Rails.application).to receive(:eager_load!) }
   after { Saltbox::Actions::Registry.reset! }
 
   def check

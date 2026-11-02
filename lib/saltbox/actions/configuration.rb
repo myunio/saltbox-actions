@@ -189,11 +189,12 @@ module Saltbox
       # @yieldreturn [String, nil]
       def area_for(&block) = block ? @area_for = block : @area_for
 
-      # Who the committed catalogue (config/actions.json) and
-      # `rails actions:check` build a create or update's input schema for,
-      # since neither has a caller: a principal holding every permission,
-      # so the catalogue lists every field. Callers never see it: each gets
-      # the fields their policy permits them. Without it the policy is asked
+      # Who a create or update's input schema is built for where there is
+      # no caller: the committed catalogue (config/actions.json),
+      # `rails actions:check` and the registry spec or test, the generator's
+      # field list, and the schema matchers without `as:`. A principal
+      # holding every permission, so the catalogue lists every field.
+      # Callers never see it: each gets the fields their policy permits them. Without it the policy is asked
       # with no person (nil). The block calls run with the principal, inside
       # whatever the policy needs, such as a tenant.
       #

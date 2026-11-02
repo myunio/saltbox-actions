@@ -41,8 +41,10 @@ module Saltbox
         error
       end
 
-      def assert_invalid_against_schema(arguments, action: action_class)
-        assert_raises(Error::Invalid) { Arguments.for(action).validate!(arguments) }
+      # Without `as:` it checks the catalogue's schema, built for
+      # Configuration#schema_principal; pass a caller when the policy needs a person.
+      def assert_invalid_against_schema(arguments, action: action_class, as: nil)
+        assert_raises(Error::Invalid) { Arguments.check(action, arguments, as) }
       end
 
       def assert_matches_output_schema(result, schema: action_class.output_schema)
