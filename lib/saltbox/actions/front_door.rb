@@ -11,6 +11,8 @@ module Saltbox
       FIND = "find_action".freeze
       # How many actions find_action lists on one page when there is no query, and the most it takes.
       PAGE_SIZE = 50
+      # Named when a system caller is refused; MCP and the assistant both come through here.
+      ENTRY = "MCP and the assistant".freeze
       MAX_PAGE_SIZE = 100
       RUN = {read: "run_read_action", change: "run_change_action", destructive: "run_destructive_action"}.freeze
       RUN_TEXT = {
@@ -28,9 +30,11 @@ module Saltbox
       # - one run tool (run_read_action, run_change_action or run_destructive_action)
       #   for each kind of action they may run.
       #
-      # @param caller [Caller]
+      # @param caller [Caller] never Caller.system
       # @return [Array<Tool>]
+      # @raise [ArgumentError] for a system caller
       def self.tools(caller)
+        Caller.from_request!(caller, ENTRY)
         # Inside the caller's set-up, which a policy may need to build each schema.
         Actions.within(caller) do |fresh|
           runnable = Registry.actions.select { |action| action.runnable_for?(fresh) }
@@ -49,7 +53,9 @@ module Saltbox
       #   when it has no body (head); or find_action's matches, or its list when there is no query
       # @raise [Error] when the action is unknown, the caller may not run it, or the input is invalid;
       #   every other surface gets the same errors in those cases
+      # @raise [ArgumentError] for a system caller
       def self.call(tool_name, arguments, caller:)
+        Caller.from_request!(caller, ENTRY)
         if tool_name == FIND
           arguments = Arguments.new(find_tool.input_schema).validate!(arguments)
           return list(caller, page: arguments.fetch("page", 1), page_size: arguments.fetch("page_size", PAGE_SIZE)) unless arguments.key?("query")

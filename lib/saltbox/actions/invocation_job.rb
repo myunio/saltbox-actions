@@ -14,6 +14,19 @@ module Saltbox
         job.logger&.info("#{job.arguments.first} was refused when it ran later: #{error.code}: #{error.message}")
       end
 
+      # Carries SystemAccount, Caller.system's default account, to the job.
+      class SystemAccountSerializer < ActiveJob::Serializers::ObjectSerializer
+        # @return [Hash]
+        def serialize(_account) = super({})
+
+        # @return [SystemAccount]
+        def deserialize(_hash) = SystemAccount.instance
+
+        # @return [Class]
+        def klass = SystemAccount
+      end
+      ActiveJob::Serializers.add_serializers(SystemAccountSerializer)
+
       # @param caller [Caller]
       # @return [Hash] what the job needs to build the caller again
       def self.serialize_caller(caller) = caller.to_h.compact.merge(class: caller.class.name).deep_stringify_keys

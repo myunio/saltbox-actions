@@ -12,7 +12,10 @@ Saltbox::Actions.configure do |config|
   config.max_array_items = 50
   config.require_area = true
   config.area_for { |model| {"Event" => "events", "Billing::Invoice" => "billing"}[model.name] }
-  config.permissions_held { |caller| (caller.account.permissions == :all) ? [] : caller.account.permissions }
+  config.permissions_held do |caller|
+    next [] if caller.system? || caller.account.permissions == :all
+    caller.account.permissions
+  end
   config.schema_principal { |run| run.call(Account.new(id: 0, permissions: :all)) }
   config.around_run do |invocation, run|
     Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent,

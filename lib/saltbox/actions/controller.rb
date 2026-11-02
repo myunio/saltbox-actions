@@ -60,11 +60,11 @@ module Saltbox
 
       private
 
-      # @return [Caller] who is calling, from the request's credential
+      # @return [Caller] who is calling, from the request's credential; never Caller.system
       def resolve_caller = raise(NotImplementedError, "#{self.class.name} must define resolve_caller")
 
       def as_action_caller
-        @action_caller = resolve_caller
+        @action_caller = Caller.from_request!(resolve_caller, self.class.name)
         yield
       end
 

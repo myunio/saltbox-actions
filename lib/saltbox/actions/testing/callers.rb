@@ -25,6 +25,10 @@ module Saltbox
         # @return [Caller] the app's chat acting for the person
         def as_assistant(account) = caller_configuration.build(:assistant, account, example: self)
 
+        # @param account [Object, nil] who the policy sees; SystemAccount when nil
+        # @return [Caller] the app itself, in a job, a rake task or the console
+        def as_system(account = nil) = caller_configuration.build(:system, account, example: self)
+
         # @param account [Object]
         # @return [Caller] a token that may only read
         def as_read_only(account) = as_api(account, scopes: [Actions.config.scopes.fetch(:read)])
