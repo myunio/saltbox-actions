@@ -2,6 +2,11 @@
 
 ## 0.1.0 (unreleased)
 
+- `find_action` with no query lists every action the caller can reach, sorted by area then
+  name, with `config.area_order` to put some areas first. When nothing matches, its hint names
+  the caller's areas, if actions have any. `run_change_action` asks first only for an action
+  marked `confirm_first`.
+
 - `summary` declares the fields a list action sends agents in place of its view, once per model
   in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
   the catalogue's `cli.columns` is now the top-level `summary`. A list's catalogue `output_schema`

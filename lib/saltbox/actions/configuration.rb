@@ -37,6 +37,9 @@ module Saltbox
       attr_accessor :instructions
       # @return [Boolean] whether every action's model must belong to an area (see #area_for)
       attr_accessor :require_area
+      # @return [Array<String>] the areas find_action lists first, in this order;
+      #   the rest follow alphabetically, then actions with no area
+      attr_accessor :area_order
       # @return [Integer, #call] the most items an array argument takes
       attr_writer :max_array_items
       # @return [Symbol, nil] the connections rule of an action that declares none;
@@ -64,6 +67,7 @@ module Saltbox
         @surfaces = SURFACES
         @instructions = nil
         @require_area = false
+        @area_order = []
         @max_array_items = 100
         @default_connections = nil
         @enforce_permissions = true

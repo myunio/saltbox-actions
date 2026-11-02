@@ -33,6 +33,12 @@ RSpec.describe Saltbox::Actions::MCP do
     expect(body.dig("result", "structuredContent", "error", "code")).to eq("human_required")
   end
 
+  it "lists every action when find_action is called with no arguments" do
+    _, _, body = rpc("tools/call", {name: "find_action"})
+    expect(body.dig("result", "isError")).to be(false)
+    expect(body.dig("result", "structuredContent", "actions").pluck("name")).to include("delete_event", "whoami")
+  end
+
   it "answers a delete's empty body as Done." do
     _, _, body = rpc("tools/call", {name: "run_destructive_action", arguments: {name: "delete_event", arguments: {id: event.id.to_s}}})
     expect(body.dig("result", "content", 0, "text")).to eq("Done.")
