@@ -292,7 +292,8 @@ Put these at the top of an action class when the name cannot give them.
 | `returns(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents. By default these come from `config/locales/actions.en.yml`. |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too. |
-| `cli_columns :id, :title`, `cli "events count"` | Hints for a command-line client you build on the catalogue. |
+| `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
+| `cli "events count"` | The command for a command-line client you build on the catalogue. |
 
 `argument` takes a type: `:string`, `:integer`, `:decimal`, `:boolean`,
 `:date`, `:time`, `:array` or `:hash`. It also takes `required:`,
@@ -304,6 +305,56 @@ JSON Schema keywords `format`, `minimum`, `maximum`, `min_length`,
 argument :page, :integer, minimum: 1, default: 1, description: "Page number, from 1"
 argument :payments, :array, of: {amount: :decimal, paid_on: :date}
 ```
+
+### Lists for agents
+
+A list's view often sends every field of every record. A person's screen
+needs that; an agent reading a list does not. Declare a model's **summary**
+once, in your base class, and every list of that model sends agents each
+record's summary instead:
+
+```ruby
+# app/actions/application_action.rb
+class ApplicationAction < Saltbox::Actions::Base
+  include Saltbox::Actions::Authorization::Pundit
+
+  summary Event, :id, :title, :starts_on, status: ->(event) { event.status.humanize }
+end
+```
+
+Name the record's own attributes or methods, and compute any other field
+with a lambda that takes the record. Keep `id` in it, so the agent can pick
+a record and run the show action for the rest. Leave links out, such as
+signed file URLs: an agent's transcript keeps everything it reads.
+
+Each field holds one plain value: text, a number, true or false, a date or
+time, or nil. Decimals and dates are sent as text. A record, a hash or a list
+stops the call with an error, so no field the summary leaves out reaches an
+agent inside another. The `meta:` beside it is your own plain data, such as
+paging: hashes, arrays, text, numbers, true or false, dates, times and nil.
+Anything else in it, such as a record or a set of them, stops the call too.
+
+`Event::ListAction` needs no change. It sets `@events` and calls
+`render :index, meta: {page: 2}`. Screens get views. Every other caller (the
+API, MCP, WebMCP and the assistant) gets summaries:
+
+```json
+{"data": {"events": [{"id": 7, "title": "AGM", "starts_on": "2026-07-01", "status": "Published"}]}, "meta": {"page": 2}}
+```
+
+A list action is one whose class name's verb is `list`. If it keeps its
+records under another name, or declares its own `action_name`, hand them
+over with `render :index, collection: @upcoming`. A list with a summary
+always renders a template and always hands over its records: `render json:`,
+or no records, stops the call with an error, rather than sending agents more
+than the summary.
+
+A model with no summary sends the view to everyone. An action can declare its
+own `summary :id, :title` in place of its model's. The catalogue lists the
+summary's fields as `summary`, which a command-line client prints as a table's
+columns, on every action of the model. For a list, its `output_schema`
+describes the summaries agents get, and `find_action` tells agents which
+fields a list returns.
 
 ### Titles and descriptions
 
@@ -526,7 +577,9 @@ Other settings include `scopes` (default `api:read` and `api:write`),
 - The unknown-action message always names `/api/v1/actions`, even if you
   mount the controller somewhere else.
 - `returns` is in the catalogue and in specs, but is not yet sent to MCP
-  clients as the tool's output schema.
+  clients as the tool's output schema. On a list with a summary, `returns`
+  describes the view screens get; check an agent's result with
+  `match_output_schema(described_class.summary_output_schema)`.
 - A literal `%` in a default error message must be written `%%`.
 - Configuration is set once, at boot. Changing it while requests run is not
   supported.

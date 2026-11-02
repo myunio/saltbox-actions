@@ -231,6 +231,7 @@ module Saltbox
         def be_invalid_against_schema(action = described_class) = BeInvalidAgainstSchema.new(action)
 
         # Passes when the result's body matches the schema the action declares with `returns`.
+        # For an agent's result from a list with a summary, pass described_class.summary_output_schema.
         #
         # @example
         #   expect(run({id: event.id}, as: as_api(manager))).to match_output_schema

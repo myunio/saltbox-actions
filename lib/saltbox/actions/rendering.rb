@@ -7,23 +7,41 @@ module Saltbox
     # the template just as they do from a controller. Views are rendered with
     # the configured controller's renderer (Configuration#renderer), the Rails
     # way to render outside a request.
+    #
+    # A list action whose model has a summary (Declarations#summarizes_list?)
+    # renders it for every caller but a person on a screen (the API, MCP,
+    # WebMCP and the assistant) in place of the view: each record in
+    # `collection:`, or else in the model's plural instance variable
+    # (@events), under data and the model's plural, with the meta beside it.
+    # Screens get the view. Such an action always renders a template, and
+    # always hands over its records, so nothing reaches an agent around the
+    # summary.
     module Rendering
       # Instance variables the base class and its adapters set for themselves;
       # views never see them. Any starting @_ are left out too.
       PROTECTED_IVARS = %i[@actor @params @pundit].freeze
       # Tells render json: false or json: nil from no json: at all.
       NO_JSON = Object.new.freeze
+      # Tells render collection: nil from no collection: at all.
+      NO_COLLECTION = Object.new.freeze
 
       # @param template [Symbol, String, nil] :show, or "events/types/show"
       # @param status [Symbol, Integer]
       # @param json [Object] a body to send as is, with no view: any JSON value, false and nil included
       # @param meta [Hash, nil] meta beside the body, such as pagination (Result#meta)
+      # @param collection [Enumerable] a list action's records, for one that keeps them elsewhere than @events;
+      #   never a template local
       # @param locals [Hash] the template's locals
       # @return [Result]
       # @raise [AbstractController::DoubleRenderError] on a second render or head
-      def render(template = nil, status: :ok, json: NO_JSON, meta: nil, **locals)
+      # @raise [ArgumentError] when a list action with a summary renders json:, or hands over no records,
+      #   or another action passes collection:
+      def render(template = nil, status: :ok, json: NO_JSON, meta: nil, collection: NO_COLLECTION, **locals)
         raise AbstractController::DoubleRenderError if performed?
-        body = if !json.equal?(NO_JSON)
+        records = summarized_records(json, collection, meta)
+        body = if records
+          summaries(records, meta)
+        elsif !json.equal?(NO_JSON)
           json.as_json
         else
           JSON.parse(Actions.config.renderer_class.render(template: template_path(template), formats: [:json], assigns: view_assigns, locals:))
@@ -52,6 +70,53 @@ module Saltbox
         model = self.class.model
         raise ArgumentError, "#{self.class.name} has no model: name the template" unless model
         "#{model.model_name.collection}/#{template}"
+      end
+
+      # @return [Enumerable, nil] the records to summarize for this caller, or nil to render as asked
+      # @raise [ArgumentError] when a list action with a summary would send agents anything else:
+      #   json:, no records, or a record or relation in its meta
+      def summarized_records(json, collection, meta)
+        action = self.class
+        unless action.summarizes_list?
+          raise ArgumentError, "render collection: is for a list action with a summary; #{action.name} has none" unless collection.equal?(NO_COLLECTION)
+          return
+        end
+        variable = "@#{action.model.model_name.plural}"
+        unless json.equal?(NO_JSON)
+          raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: render a template with #{variable} or collection:, not json:"
+        end
+        records = collection.equal?(NO_COLLECTION) ? instance_variable_get(variable) : collection
+        unless records.respond_to?(:map) && !records.is_a?(Hash)
+          raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: set #{variable} to its records, or render collection:"
+        end
+        plain_meta!(meta)
+        records if actor.agent?
+      end
+
+      # The same JSON in either result format: {"data": {"events": [...]}, "meta": {...}}.
+      # The envelope format wraps the body in data and adds the meta itself.
+      def summaries(records, meta)
+        summary = self.class.summary
+        body = {self.class.model.model_name.plural => records.map { summary.call(it) }}
+        return body if Actions.config.result_format == :envelope
+        {"data" => body, "meta" => meta&.as_json}.compact
+      end
+
+      # What a summarized list's meta may hold, besides hashes and arrays of them.
+      PLAIN_META = [String, Symbol, Numeric, TrueClass, FalseClass, NilClass, Date, Time].freeze
+
+      # A summarized list's meta is the app's own plain data, such as paging:
+      # anything else, a record or a set of them, would reach agents around
+      # the summary.
+      def plain_meta!(value, path = "meta")
+        case value
+        when ActiveRecord::Base, ActiveRecord::Relation then nil
+        when Hash then return value.each { |key, item| plain_meta!(item, "#{path}.#{key}") }
+        when Array then return value.each_with_index { |item, index| plain_meta!(item, "#{path}[#{index}]") }
+        when *PLAIN_META then return
+        end
+        raise ArgumentError, "#{self.class.name} sends agents #{self.class.model.name}'s summary: #{path} holds a #{value.class}; " \
+          "meta is plain data, such as paging: hashes, arrays, text, numbers, true or false, dates, times and nil"
       end
 
       # @return [Hash{String => Object}] the action's own instance variables

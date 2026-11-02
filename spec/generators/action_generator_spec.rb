@@ -35,6 +35,12 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     expect(action).to include("kind :destructive", "argument :id", "connections :confirm", "authorize :archive?")
   end
 
+  it "points a list action at its model's summary only when the model has none" do
+    expect(generate("Event::List")).not_to include("summary Event")
+    allow(ApplicationAction).to receive(:model_summaries).and_return({})
+    expect(generate("Event::List", "--force")).to include("Agents get each event's full view", "`summary Event, :id, ...` in ApplicationAction")
+  end
+
   it "refuses a Rails verb, an unknown verb without a kind, and a name that is not a model" do
     expect { described_class.new(["Event::Destroy"]).check_name }.to raise_error(Thor::Error, "destroy is spelled delete in actions")
     expect { described_class.new(["Event::Archive"]).check_name }.to raise_error(Thor::Error, /pass --kind/)

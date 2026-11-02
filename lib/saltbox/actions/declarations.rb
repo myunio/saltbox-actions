@@ -12,7 +12,8 @@ module Saltbox
     # - `idempotent`: calling it again with the same input changes nothing more.
     # - `mcp_core`: list the action as an MCP tool of its own.
     # - `feature`: the feature flag the action needs.
-    # - `cli_columns`, or `cli`: the CLI's columns, or its whole command.
+    # - `summary`: the fields a list sends agents, and the CLI's columns.
+    # - `cli`: the CLI's whole command.
     # - `returns`: the JSON Schema of the body it renders.
     module Declarations
       extend ActiveSupport::Concern
@@ -131,31 +132,51 @@ module Saltbox
           @feature = key
         end
 
-        # Declares the columns the CLI prints when it shows the action's
-        # records as a table. Called with no columns, it returns the declared
-        # ones, or an empty array.
+        # Declares a record's summary: the fields a list action sends agents
+        # in place of its view, and the columns the CLI prints. Declared in
+        # the base class with the model first, it serves every action of
+        # that model; declared in an action, it serves that action alone.
+        # Called with nothing, it returns the action's summary: its own, else
+        # the nearest base class's for its model, else nil.
         #
-        # @param columns [Array<Symbol>] column names, in print order
-        # @return [Array<String>]
-        def cli_columns(*columns)
-          return declared_cli&.fetch(:columns) || @cli_columns || [] if columns.empty?
-          @cli_columns = columns.map(&:to_s)
+        # @param fields [Array<Class, Symbol>] the model, in the base class only, then the record's own
+        #   attributes or methods
+        # @param computed [Hash{Symbol => #call}] fields computed from the record
+        # @return [Summary, nil]
+        #
+        # @example In ApplicationAction, for every Event action
+        #   summary Event, :id, :title, :starts_on, full: ->(event) { event.attendees_count >= event.capacity }
+        # @example In one action
+        #   summary :id, :title
+        def summary(*fields, **computed)
+          return @summary || inherited_summary if fields.empty? && computed.empty?
+          return @summary = Summary.build(fields, computed) unless fields.first.is_a?(Class)
+          model = fields.shift
+          raise ArgumentError, "summary #{model} names no field" if fields.empty? && computed.empty?
+          model_summaries[model.name] = Summary.build(fields, computed)
         end
 
+        # @return [Boolean] whether agents get summaries in place of the view: an action whose class
+        #   name's verb is list (Event::ListAction, or a renamed Reports::ListUpcomingAction that
+        #   declares its model), with a summary
+        def summarizes_list? = verb == "list" && !model.nil? && !summary.nil?
+
+        # @return [Hash{String => Summary}] the summaries declared here for each model, by its name
+        def model_summaries = @model_summaries ||= {}
+
         # Declares the whole CLI command, for an app whose commands are
-        # already in use: the words people type, other words for it, the
-        # arguments taken by position, and the columns of its table.
+        # already in use: the words people type, other words for it, and the
+        # arguments taken by position. Its table's columns are the summary.
         #
         # @param command [String] such as "invoices send"
         # @param aliases [Array<String>] other commands for the same action
         # @param args [Array<String, Symbol>] declared arguments, taken by position
-        # @param columns [Array<String, Symbol>]
         # @return [Hash]
         # @raise [ArgumentError] for an args entry that is not a declared argument
-        def cli(command, aliases: [], args: [], columns: [])
+        def cli(command, aliases: [], args: [])
           unknown = args.map(&:to_s) - arguments.keys
           raise ArgumentError, "cli args #{unknown.join(", ")} are not arguments of #{action_name}" if unknown.any?
-          @declared_cli = {command: command.split, aliases: aliases.map(&:split), args: args.map(&:to_s), columns: columns.map(&:to_s)}
+          @declared_cli = {command: command.split, aliases: aliases.map(&:split), args: args.map(&:to_s)}
         end
 
         # @return [Hash, nil] the command declared with `cli`
@@ -199,6 +220,8 @@ module Saltbox
 
         # Declares the JSON Schema of the body the action renders, so agents
         # know what comes back and specs can check it (match_output_schema).
+        # On a list action with a summary it describes the view screens get;
+        # the catalogue gives agents summary_output_schema instead.
         #
         # @param schema [Hash]
         # @return [Hash]
@@ -206,6 +229,18 @@ module Saltbox
 
         # @return [Hash, nil] the schema declared with `returns`
         def output_schema = @output_schema
+
+        private
+
+        # Model summaries are keyed by name, so a reloaded model class still finds its own.
+        def inherited_summary
+          return unless model
+          ancestors.each do |ancestor|
+            found = ancestor.respond_to?(:model_summaries) && ancestor.model_summaries[model.name]
+            return found if found
+          end
+          nil
+        end
       end
     end
   end
