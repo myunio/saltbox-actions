@@ -2,6 +2,46 @@
 
 ## 0.1.0 (unreleased)
 
+- Actions are Active Model objects, named like controllers. `Events::UpdateAction` lives in
+  `app/actions/events/update_action.rb`; its model is the namespace, singular, as
+  `wrap_parameters` finds it (`Admin::Events` tries `Admin::Event`, then `Event`), and
+  `model Customer` overrides it. An action in its model's own namespace (`Event::UpdateAction`)
+  stops the boot. Public names do not change: it is still `update_event`.
+- Input is declared with Active Model: `attribute :reason, :string` for anything that is not a
+  model field, and validations for its checks. The JSON Schema is derived from them: `presence`
+  makes a field required, `inclusion` gives its enum, `length` and `numericality` its bounds.
+  Validations with `if:`, `unless:` or `on:` run but stay out of the schema. Validations run on
+  every call after the schema check and before `confirm`, and a failure is `validation_failed`
+  by field. Each attribute is cast once by its Active Model type and read as a method.
+  `argument` and its keyword options are removed. An attribute named like a method every
+  action has (`params`, `errors`, `authorize`) is refused.
+- One list of model fields: a create or update takes the fields its policy permits (Pundit, or
+  ActionPolicy with `permitted_attributes`). Without such a policy an action lists them with
+  `accepts`; `accepts` beside a policy that supplies fields fails `rails actions:check`.
+  Adapters answer `supplies_fields?`.
+- The verb carries the defaults: kind, whether it works on one record, whether it is safe to
+  repeat, and its rule for agents (`:confirm` for a destructive action, `:allowed` for the
+  rest). `connections` is declared only where an action departs from its verb, and
+  `Configuration#default_connections` is removed. `update` and `delete` are now idempotent.
+  `define_verb :archive, kind: :change, on: :member, idempotent: true` adds an app's own verbs
+  in its base class; `verbs` reads the table. `idempotent false` overrides a verb.
+- A member action loads its record before `perform`, as CanCanCan's
+  `load_and_authorize_resource` does: through `policy_scope`, by `id` (or the action's
+  `find_<record>(scope)`), then `authorize`. It sets `@event` for the view and the reader `event`
+  returns it. `rails actions:check` refuses an attribute named like the reader.
+  `attribute :id` declares a member action for a verb outside the table.
+- `paginated(per_page: 25, max_per_page: 100)` declares `page` and `page_size` as attributes.
+- `featured` replaces `mcp_core`. The catalogue keeps the `mcp_core` key on the wire.
+- `policy_rule :archive?` replaces the class-level `authorize :archive?`.
+- Titles and descriptions are written in the class. A locale entry wins over the class text,
+  as Action Mailer's `default_i18n_subject` does. A field's description comes from the action's
+  locale entry, then the resource's (`actions.events.fields`), then the attribute's
+  `description:`, then `actions.shared.fields`. The generator no longer writes a locale entry.
+- `Events::UpdateAction.perform_now(caller:, **input)` runs an action through every check;
+  `perform_later` runs it through Active Job (`Saltbox::Actions::InvocationJob`), checking
+  everything again when the job runs and dropping it on a refusal.
+- `Error::Invalid.for(errors)` turns Active Model errors into a `validation_failed` refusal.
+
 - Booting never touches the database. With eager loading, the boot checks only what each action
   declares (name, verb, kind, connections, unique names and CLI commands). `rails actions:check`
   runs every other check (policy rules, fields, summaries, `check_action` and `check_registry`), as
