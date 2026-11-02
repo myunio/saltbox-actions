@@ -21,9 +21,40 @@ RSpec.describe Saltbox::Actions::Finder do
     end
   end
 
-  it "finds nothing for a request sharing one description word with an action, rather than that action" do
+  it "finds nothing for a request sharing one description word with several actions, rather than those actions" do
     expect(found("say hello")).to be_empty
     expect(found("send a newsletter")).to be_empty
+  end
+
+  it "finds the one action using a description word when nothing else matches" do
+    expect(found("the capacity")).to eq(["update_event"])
+  end
+
+  # Descriptions written so each word's rarity is known: "ticket" and "venue"
+  # are in three descriptions, the rest in two each, so none falls back as
+  # the one action using a word.
+  context "weighing description words" do
+    let(:action) { Data.define(:action_name, :title, :description) }
+    let(:weighed) do
+      described_class.new([
+        action.new("first", "First", "Handles ticket and venue questions."),
+        action.new("second", "Second", "Handles ticket and venue changes."),
+        action.new("third", "Third", "Handles ticket and venue moves."),
+        action.new("fourth", "Fourth", "Handles refund and waitlist requests."),
+        action.new("fifth", "Fifth", "Handles parking and catering."),
+        action.new("sixth", "Sixth", "Handles refund and waitlist complaints."),
+        action.new("seventh", "Seventh", "Handles parking and catering bookings.")
+      ])
+    end
+
+    it "drops an action whose words carry less than half the weight of the request's known words" do
+      expect(found("ticket venue refund waitlist", among: weighed)).to contain_exactly("fourth", "sixth")
+    end
+
+    it "keeps an action whose words carry half that weight or more" do
+      expect(found("refund waitlist parking catering", among: weighed)).to contain_exactly("fourth", "fifth", "sixth", "seventh")
+      expect(found("ticket venue refund", among: weighed)).to contain_exactly("first", "second", "third")
+    end
   end
 
   it "ignores words no action uses, such as a person's name" do
@@ -44,7 +75,8 @@ RSpec.describe Saltbox::Actions::Finder do
       end
     end
 
-    it "still finds nothing for one shared description word" do
+    it "finds the one action using a description word, but nothing for a word several share" do
+      expect(found("newest", among: five)).to eq(["list_events"])
       expect(found("say hello", among: five)).to be_empty
     end
   end

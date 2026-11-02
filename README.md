@@ -250,7 +250,12 @@ object that answers `allows?(action)`:
 ConnectionAccess = Data.define(:action_names) do
   def allows?(action) = action_names.include?(action.action_name)
 end
+```
 
+Build the caller with it wherever you build one from a token. Here
+`token.action_names` stands for your own record of what the person allowed:
+
+```ruby
 ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: "Claude",
   scopes: token.scopes, access: ConnectionAccess.new(token.action_names))
 ```
@@ -263,8 +268,10 @@ place to note the refusal:
 
 ```ruby
 # config/initializers/actions.rb
-config.on_access_refused do |caller, action|
-  Saltbox::Actions::Error::InsufficientScope.new("This connection may not use #{action.title}. Allow it in Settings.")
+Saltbox::Actions.configure do |config|
+  config.on_access_refused do |caller, action|
+    Saltbox::Actions::Error::InsufficientScope.new("This connection may not use #{action.title}. Allow it in Settings.")
+  end
 end
 ```
 

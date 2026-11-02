@@ -11,6 +11,10 @@ module Saltbox
     # the app does not do then finds nothing, rather than an action whose
     # description happens to share one word with it; a word no action uses,
     # such as a person's name, neither helps nor hurts.
+    #
+    # When no action clears that bar, a description word only one action uses
+    # still finds that action: "capacity" finds the one action that changes
+    # it, while a word several actions share finds nothing.
     class Finder
       # Words that carry no meaning for choosing an action.
       STOP_WORDS = %w[a an and any are as at be by can could do does for from get give have how i in is it me my of on or our please show some that the this to up was we what when where which who will with would you your].to_set.freeze
@@ -33,10 +37,12 @@ module Saltbox
         terms = self.class.terms(query)
         return [] if terms.empty?
 
-        rarity = terms.to_h { |term| [term, rarity(term)] }
-        known = terms.select { |term| @actions.any? { uses?(it, term) } }
-        @actions.select { |action| relevant?(action, terms, rarity, known) }
-          .map { |action| [action, score(action, terms, rarity)] }
+        used = terms.to_h { |term| [term, @actions.count { uses?(it, term) }] }
+        rarity = used.transform_values { |count| rarity(count) }
+        known = terms.select { |term| used.fetch(term).positive? }
+        found = @actions.select { |action| relevant?(action, terms, rarity, known) }
+        found = @actions.select { |action| known.any? { |term| used.fetch(term) == 1 && uses?(action, term) } } if found.empty?
+        found.map { |action| [action, score(action, terms, rarity)] }
           .sort_by { |action, score| [-score, action.action_name] }
           .first(limit).map(&:first)
       end
@@ -82,10 +88,7 @@ module Saltbox
 
       # A word few actions use says more than one most of them use ("comment"
       # against "card").
-      def rarity(term)
-        used = @actions.count { uses?(it, term) }
-        Math.log(1 + @actions.size.to_f / (1 + used))
-      end
+      def rarity(used) = Math.log(1 + @actions.size.to_f / (1 + used))
 
       # Exactly, or by a shared start of four letters or more ("comment" and "comments").
       def matches?(word, term)

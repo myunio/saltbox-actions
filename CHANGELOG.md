@@ -3,7 +3,8 @@
 ## 0.1.0 (unreleased)
 
 - find_action finds an action only through its title or name, or two or more of the
-  request's words in its description; one shared description word no longer matches.
+  request's words in its description. When nothing clears that bar, a description
+  word only one action uses still finds it.
 
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
