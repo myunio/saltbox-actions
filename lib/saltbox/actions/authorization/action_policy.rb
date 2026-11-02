@@ -9,6 +9,10 @@ module Saltbox
       # The policy's authorization context is the caller's account as
       # `user`; override authorization_context_for to add more.
       #
+      # Policies are looked up in the action's policy namespace
+      # (Policies#policy_namespace), strictly: Admin::Projects::ListAction
+      # asks Admin::ProjectPolicy, and never falls back to ProjectPolicy.
+      #
       # ActionPolicy has no permitted_attributes. A policy that defines one,
       # returning the field names the person may set, gives create and update
       # actions their fields; otherwise an action names them with `accepts`.
@@ -19,7 +23,9 @@ module Saltbox
         module Namespace
           private
 
-          def authorization_namespace = self.class.policy_namespace || super
+          def authorization_namespace = self.class.policy_namespace_module!
+
+          def authorization_strict_namespace = true
         end
 
         included do
@@ -31,12 +37,15 @@ module Saltbox
         end
 
         class_methods do
-          # The namespace policies are looked up in first, as ActionPolicy's
-          # authorization_namespace: ActionPolicies::EventPolicy before
-          # EventPolicy. Override it to use one.
-          #
+          # @return [Module, nil] the policy namespace, as ActionPolicy's authorization_namespace takes it
+          def policy_namespace_module = policy_namespace.presence&.then { it.map { it.to_s.camelize }.join("::").safe_constantize }
+
           # @return [Module, nil]
-          def policy_namespace = nil
+          # @raise [ActionPolicy::NotFound] for a namespace no module has, so no policy can be in it
+          def policy_namespace_module!
+            return if policy_namespace.empty?
+            policy_namespace_module || raise(::ActionPolicy::NotFound.new(model, "No module #{policy_namespace.join("/").camelize} holds policies"))
+          end
 
           # @param account [Object]
           # @return [Hash] the policy's authorization context
@@ -49,11 +58,17 @@ module Saltbox
           # @return [Boolean]
           def permitted?(account)
             return true unless model
-            policy_class.new(model, **authorization_context_for(account)).apply(policy_query)
+            policy = policy_class || raise(::ActionPolicy::NotFound.new(model, "Couldn't find #{expected_policy_name} for #{model}"))
+            policy.new(model, **authorization_context_for(account)).apply(policy_query!)
           end
 
-          # @return [Class, nil] the model's policy
-          def policy_class = model && ::ActionPolicy.lookup(model, namespace: policy_namespace, allow_nil: true)
+          # @return [Class, nil] the model's policy, in the action's policy namespace
+          def policy_class
+            return unless model
+            namespace = policy_namespace_module
+            return if namespace.nil? && policy_namespace.any?
+            ::ActionPolicy.lookup(model, namespace:, strict_namespace: true, allow_nil: true)
+          end
 
           # @param rule [Symbol]
           # @return [Boolean] whether the policy answers the rule: defined, aliased, or by its default rule
@@ -90,7 +105,7 @@ module Saltbox
         # @raise [ActionPolicy::Unauthorized]
         def authorize(record, rule = nil, **)
           @_authorization_performed = true
-          authorize!(record, to: rule || self.class.policy_query, **)
+          authorize!(record, to: rule || self.class.policy_query!, **)
           record
         end
 

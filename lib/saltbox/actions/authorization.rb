@@ -31,24 +31,62 @@ module Saltbox
       autoload :Pundit, "saltbox/actions/authorization/pundit"
       autoload :ActionPolicy, "saltbox/actions/authorization/action_policy"
 
-      # The rails actions:check check for an adapter whose rules live in policy classes,
-      # one per model. The adapter defines policy_class, policy_rule?(rule)
-      # and policy_label.
+      # What an adapter whose rules live in policy classes, one per model,
+      # shares: the namespace its policies are looked up in, and the
+      # rails actions:check check. The adapter defines policy_class,
+      # policy_rule?(rule) and policy_label.
       module Policies
         extend ActiveSupport::Concern
 
+        included do
+          class_attribute :_policy_namespace, instance_accessor: false, instance_predicate: false
+        end
+
         class_methods do
+          # The namespace the action's policy is looked up in, as Pundit's
+          # authorize [:admin, project] names one. It is the action's outer
+          # namespace (Naming#outer_namespace), so Admin::Projects::ListAction
+          # asks Admin::ProjectPolicy, everywhere: before any record loads,
+          # in authorize and policy_scope, for its fields and for the records
+          # a reference may pick. A missing namespaced policy is never
+          # replaced by the model's own: the action fails, and
+          # rails actions:check names the policy to add.
+          #
+          # Declare another when the class's modules are not the right one:
+          # a symbol or a module, or false for the model's own policy.
+          # Inherited, as policy_rule is.
+          #
+          # @param value [Symbol, String, Module, false, nil] declares it: :admin, Admin, or false
+          # @return [Array<Symbol>] such as [:admin]; [] for the model's own policy
+          def policy_namespace(value = nil)
+            return _policy_namespace || outer_namespace.map(&:to_sym) if value.nil?
+            words = value.is_a?(Module) ? value.name.underscore.split("/") : value.to_s.split("/")
+            self._policy_namespace = (value == false) ? [] : words.map(&:to_sym)
+          end
+
+          # @return [Symbol] the policy rule the action asks
+          # @raise [ArgumentError] for an action with a declared name and no policy_rule, naming the fix
+          def policy_query!
+            policy_query || raise(ArgumentError, "#{name}: #{missing_rule}")
+          end
+
+          # @return [String] the policy's name, found or not: Admin::ProjectPolicy
+          def expected_policy_name = [*policy_namespace.map { it.to_s.camelize }, "#{model.name}Policy"].join("::")
+
           # @return [Array<String>] a missing policy or rule, and the fix
           def authorization_problems
             return [] unless model
             problems = []
             if declared_name && declared_query.nil?
-              return ["#{model.name} is its model: name the policy rule, policy_rule :show? or another"]
+              return [missing_rule]
             elsif more_than_verb? && declared_query.nil? && !declared_name
               problems << "#{action_words.join(" ")} says more than #{verb}: name the policy rule, policy_rule :#{verb}? or another"
             end
-            if policy_class.nil?
-              problems << "#{model.name} has no #{policy_label} policy: add #{model.name}Policy, or include another authorization adapter (see the README)"
+            if policy_class.nil? && policy_namespace.any?
+              problems << "#{model.name} has no #{policy_label} policy in #{policy_namespace.join("/")}: " \
+                "add #{expected_policy_name}, or declare policy_namespace (see the README)"
+            elsif policy_class.nil?
+              problems << "#{model.name} has no #{policy_label} policy: add #{expected_policy_name}, or include another authorization adapter (see the README)"
             elsif !policy_rule?(policy_query)
               problems << "#{policy_class}##{policy_query} is missing: add it, or name another with policy_rule"
             end
@@ -57,6 +95,10 @@ module Saltbox
             end
             problems
           end
+
+          private
+
+          def missing_rule = "#{model.name} is its model: name the policy rule, policy_rule :show? or another"
         end
       end
 

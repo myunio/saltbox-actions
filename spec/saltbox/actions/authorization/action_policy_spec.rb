@@ -5,7 +5,7 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
     stub_const("PolicyAction", Class.new(Saltbox::Actions::Base) {
       include Saltbox::Actions::Authorization::ActionPolicy
 
-      def self.policy_namespace = ActionPolicies
+      policy_namespace ActionPolicies
     })
   end
 

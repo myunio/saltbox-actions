@@ -115,9 +115,19 @@ RSpec.describe Saltbox::Actions::Registry do
   end
 
   it "names both classes when two actions share a name" do
+    upcoming = action("Events::ListUpcomingAction") {
+      action_name "list_events"
+      kind :read
+      model Event
+      policy_rule :index?
+    }
+    expect { described_class.validate!([upcoming, Events::ListAction]) }
+      .to raise_error(ArgumentError, /Action names must be unique: list_events \(Events::ListAction, Events::ListUpcomingAction\)\. To fix: declare action_name/)
+  end
+
+  it "keeps a back-office action apart from the public one, by its outer namespace" do
     admin = action("Admin::Events::ListAction")
-    expect { described_class.validate!([admin, Events::ListAction]) }
-      .to raise_error(ArgumentError, /Action names must be unique: list_events \(Admin::Events::ListAction, Events::ListAction\)\. To fix: declare action_name/)
+    expect(described_class.validate!([admin, Events::ListAction])).to be_nil
   end
 
   it "refuses two actions with one CLI command, or an alias that is another's command" do

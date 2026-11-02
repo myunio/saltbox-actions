@@ -123,24 +123,44 @@ module Saltbox
         #   otherwise ["events", "update"], ["event-types", "create"]
         def cli_command
           return declared_cli[:command] if declared_cli
-          noun = action_namespace ? name_noun(plural: true) : model&.model_name&.route_key
+          noun = (action_namespace || outer_namespace.any?) ? name_noun(plural: true) : model&.model_name&.route_key
           [noun&.dasherize, action_words.join("-")].compact
         end
 
         # @return [String, nil] the namespace its action folder gives its names (see ActionPaths#add)
         def action_namespace = Actions.config.action_paths.namespace_for(self)
 
-        # The model's part of the action's name. A namespace from the action
-        # folder takes the place of an isolated engine's module: Billing::Invoice
-        # is billing_invoice, or pay_invoice under the namespace "pay".
+        # The modules the action sits in outside its model's own, as a
+        # controller's do in a back office: ["admin"] for
+        # Admin::Projects::ListAction on Project. They come before the
+        # resource namespace, and leave out the model's modules, so
+        # Projects::ListAction and Billing::Invoices::ListAction on
+        # Billing::Invoice have none. They are part of the action's name
+        # (list_admin_projects), and its policy is looked up in them
+        # (Authorization::Policies#policy_namespace).
+        #
+        # @return [Array<String>]
+        def outer_namespace
+          return [] unless name && model.is_a?(Class)
+          (name.deconstantize.split("::")[0...-1] - model.name.deconstantize.split("::")).map(&:underscore)
+        end
+
+        # The model's part of the action's name, after any outer namespace.
+        # A namespace from the action folder takes the place of an isolated
+        # engine's module: Billing::Invoice is billing_invoice, or
+        # pay_invoice under the namespace "pay".
         #
         # @param plural [Boolean]
         # @return [String, nil]
         def name_noun(plural:)
           return unless model
           names = model.model_name
-          return plural ? names.plural : names.singular unless (namespace = action_namespace)
-          "#{namespace}_#{plural ? names.param_key.pluralize : names.param_key}"
+          noun = if (namespace = action_namespace)
+            "#{namespace}_#{plural ? names.param_key.pluralize : names.param_key}"
+          else
+            plural ? names.plural : names.singular
+          end
+          [*outer_namespace, noun].join("_")
         end
 
         # @return [String, nil] the name declared with action_name
@@ -213,6 +233,7 @@ module Saltbox
         def built_title
           noun = model&.model_name&.human&.downcase
           noun = "#{action_namespace.humanize(capitalize: false)} #{noun}" if noun && action_namespace
+          noun = [*outer_namespace.map { it.humanize(capitalize: false) }, noun].join(" ") if noun
           noun = noun&.pluralize if PLURAL_VERBS.include?(verb)
           [verb.humanize, noun, *action_words.drop(1)].compact.join(" ")
         end

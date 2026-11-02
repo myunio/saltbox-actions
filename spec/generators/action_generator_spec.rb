@@ -58,7 +58,10 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     expect(destination.join("app/actions/events/update_action.rb").read).to eq(action)
   end
 
-  it "finds the model outside an admin namespace, as the action will" do
+  it "finds the model outside an admin namespace, as the action will, and asks the namespace's policy" do
+    expect(generate_failing("Admin::Events::Update")).to include("add Admin::EventPolicy")
+    expect(destination.join("app/actions/admin/events/update_action.rb")).not_to exist
+    stub_const("Admin::EventPolicy", Class.new(EventPolicy))
     generate("Admin::Events::Update")
     expect(destination.join("app/actions/admin/events/update_action.rb").read).to include("class Admin::Events::UpdateAction", "event.update!")
   end
