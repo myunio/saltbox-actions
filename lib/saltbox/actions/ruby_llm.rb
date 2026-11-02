@@ -2,10 +2,13 @@ require "ruby_llm"
 
 module Saltbox
   module Actions
-    # Presents the front door to an in-app chat as RubyLLM tools. Refusals
-    # come back as the error's JSON, so the model can explain the next step.
+    # Presents the front door to an in-app chat as RubyLLM tools. Results
+    # and refusals come back as JSON marked as record data (see RecordData),
+    # so the model can explain the next step without taking orders from a
+    # record. Put RecordData::NOTE in the chat's instructions too.
     #
     # @example
+    #   chat.with_instructions(Saltbox::Actions::RecordData::NOTE)
     #   chat.with_tools(*Saltbox::Actions::RubyLLMTool.for(ApplicationAction::Caller.assistant(account)))
     class RubyLLMTool < ::RubyLLM::Tool
       # @param caller [Caller] usually an assistant caller
@@ -32,14 +35,13 @@ module Saltbox
       def parameters_schema = @tool.input_schema
 
       # @param arguments [Hash] the model's arguments
-      # @return [Hash, String] the action's response body: an object as it is, any other JSON
-      #   value as its JSON text ("false", "null"); "Done." when it has none; or the error as JSON
+      # @return [String] the action's response body, or the error, as JSON marked as
+      #   record data; "Done." when it has none
       def execute(**arguments)
         result = FrontDoor.call(@tool.name, arguments.deep_stringify_keys, caller: @caller)
-        return "Done." if result.equal?(FrontDoor::EMPTY)
-        result.is_a?(Hash) ? result : JSON.generate(result)
+        result.equal?(FrontDoor::EMPTY) ? "Done." : RecordData.wrap(result)
       rescue Error => error
-        error.as_json
+        RecordData.wrap(error.as_json)
       end
     end
   end

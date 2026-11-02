@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+- Every result an agent gets over MCP or from the assistant tools, refusals included, is
+  marked as record data: its text comes inside `<record-data>` tags, with `<`, `>` and `&`
+  escaped so a record cannot close the tag. MCP's `structuredContent` is unchanged. One
+  sentence, `RecordData::NOTE`, explains the tag: first in the MCP server's instructions
+  (then `config.instructions`) and in the `find_action` and run tool descriptions.
+  `RubyLLMTool#execute` now returns that marked text, never a Hash.
 - Authorization is optional. With no adapter, every action is allowed and the boot check asks
   for no policy. Adapters report their boot problems through `authorization_problems`; the
   README documents the adapter contract with a plain-model example.
