@@ -288,7 +288,8 @@ end
 
 Name the record's own attributes or methods, and compute any other field
 with a lambda that takes the record. Keep `id` in it, so the agent can pick
-a record and run the show action for the rest.
+a record and run the show action for the rest. Leave links out, such as
+signed file URLs: an agent's transcript keeps everything it reads.
 
 `Event::ListAction` needs no change. It sets `@events` and calls
 `render :index, meta: {page: 2}`. A person on a screen still gets the view.

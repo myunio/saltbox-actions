@@ -29,6 +29,15 @@ RSpec.describe Saltbox::Actions::Summary do
     expect(list_events(as_api(manager))).to eq(list_events(as_mcp(manager)))
   end
 
+  it "keeps a full agent page small and free of links, while a screen still gets the view" do
+    24.times { Event.create!(org_id: 1, title: "Event #{it}", starts_on: "2026-08-01", notes: "https://files.example.com/signed?token=#{it}") }
+    json = JSON.generate(list_events(as_mcp(manager)))
+    expect(JSON.parse(json).dig("data", "events").size).to eq(25)
+    expect(json.bytesize).to be < 12.kilobytes
+    expect(json).not_to include("://")
+    expect(list_events(as_screen(manager), action: list { summary :id, :notes }).dig("data", "events").size).to eq(25)
+  end
+
   it "sends the same JSON in the envelope format" do
     body = list_events(as_mcp(manager))
     with_settings(result_format: :envelope) { expect(list_events(as_mcp(manager))).to eq(body) }
