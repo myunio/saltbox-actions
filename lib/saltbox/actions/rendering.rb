@@ -17,10 +17,11 @@ module Saltbox
     # Screens get the view, or the json: sent beside collection: (a
     # serializer's, such as Alba's). Such an action always hands over its
     # records, so nothing reaches an agent around the summary.
+    # @api private
     module Rendering
       # Instance variables the base class, Active Model and the adapters set
       # for themselves; views never see them. Any starting @_ are left out too.
-      PROTECTED_IVARS = %i[@actor @params @pundit @attributes @errors @validation_context @context_for_validation].freeze
+      PROTECTED_IVARS = %i[@current_caller @params @pundit @attributes @errors @validation_context @context_for_validation].freeze
       # Tells render json: false or json: nil from no json: at all.
       NO_JSON = Object.new.freeze
       # Tells render collection: nil from no collection: at all.
@@ -37,6 +38,7 @@ module Saltbox
       # @raise [AbstractController::DoubleRenderError] on a second render or head
       # @raise [ArgumentError] when a list action with a summary renders json: without collection:,
       #   or hands over no records, or another action passes collection:
+      # @api public
       def render(template = nil, status: :ok, json: NO_JSON, meta: nil, collection: NO_COLLECTION, **locals)
         raise AbstractController::DoubleRenderError if performed?
         records = summarized_records(json, collection, meta)
@@ -54,15 +56,18 @@ module Saltbox
 
       # @param status [Symbol, Integer]
       # @return [Result] a response with no body
+      # @api public
       def head(status)
         raise AbstractController::DoubleRenderError if performed?
         @_result = Result.new(status: Rack::Utils.status_code(status), body: nil, empty: true)
       end
 
       # @return [Boolean] whether render or head has run
+      # @api public
       def performed? = !@_result.nil?
 
       # @return [Result] the response, or a 204 when nothing was rendered
+      # @api public
       def result = @_result || Result.no_content
 
       private
@@ -100,7 +105,7 @@ module Saltbox
           raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: set #{variable} to its records, or render collection:"
         end
         plain_meta!(meta)
-        records if actor.agent?
+        records if current_caller.agent?
       end
 
       # The same JSON in either result format: {"data": {"events": [...]}, "meta": {...}}.

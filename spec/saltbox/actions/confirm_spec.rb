@@ -4,7 +4,7 @@ require "saltbox/actions/mcp"
 RSpec.describe "Confirming a :confirm action" do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
   let(:config) { Saltbox::Actions.config }
-  let(:cancel) { ->(caller) { Saltbox::Actions::Invocation.call(name: "cancel_event", caller:, arguments: {id: event.id.to_s}) } }
+  let(:cancel) { ->(caller) { Saltbox::Actions::Invocation.call(action: "cancel_event", caller:, arguments: {id: event.id.to_s}) } }
 
   def approve(answer = true, &block)
     allow(config).to receive(:confirm).and_return(block || ->(*) { answer })
@@ -13,9 +13,19 @@ RSpec.describe "Confirming a :confirm action" do
   {screen: :allowed, webmcp: :allowed, api: :allowed, mcp: :allowed, assistant: :human_required}.each do |surface, answer|
     it "lets #{surface} run it with enforce_confirm off, and never asks" do
       approve { raise "asked" }
-      outcome = expect { cancel.call(public_send(:"as_#{surface}", manager)) }
-      (answer == :allowed) ? outcome.not_to(be_refused) : outcome.to(be_refused.with(answer))
+      with_settings(enforce_confirm: false) do
+        outcome = expect { cancel.call(public_send(:"as_#{surface}", manager)) }
+        (answer == :allowed) ? outcome.not_to(be_refused) : outcome.to(be_refused.with(answer))
+      end
     end
+  end
+
+  it "is on by default: with no confirm hook, every agent but the chat is refused, and a person is not" do
+    expect(Saltbox::Actions::Configuration.new.enforce_confirm).to be(true)
+    expect(config.enforce_confirm).to be(true)
+    expect { cancel.call(as_api(manager)) }.to be_refused.with(:confirmation_required)
+    expect { cancel.call(as_mcp(manager)) }.to be_refused.with(:confirmation_required)
+    expect { cancel.call(as_screen(manager)) }.not_to be_refused
   end
 
   {screen: :allowed, webmcp: :confirmation_required, api: :confirmation_required,
@@ -77,7 +87,7 @@ RSpec.describe "Confirming a :confirm action" do
     approve { raise "asked" }
     with_settings(enforce_confirm: true) do
       expect { cancel.call(as_mcp(reader)) }.to be_refused.with(:forbidden)
-      expect { Saltbox::Actions::Invocation.call(name: "cancel_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, reason: 1}) }
+      expect { Saltbox::Actions::Invocation.call(action: "cancel_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, reason: 1}) }
         .to have_field_errors(:reason)
     end
   end
@@ -85,7 +95,7 @@ RSpec.describe "Confirming a :confirm action" do
   it "never asks for an :allowed action" do
     approve { raise "asked" }
     with_settings(enforce_confirm: true) do
-      expect { Saltbox::Actions::Invocation.call(name: "update_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, title: "New"}) }
+      expect { Saltbox::Actions::Invocation.call(action: "update_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, title: "New"}) }
         .not_to be_refused
     end
   end
@@ -96,23 +106,23 @@ RSpec.describe "Confirming a :confirm action" do
       Class.new(ApplicationAction) do
         def self.name = "Events::RescheduleAction"
         kind :change
-        connections :allowed
+        agents :allowed
         policy_rule :update?
         attribute :id
         attribute :cancel, :boolean
 
         def perform
           event.update!(title: "Moved")
-          actor.confirm!(Events::CancelAction) if cancel
+          current_caller.confirm!(Events::CancelAction) if cancel
           event.update!(status: cancel ? "cancelled" : "published")
           render :show
         end
       end
     end
-    let(:reschedule) { ->(caller, cancel: true) { Saltbox::Actions::Invocation.call(name: action, caller:, arguments: {id: event.id.to_s, cancel:}) } }
+    let(:reschedule) { ->(caller, cancel: true) { Saltbox::Actions::Invocation.call(action: action, caller:, arguments: {id: event.id.to_s, cancel:}) } }
 
     it "lets the call through with enforce_confirm off, and a person on a screen always" do
-      reschedule.call(as_mcp(manager))
+      with_settings(enforce_confirm: false) { reschedule.call(as_mcp(manager)) }
       expect(event.reload.status).to eq("cancelled")
       with_settings(enforce_confirm: true) { reschedule.call(as_screen(manager)) }
     end
@@ -129,7 +139,7 @@ RSpec.describe "Confirming a :confirm action" do
       expect(event.reload.status).to eq("cancelled")
     end
 
-    it "refuses a caller the named action's connections bar" do
+    it "refuses a caller the named action's agents bar" do
       expect { reschedule.call(as_assistant(manager)) }.to be_refused.with(:human_required)
     end
 

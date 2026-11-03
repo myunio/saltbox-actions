@@ -24,7 +24,7 @@ RSpec.describe "An action whose policy is missing" do
 
   shared_examples "left out of every list" do
     it "is left out of the actions list, MCP and the assistant's tools, which still list the others" do
-      expect(registry.catalogue(as_api(manager)).pluck("name")).to include("list_events", "show_event").and exclude("export_reports_events")
+      expect(registry.catalog(as_api(manager)).pluck("name")).to include("list_events", "show_event").and exclude("export_reports_events")
       expect(mcp("tools/list").dig("result", "tools").pluck("name")).to include("show_event", "find_action", "run_read_action")
       found = mcp("tools/call", {name: "find_action"}).dig("result", "structuredContent", "actions").pluck("name")
       expect(found).to include("list_events").and exclude("export_reports_events")
@@ -34,7 +34,7 @@ RSpec.describe "An action whose policy is missing" do
     end
 
     it "still fails when run" do
-      expect { Saltbox::Actions::Invocation.call(name: missing, caller: as_api(manager), arguments: {}) }.to raise_error(missing_policy)
+      expect { Saltbox::Actions::Invocation.call(action: missing, caller: as_api(manager), arguments: {}) }.to raise_error(missing_policy)
       expect { missing.perform_now(caller: as_api(manager)) }.to raise_error(missing_policy)
     end
 
@@ -43,14 +43,14 @@ RSpec.describe "An action whose policy is missing" do
     it "warns once per action through the Rails logger, naming the policy to add, and stays left out after" do
       logged = StringIO.new
       allow(Rails).to receive(:logger).and_return(ActiveSupport::Logger.new(logged))
-      expect { 2.times { registry.catalogue(as_api(manager)) } }.not_to output.to_stderr
+      expect { 2.times { registry.catalog(as_api(manager)) } }.not_to output.to_stderr
       expect(logged.string).to match(warning)
       expect([missing.policy_missing?, missing.policy_missing?]).to eq([true, true])
     end
 
     it "warns on stderr when Rails has no logger" do
       allow(Rails).to receive(:logger).and_return(nil)
-      expect { 2.times { registry.catalogue(as_api(manager)) } }.to output(warning).to_stderr
+      expect { 2.times { registry.catalog(as_api(manager)) } }.to output(warning).to_stderr
     end
   end
 

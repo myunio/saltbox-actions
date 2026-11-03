@@ -16,6 +16,7 @@ module Saltbox
     # because the words are public: the action name is the tool name agents
     # call over MCP (create_event_type), and the CLI command is built from
     # the same words.
+    # @api private
     module Naming
       extend ActiveSupport::Concern
 
@@ -28,9 +29,6 @@ module Saltbox
         "export" => {kind: :read, member: false, idempotent: false},
         "create" => {kind: :change, member: false, idempotent: false},
         "update" => {kind: :change, member: true, idempotent: true},
-        "cancel" => {kind: :change, member: true, idempotent: false},
-        "reinstate" => {kind: :change, member: true, idempotent: false},
-        "publish" => {kind: :change, member: true, idempotent: false},
         "delete" => {kind: :destructive, member: true, idempotent: true}
       }.freeze
       # Rails verbs, and the verb actions use instead. An action named with the
@@ -38,13 +36,15 @@ module Saltbox
       RAILS_SPELLINGS = {"destroy" => "delete", "index" => "list", "edit" => "update", "new" => "create", "get" => "show"}.freeze
       # Verbs whose tool name uses the model's plural: list_events, not list_event.
       PLURAL_VERBS = %w[list export].freeze
-      # The policy query each verb asks. A verb not listed asks the query of
-      # its own name: cancel asks cancel?.
-      VERB_QUERIES = {"list" => :index?, "show" => :show?, "create" => :create?, "update" => :update?, "delete" => :destroy?}.freeze
+      # The policy rule each verb asks. A verb not listed asks the rule of
+      # its own name: archive asks archive?.
+      VERB_RULES = {"list" => :index?, "show" => :show?, "create" => :create?, "update" => :update?, "delete" => :destroy?}.freeze
       KINDS = %i[read change destructive].freeze
       ON = %i[member collection].freeze
 
       included do
+        # The verb table: `verbs` reads it (@api public). Add to it with
+        # define_verb; writing it directly is internal.
         class_attribute :verbs, instance_accessor: false, default: VERBS
       end
 
@@ -58,37 +58,42 @@ module Saltbox
         # @param kind [Symbol] :read, :change or :destructive
         # @param on [Symbol] :member for a verb that works on one record named by an id, or :collection
         # @param idempotent [Boolean] whether running it again with the same input changes nothing more
-        # @param connections [Symbol, nil] the verb's connections rule (see Declarations#connections);
+        # @param agents [Symbol, nil] the verb's agents rule (see Declarations#agents);
         #   left out, its kind's
         # @return [void]
-        # @raise [ArgumentError] for an unknown kind, on: or connections rule, or a Rails spelling
+        # @raise [ArgumentError] for an unknown kind, on: or agents rule, or a Rails spelling
         #
         # @example In ApplicationAction
         #   define_verb :archive, kind: :change, on: :member, idempotent: true
-        #   define_verb :void, kind: :destructive, on: :member, connections: :never
-        def define_verb(*names, kind:, on: :collection, idempotent: false, connections: nil)
+        #   define_verb :void, kind: :destructive, on: :member, agents: :never
+        # @api public
+        def define_verb(*names, kind:, on: :collection, idempotent: false, agents: nil)
           raise ArgumentError, "define_verb #{names.join(", ")}: kind is :read, :change or :destructive, not #{kind.inspect}" unless KINDS.include?(kind)
           raise ArgumentError, "define_verb #{names.join(", ")}: on is :member or :collection, not #{on.inspect}" unless ON.include?(on)
-          if connections && !Declarations::CONNECTIONS.include?(connections)
-            raise ArgumentError, "define_verb #{names.join(", ")}: connections is :allowed, :confirm or :never, not #{connections.inspect}"
+          if agents && !Declarations::AGENT_RULES.include?(agents)
+            raise ArgumentError, "define_verb #{names.join(", ")}: agents is :allowed, :confirm or :never, not #{agents.inspect}"
           end
           names = names.map(&:to_s)
           spelled = names.select { RAILS_SPELLINGS.key?(it) }
           raise ArgumentError, "#{spelled.map { "#{it} is spelled #{RAILS_SPELLINGS[it]}" }.join(", ")} in actions" if spelled.any?
-          rule = {kind:, member: on == :member, idempotent:, connections:}.compact.freeze
+          rule = {kind:, member: on == :member, idempotent:, agents:}.compact.freeze
           self.verbs = verbs.merge(names.to_h { [it, rule] }).freeze
         end
 
         # @return [Array<String>] the words before Action: ["show", "history"] for Events::ShowHistoryAction
+        # @api private
         def action_words = name.demodulize.delete_suffix("Action").underscore.split("_")
 
         # @return [String] the first action word
+        # @api private
         def verb = action_words.first
 
         # @return [Boolean] whether the verb is in the verb table
+        # @api private
         def table_verb? = verbs.key?(verb)
 
         # @return [Boolean] whether the class name has words after the verb, as ShowHistoryAction does
+        # @api private
         def more_than_verb? = action_words.size > 1
 
         # The model the action works on, unless declared: its namespace,
@@ -99,6 +104,7 @@ module Saltbox
         #
         # @param value [Class<ActiveRecord::Base>, nil] declares the model
         # @return [Class<ActiveRecord::Base>, nil]
+        # @api public
         def model(value = nil)
           return @model = value if value
           return @model if declared_name || defined?(@model)
@@ -113,6 +119,7 @@ module Saltbox
         #
         # @param value [String, nil] declares the name
         # @return [String] such as update_event, list_event_types, show_event_history or whoami
+        # @api public
         def action_name(value = nil)
           return @declared_name = value.to_s if value
           return declared_name if declared_name
@@ -121,6 +128,7 @@ module Saltbox
 
         # @return [Array<String>] the CLI command's words: the declared ones (see Declarations#cli),
         #   otherwise ["events", "update"], ["event-types", "create"]
+        # @api private
         def cli_command
           return declared_cli[:command] if declared_cli
           noun = (action_namespace || outer_namespace.any?) ? name_noun(plural: true) : model&.model_name&.route_key
@@ -128,6 +136,7 @@ module Saltbox
         end
 
         # @return [String, nil] the namespace its action folder gives its names (see ActionPaths#add)
+        # @api private
         def action_namespace = Actions.config.action_paths.namespace_for(self)
 
         # Every module the action is in that its model is not in, as a
@@ -144,6 +153,7 @@ module Saltbox
         # looked up in them (Authorization::Policies#policy_namespace).
         #
         # @return [Array<String>]
+        # @api public
         def outer_namespace = name ? outer_modules(name.deconstantize.split("::")) : []
 
         # @api private
@@ -165,6 +175,7 @@ module Saltbox
         #
         # @param plural [Boolean]
         # @return [String, nil]
+        # @api private
         def name_noun(plural:)
           return unless model
           names = model.model_name
@@ -177,31 +188,38 @@ module Saltbox
         end
 
         # @return [String, nil] the name declared with action_name
+        # @api private
         def declared_name = @declared_name
 
         # @return [Symbol, nil] :read, :change or :destructive, from the verb table or from the class's
         #   `kind` declaration; an action with a declared name always declares it
+        # @api public
         def kind = declared_name ? declared_kind : (verb_rule&.fetch(:kind) || declared_kind)
 
         # @return [Hash, nil] the verb's row in the verb table, for an action named by its verb
+        # @api private
         def verb_rule = (verbs[verb] unless declared_name)
 
         # @return [Boolean] whether the action works on one record named by an id: a member verb,
         #   or `attribute :id`
+        # @api private
         def takes_id? = verb_rule&.fetch(:member) == true || declares_id?
 
-        # @return [Symbol] the policy rule the action checks: the one declared with `policy_rule`,
-        #   otherwise the verb's from VERB_QUERIES (destroy? for delete), otherwise "<verb>?"
-        #   (an action with a declared name has only the declared one)
-        def policy_query = declared_query || (declared_name ? nil : VERB_QUERIES.fetch(verb) { :"#{verb}?" })
+        # @api private
+        # @return [Symbol, nil] the verb's policy rule: from VERB_RULES (destroy? for delete),
+        #   otherwise "<verb>?"; nil for an action with a declared name
+        def verb_policy_rule = (VERB_RULES.fetch(verb) { :"#{verb}?" } unless declared_name)
 
         # @return [String, nil] the area its model belongs to, from Configuration#area_for
+        # @api public
         def area = model && Actions.config.area_for.call(model)
 
         # @return [String] the action's key in config/locales/actions.en.yml: events/update for Events::UpdateAction
+        # @api private
         def locale_key = name.underscore.delete_suffix("_action")
 
         # @return [String, nil] its resource's key, whose fields every action of the resource shares: events
+        # @api private
         def resource_locale_key = locale_key.rpartition("/").first.presence
 
         # The action's title. The locale file's wins, as Action Mailer's
@@ -210,6 +228,7 @@ module Saltbox
         #
         # @param value [String, nil] declares it
         # @return [String]
+        # @api public
         def title(value = nil)
           return @declared_title = value if value
           I18n.t("actions.#{locale_key}.title", default: @declared_title || built_title)
@@ -221,6 +240,7 @@ module Saltbox
         #
         # @param value [String, nil] declares it
         # @return [String, nil]
+        # @api public
         def description(value = nil)
           return @declared_description = value.squish if value
           I18n.t("actions.#{locale_key}.description", default: @declared_description)&.squish
@@ -233,6 +253,7 @@ module Saltbox
         #
         # @param field [String]
         # @return [String, nil]
+        # @api private
         def field_description(field)
           keys = [:"actions.#{locale_key}.fields.#{field}"]
           keys << :"actions.#{resource_locale_key}.fields.#{field}" if resource_locale_key

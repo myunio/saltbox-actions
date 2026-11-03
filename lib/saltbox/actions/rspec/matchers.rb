@@ -9,6 +9,7 @@ module Saltbox
       module Matchers
         # Runs a block, or takes a value, and gives back the Error it raised or
         # was, or nil.
+        # @api private
         module Outcome
           private
 
@@ -23,6 +24,7 @@ module Saltbox
         end
 
         # @see Matchers#be_refused
+        # @api private
         class BeRefused
           include ::RSpec::Matchers::Composable
           include Outcome
@@ -31,6 +33,7 @@ module Saltbox
 
           # @param code [Symbol, String] the error code: forbidden, human_required, not_found…
           # @return [self]
+          # @api public
           def with(code)
             @code = code.to_s
             self
@@ -61,6 +64,7 @@ module Saltbox
         end
 
         # @see Matchers#have_field_errors
+        # @api private
         class HaveFieldErrors
           include ::RSpec::Matchers::Composable
           include Outcome
@@ -83,6 +87,7 @@ module Saltbox
         end
 
         # @see Matchers#be_invalid_against_schema
+        # @api private
         class BeInvalidAgainstSchema
           include ::RSpec::Matchers::Composable
 
@@ -95,7 +100,7 @@ module Saltbox
             @arguments = arguments
             Arguments.check(@action, arguments, @caller)
             false
-          rescue Error::Invalid => error
+          rescue Error::ValidationFailed => error
             @error = error
             true
           end
@@ -108,13 +113,14 @@ module Saltbox
         end
 
         # @see Matchers#match_output_schema
+        # @api private
         class MatchOutputSchema
           include ::RSpec::Matchers::Composable
 
           def initialize(schema) = @schema = schema
 
           def matches?(result)
-            raise ArgumentError, "the action declares no output schema: add returns" unless @schema
+            raise ArgumentError, "the action declares no output schema: add output_schema" unless @schema
             body = result.respond_to?(:body) ? result.body : result
             @failures = JSONSchemer.schema(@schema).validate(body.as_json).map { it["error"] }
             @failures.empty?
@@ -126,18 +132,22 @@ module Saltbox
         end
 
         # @see Matchers#change_audit_trail
+        # @api private
         class ChangeAuditTrail
           include ::RSpec::Matchers::Composable
 
           def initialize = @expected = {}
 
           # @param record [ActiveRecord::Base] the record the entry is for
+          # @api public
           def on(record) = tap { @record = record }
 
-          # @param account [Object] the person named on the entry
-          def by(account) = tap { @whodunnit = account.respond_to?(:id) ? account.id : account }
+          # @param user [Object] the person named on the entry
+          # @api public
+          def by(user) = tap { @whodunnit = user.respond_to?(:id) ? user.id : user }
 
           # @param attributes [Hash] other columns the entry must hold, such as agent: "Claude"
+          # @api public
           def with(**attributes) = tap { @expected = attributes }
 
           def supports_block_expectations? = true
@@ -160,6 +170,7 @@ module Saltbox
         end
 
         # @see Matchers#announce_changes
+        # @api private
         class AnnounceChanges
           include ::RSpec::Matchers::Composable
 
@@ -189,8 +200,9 @@ module Saltbox
           def description = "announce changes"
         end
 
-        # @see Matchers#be_runnable_by
-        class BeRunnableBy
+        # @see Matchers#be_runnable_for
+        # @api private
+        class BeRunnableFor
           include ::RSpec::Matchers::Composable
 
           def initialize(caller, listed_only:)
@@ -200,7 +212,7 @@ module Saltbox
 
           def matches?(action)
             @action = action
-            Actions.within(@caller) { |fresh| @listed_only ? action.available_to?(fresh) : action.runnable_for?(fresh) }
+            Actions.within(@caller) { |fresh| @listed_only ? action.listed_for?(fresh) : action.runnable_for?(fresh) }
           end
 
           def failure_message = "expected #{@action.action_name} to be #{verb} for #{@caller.surface}, but it is not"
@@ -217,7 +229,7 @@ module Saltbox
         # Passes when the action refuses; `.with(code)` names the refusal.
         #
         # @example
-        #   expect { run(arguments, as: as_mcp(manager)) }.to be_refused.with(:human_required)
+        #   expect { run_action(arguments, as: as_mcp(manager)) }.to be_refused.with(:human_required)
         def be_refused = BeRefused.new
 
         # @return [BeRefused] refused as not_found
@@ -226,12 +238,12 @@ module Saltbox
         # Passes when the action refuses its input naming each field.
         #
         # @example
-        #   expect { run({title: ""}, as: as_screen(manager)) }.to have_field_errors(:title)
+        #   expect { run_action({title: ""}, as: as_screen(manager)) }.to have_field_errors(:title)
         def have_field_errors(*fields) = HaveFieldErrors.new(fields)
 
         # Passes when the action's input schema refuses the arguments, before
-        # any caller is checked. Without `as:` it is the catalogue's schema,
-        # built for Configuration#schema_principal; pass a caller when the
+        # any caller is checked. Without `as:` it is the catalog's schema,
+        # built for Configuration#schema_user; pass a caller when the
         # policy needs a person, or to check that caller's fields.
         #
         # @example
@@ -239,33 +251,33 @@ module Saltbox
         #   expect(capacity: "lots").to be_invalid_against_schema(as: as_screen(manager))
         def be_invalid_against_schema(action = described_class, as: nil) = BeInvalidAgainstSchema.new(action, as)
 
-        # Passes when the result's body matches the schema the action declares with `returns`.
+        # Passes when the result's body matches the schema the action declares with `output_schema`.
         # For an agent's result from a list with a summary, pass described_class.summary_output_schema.
         #
         # @example
-        #   expect(run({id: event.id}, as: as_api(manager))).to match_output_schema
+        #   expect(run_action({id: event.id}, as: as_api(manager))).to match_output_schema
         def match_output_schema(schema = described_class.output_schema) = MatchOutputSchema.new(schema)
 
         # Passes when the block writes a PaperTrail entry; narrow it with on, by and with.
         #
         # @example
-        #   expect { run(arguments, as: as_mcp(manager)) }.to change_audit_trail.on(event).by(manager).with(agent: "RSpec agent")
+        #   expect { run_action(arguments, as: as_mcp(manager)) }.to change_audit_trail.on(event).by(manager).with(agent: "RSpec agent")
         def change_audit_trail = ChangeAuditTrail.new
 
         # Passes when the change announces each record or model with its event.
         #
         # @example
-        #   expect { run(arguments, as: as_screen(manager)) }.to announce_changes(event => :update)
+        #   expect { run_action(arguments, as: as_screen(manager)) }.to announce_changes(event => :update)
         def announce_changes(expected = {}) = AnnounceChanges.new(expected)
 
-        # Passes when the caller may run the action: listed for them, and not barred by `connections`.
+        # Passes when the caller may run the action: listed for them, and not barred by `agents`.
         #
         # @example
-        #   expect(described_class).not_to be_runnable_by(as_assistant(manager))
-        def be_runnable_by(caller) = BeRunnableBy.new(caller, listed_only: false)
+        #   expect(described_class).not_to be_runnable_for(as_assistant(manager))
+        def be_runnable_for(caller) = BeRunnableFor.new(caller, listed_only: false)
 
         # Passes when the actions list shows the action to the caller.
-        def be_listed_for(caller) = BeRunnableBy.new(caller, listed_only: true)
+        def be_listed_for(caller) = BeRunnableFor.new(caller, listed_only: true)
       end
     end
   end

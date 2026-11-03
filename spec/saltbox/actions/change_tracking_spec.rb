@@ -1,13 +1,13 @@
 RSpec.describe Saltbox::Actions::ChangeTracking do
   let!(:event) { Event.create!(org_id: 1, title: "AGM") }
-  let(:update) { -> { Saltbox::Actions::Invocation.call(name: "update_event", caller: as_screen(manager), arguments: {id: event.id.to_s, title: "Annual meeting"}) } }
+  let(:update) { -> { Saltbox::Actions::Invocation.call(action: "update_event", caller: as_screen(manager), arguments: {id: event.id.to_s, title: "Annual meeting"}) } }
 
   # Updates the event, and adds a child inside a savepoint it rolls back.
   let(:half_undone) do
     Class.new(ApplicationAction) do
       def self.name = "Events::SplitAction"
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :update?
 
       def perform
@@ -40,15 +40,15 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
 
   it "notes creates and destroys" do
     without_paper_trail do
-      expect { Saltbox::Actions::Invocation.call(name: "create_event", caller: as_screen(manager), arguments: {title: "New"}) }
+      expect { Saltbox::Actions::Invocation.call(action: "create_event", caller: as_screen(manager), arguments: {title: "New"}) }
         .to announce_changes(Event => :create)
-      expect { Saltbox::Actions::Invocation.call(name: "delete_event", caller: as_screen(manager), arguments: {id: event.id.to_s}) }
+      expect { Saltbox::Actions::Invocation.call(action: "delete_event", caller: as_screen(manager), arguments: {id: event.id.to_s}) }
         .to announce_changes(event => :destroy)
     end
   end
 
   it "notes nothing for a write a savepoint inside the action rolls back" do
-    without_paper_trail { Saltbox::Actions::Invocation.call(name: half_undone, caller: as_screen(manager)) }
+    without_paper_trail { Saltbox::Actions::Invocation.call(action: half_undone, caller: as_screen(manager)) }
     expect(Dummy::ANNOUNCED.sole[:changes]).to eq([["Event", event.id.to_s, "update"]])
   end
 
@@ -56,17 +56,17 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
     failing = Class.new(ApplicationAction) do
       def self.name = "Events::BreakAction"
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :update?
 
       def perform
         event = policy_scope(Event).first
         authorize event
         event.update!(title: "Broken")
-        raise Saltbox::Actions::Error::Invalid, "No"
+        raise Saltbox::Actions::Error::ValidationFailed, "No"
       end
     end
-    expect { expect { Saltbox::Actions::Invocation.call(name: failing, caller: as_screen(manager)) }.to be_refused.with(:validation_failed) }
+    expect { expect { Saltbox::Actions::Invocation.call(action: failing, caller: as_screen(manager)) }.to be_refused.with(:validation_failed) }
       .not_to announce_changes
     expect(Dummy::ANNOUNCED).to be_empty
   end

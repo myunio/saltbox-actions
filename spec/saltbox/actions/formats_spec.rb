@@ -1,7 +1,7 @@
 # The error and result bodies an app that predates the gem keeps
 # (Configuration#error_format and #result_format).
 RSpec.describe "Error and result formats" do
-  let(:invalid) { Saltbox::Actions::Error::Invalid.new("Title can't be blank", errors: {"title" => ["can't be blank"]}, details: {hint: "name it"}) }
+  let(:invalid) { Saltbox::Actions::Error::ValidationFailed.new("Title can't be blank", errors: {"title" => ["can't be blank"]}, details: {hint: "name it"}) }
 
   it "sends code and errors by default, and type with the fields in details for :type" do
     expect(invalid.as_json).to eq("error" => {"code" => "validation_failed", "message" => "Title can't be blank",
@@ -11,6 +11,14 @@ RSpec.describe "Error and result formats" do
                                                 "details" => {"hint" => "name it", "fields" => ["title"]}})
       expect(Saltbox::Actions::Error::NotFound.new.as_json).to eq("error" => {"type" => "not_found", "message" => "Not found."})
     end
+  end
+
+  it "builds a validation refusal from a result's messages, or from errors by field" do
+    from_result = Saltbox::Actions::Error::ValidationFailed.from_result(Struct.new(:errors).new(["Too late", "Full"]))
+    expect([from_result.code, from_result.message, from_result.errors]).to eq(["validation_failed", "Too late; Full", nil])
+    errors = ActiveModel::Errors.new(Event.new).tap { it.add(:title, :blank) }
+    built = Saltbox::Actions::Error::ValidationFailed.for(errors)
+    expect([built.code, built.message, built.errors]).to eq(["validation_failed", "Title can't be blank", {"title" => ["can't be blank"]}])
   end
 
   it "sends the rendered body by default, and data with meta for :envelope" do

@@ -16,7 +16,7 @@ module Saltbox
     # - Naming: what the class name and the verb table give;
     # - Declarations: what the class declares;
     # - Inputs: its attributes and validations;
-    # - Catalogue: who sees the action in the actions list;
+    # - Catalog: who sees the action in the actions list;
     # - Schema: the JSON Schema of the action's input;
     # - Rendering: render and head;
     # - Permitting: permitted_attributes;
@@ -29,7 +29,7 @@ module Saltbox
       include Naming
       include Declarations
       include Inputs
-      include Catalogue
+      include Catalog
       include Schema
       include Rendering
       include Permitting
@@ -48,7 +48,7 @@ module Saltbox
       Declarations = Actions::Declarations
       Inputs = Actions::Inputs
       Schema = Actions::Schema
-      Catalogue = Actions::Catalogue
+      Catalog = Actions::Catalog
       Rendering = Actions::Rendering
       Permitting = Actions::Permitting
 
@@ -65,7 +65,7 @@ module Saltbox
         # @example From a controller
         #   caller = ApplicationAction::Caller.screen(Current.user)
         #   result = Events::UpdateAction.perform_now(caller:, id: @event.id, title: "AGM")
-        def perform_now(caller:, **input) = Invocation.call(name: self, caller:, arguments: input)
+        def perform_now(caller:, **input) = Invocation.call(action: self, caller:, arguments: input)
 
         # Runs the action later, as an Active Job (InvocationJob), as the same
         # caller. Every refusal runs again when the job runs, so a person who
@@ -84,6 +84,7 @@ module Saltbox
         # for Event, invoice for an isolated engine's Billing::Invoice.
         #
         # @return [String, nil] nil for an action that works on no one record, or a class with no name
+        # @api private
         def record_name
           model.model_name.param_key if name && takes_id? && model.is_a?(Class) && model < ActiveRecord::Base
         end
@@ -93,10 +94,11 @@ module Saltbox
         # lives in a module of its own, as Active Model's attribute methods
         # do, so the action may override it and call super. A subclass keeps
         # its parent's reader. A name every action already answers to, such
-        # as account or result, gets no reader: rails actions:check refuses
+        # as current_user or result, gets no reader: rails actions:check refuses
         # the action (record_reader_conflict).
         #
         # @return [void]
+        # @api private
         def define_record_reader
           return if @record_reader_defined
           superclass.define_record_reader if superclass < Base
@@ -107,7 +109,8 @@ module Saltbox
         end
 
         # @return [Module, nil] what already answers to the record reader's name, when the
-        #   gem, an adapter or Ruby does (account for an Account, result for a Result)
+        #   gem, an adapter or Ruby does (result for a Result, params for a Params)
+        # @api private
         def record_reader_conflict
           reader = record_name
           return if reader.nil?
@@ -120,6 +123,7 @@ module Saltbox
       end
 
       # The module that holds a member action's record reader.
+      # @api private
       class RecordReader < Module
         # @param name [String] the reader's name, such as event
         def initialize(name)
@@ -129,22 +133,22 @@ module Saltbox
       end
 
       # @return [Caller] who is calling, and from where
-      attr_reader :actor
+      attr_reader :current_caller
       # @return [Params] the checked input
       attr_reader :params
 
-      # @param actor [Caller]
+      # @param current_caller [Caller]
       # @param params [Params] the input, already checked against the action's JSON Schema;
       #   each attribute is cast once, by its type, from its value here
-      def initialize(actor:, params:)
-        @actor = actor
+      def initialize(current_caller:, params:)
+        @current_caller = current_caller
         @params = params
         self.class.define_record_reader
         super(params.to_h.slice(*self.class.declared_attributes.keys))
       end
 
       # @return [Object] the person the action acts for
-      def account = actor.account
+      def current_user = current_caller.user
 
       # @return [Object, nil] the id the caller sent, for a member action
       def id = self.class.takes_id? ? params[:id] : nil
@@ -154,7 +158,7 @@ module Saltbox
       # verify_policy_scoped do after every controller action. A list action
       # needs only policy_scope, as a controller's index does: whether the
       # person may list at all was asked before #perform (see
-      # Catalogue#permitted?).
+      # Catalog#permitted?).
       #
       # @return [Result] the response #perform rendered, or a 204 when it rendered nothing
       def perform_now

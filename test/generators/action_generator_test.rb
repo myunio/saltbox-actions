@@ -9,19 +9,19 @@ class ActionGeneratorTest < ActiveSupport::TestCase
     assert_equal TestUnit::Generators::ActionGenerator, Rails::Generators.find_by_namespace("test_unit:action")
     Dir.mktmpdir("action-generator") do |destination|
       output, = capture_io do
-        Saltbox::Actions::Generators::ActionGenerator.start(["Events::Update", "--no-catalogue"], destination_root: destination)
+        Saltbox::Actions::Generators::ActionGenerator.start(["Events::Update", "--no-catalog"], destination_root: destination)
       end
       assert_includes output, "Fill in the placeholders in test/actions/events/update_action_test.rb"
       test_file = Pathname(destination).join("test/actions/events/update_action_test.rb")
       assert test_file.exist?, "rails g action must invoke test_unit by default"
       assert Pathname(destination).join("app/actions/events/update_action.rb").exist?
       source = test_file.read
-      assert_includes source, "self.action_class = Events::UpdateAction"
+      assert_includes source, "tests Events::UpdateAction"
       assert_includes source, "id: visible_record.id.to_s"
       # Supply this app's records where the template asks for them, then run
       # the generated test through Minitest itself in a separate process.
       source = source.sub('raise NotImplementedError, "a person who may run Events::UpdateAction"',
-        "Account.new(id: 1, permissions: %w[events.view events.manage])")
+        "User.new(id: 1, permissions: %w[events.view events.manage])")
       source = source.sub('raise NotImplementedError, "a record the person can see"',
         'Event.create!(org_id: 1, title: "AGM")')
       test_file.write(source)
@@ -38,7 +38,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
       Dir.mktmpdir("action-generator") do |destination|
         capture_io do
           Saltbox::Actions::Generators::ActionGenerator.start(
-            ["Events::Archive", "--kind=change", "--no-catalogue", (takes_id ? "--id" : "--no-id")],
+            ["Events::Archive", "--kind=change", "--no-catalog", (takes_id ? "--member" : "--no-member")],
             destination_root: destination
           )
         end
@@ -50,7 +50,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
     EventPolicy.remove_method(:archive?)
   end
 
-  test "writes a factory-free no-id test and a nested custom verb test" do
+  test "writes a factory-free no-member test and a nested custom verb test" do
     Dir.mktmpdir("action-generator") do |destination|
       capture_io { TestUnit::Generators::ActionGenerator.start(["Events::List"], destination_root: destination) }
       source = Pathname(destination).join("test/actions/events/list_action_test.rb").read
@@ -61,7 +61,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
       assert_includes source, "class Event::Types::ArchiveActionTest"
       assert_includes source, "id: visible_record.id.to_s"
       refute_includes source, "FactoryBot"
-      capture_io { TestUnit::Generators::ActionGenerator.start(["Events::Archive", "--no-id"], destination_root: destination) }
+      capture_io { TestUnit::Generators::ActionGenerator.start(["Events::Archive", "--no-member"], destination_root: destination) }
       source = Pathname(destination).join("test/actions/events/archive_action_test.rb").read
       refute_includes source, "visible_record"
     end

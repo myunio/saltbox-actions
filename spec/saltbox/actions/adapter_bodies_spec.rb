@@ -9,7 +9,7 @@ RSpec.describe "Response bodies on every surface" do
       define_singleton_method(:name) { "Reports::AnswerAction" }
       action_name "answer"
       kind :read
-      connections :allowed
+      agents :allowed
       define_method(:perform) do
         skip_authorization
         skip_policy_scope

@@ -25,6 +25,6 @@ RSpec.describe "Booting without a database" do
     output, status = Dir.mktmpdir { |folder| boot("check", database: "#{folder}/empty.sqlite3") }
     expect(status).not_to be_success
     expect(output).to include("Events::CreateAction: Event's table events does not exist: run bin/rails db:prepare first")
-    expect(output).not_to include("schema_principal")
+    expect(output).not_to include("schema_user")
   end
 end

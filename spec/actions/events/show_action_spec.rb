@@ -1,11 +1,11 @@
 RSpec.describe Events::ShowAction do
-  let(:permitted_account) { reader }
-  let(:unpermitted_account) { stranger }
+  let(:permitted_user) { reader }
+  let(:unpermitted_user) { stranger }
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
   let(:arguments) { {id: event.id.to_s} }
 
   before do
-    described_class.returns(type: "object", required: %w[data], properties: {
+    described_class.output_schema(type: "object", required: %w[data], properties: {
       data: {type: "object", required: %w[event], properties: {event: {type: "object", required: %w[id title]}}}
     })
   end

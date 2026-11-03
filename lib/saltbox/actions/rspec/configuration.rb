@@ -4,6 +4,7 @@ module Saltbox
   module Actions
     module RSpec
       class Configuration < Testing::Configuration
+        # @api private
         AGENT = "RSpec agent".freeze
 
         attr_writer :spec_root

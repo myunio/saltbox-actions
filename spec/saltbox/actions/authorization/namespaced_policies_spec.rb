@@ -2,8 +2,8 @@
 # on Event, asks that namespace's policy, as Pundit's authorize [:admin, event]
 # does: Admin::EventPolicy, never EventPolicy.
 RSpec.describe "Namespaced policies" do
-  let(:admin) { Account.new(id: 6, permissions: %w[events.view events.manage events.admin]) }
-  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(name: klass, caller:, arguments:) } }
+  let(:admin) { User.new(id: 6, permissions: %w[events.view events.manage events.admin]) }
+  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(action: klass, caller:, arguments:) } }
   let!(:ours) { Event.create!(org_id: 1, title: "AGM") }
   let!(:theirs) { Event.create!(org_id: 2, title: "Elsewhere") }
 

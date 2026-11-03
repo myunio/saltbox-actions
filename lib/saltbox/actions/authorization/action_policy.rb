@@ -6,7 +6,7 @@ module Saltbox
       # Authorizes actions with ActionPolicy. Events::UpdateAction asks
       # EventPolicy's update? rule (aliases and default rules apply), and
       # #perform must call authorize and policy_scope (authorized_scope).
-      # The policy's authorization context is the caller's account as
+      # The policy's authorization context is the caller's person as
       # `user`; override authorization_context_for to add more.
       #
       # Policies are looked up in the action's policy namespace
@@ -48,7 +48,7 @@ module Saltbox
           include Namespace
           include Policies
 
-          authorize :user, through: :account
+          authorize :user, through: :current_user
         end
 
         class_methods do
@@ -56,19 +56,19 @@ module Saltbox
           # @return [Module, nil] the policy namespace, as ActionPolicy's authorization_namespace takes it
           def policy_namespace_module = policy_namespace.presence&.then { it.map { it.to_s.camelize }.join("::").safe_constantize }
 
-          # @param account [Object]
+          # @param user [Object]
           # @return [Hash] the policy's authorization context
-          def authorization_context_for(account) = {user: account}
+          def authorization_context_for(user) = {user:}
 
           # Whether the person's role allows the action at all, asked of the
           # model's policy before any record is loaded.
           #
-          # @param account [Object]
+          # @param user [Object]
           # @return [Boolean]
-          def permitted?(account)
+          def permitted?(user)
             return true unless model
             policy = policy_class || raise(namespaced_policy_not_found(model))
-            policy.new(model, **authorization_context_for(account)).apply(policy_query!)
+            policy.new(model, **authorization_context_for(user)).apply(policy_rule!)
           end
 
           # @return [Class, nil] the model's policy, in the action's policy namespace
@@ -98,11 +98,11 @@ module Saltbox
           # @return [Boolean] whether the model's policy defines permitted_attributes
           def supplies_fields? = !!policy_class&.method_defined?(:permitted_attributes)
 
-          # @param principal [Object]
+          # @param user [Object]
           # @param record [ActiveRecord::Base]
           # @return [Array<String>]
-          def permitted_attribute_names_for(principal, record)
-            policy = policy_class.new(record, **authorization_context_for(principal))
+          def permitted_attribute_names_for(user, record)
+            policy = policy_class.new(record, **authorization_context_for(user))
             policy.respond_to?(:permitted_attributes) ? policy.permitted_attributes.map(&:to_s) : []
           end
 
@@ -152,7 +152,7 @@ module Saltbox
         # @raise [ActionPolicy::Unauthorized]
         def authorize(record, rule = nil, **)
           @_authorization_performed = true
-          authorize!(record, to: rule || self.class.policy_query!, **)
+          authorize!(record, to: rule || self.class.policy_rule!, **)
           record
         end
 

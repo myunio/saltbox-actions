@@ -30,10 +30,10 @@ class EventPolicy
       @scope = scope
     end
 
-    def resolve = @user.is_a?(Saltbox::Actions::SystemAccount) ? @scope.all : @scope.where(org_id: @user.org_id)
+    def resolve = @user.is_a?(Saltbox::Actions::SystemUser) ? @scope.all : @scope.where(org_id: @user.org_id)
   end
 
   private
 
-  def system? = user.is_a?(Saltbox::Actions::SystemAccount)
+  def system? = user.is_a?(Saltbox::Actions::SystemUser)
 end

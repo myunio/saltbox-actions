@@ -20,19 +20,19 @@ RSpec.describe Saltbox::Actions::Authorization::None do
     end
   end
 
-  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(name: klass, caller:, arguments:) } }
+  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(action: klass, caller:, arguments:) } }
 
   it "asks for no policy, rule or rule name, at boot or in rails actions:check" do
     with_settings(require_area: false) do
       archive = action("Gatherings::ArchiveAction") do
         kind :change
         attribute :id
-        connections :confirm
+        agents :confirm
       end
-      totals = action("Gatherings::ShowTotalsAction") { connections :allowed }
+      totals = action("Gatherings::ShowTotalsAction") { agents :allowed }
       expect(Saltbox::Actions::Registry.problems(archive)).to eq([])
       expect(Saltbox::Actions::Registry.problems(totals)).to eq([])
-      create = action("Gatherings::CreateAction") { connections :allowed }
+      create = action("Gatherings::CreateAction") { agents :allowed }
       expect(Saltbox::Actions::Registry.problems(create)).to eq([])
       expect(Saltbox::Actions::Registry.problems(create, declared_only: true)).to eq([])
     end
@@ -44,7 +44,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
       kind :change
       attribute :id
       attribute :title, :string
-      connections :allowed
+      agents :allowed
       def perform
         Gathering.find(params[:id]).update!(title: params[:title])
         head :no_content
@@ -72,15 +72,15 @@ RSpec.describe Saltbox::Actions::Authorization::None do
       .to eq("title" => "Renamed", "capacity" => 40)
     expect(gathering.reload.parent).to eq(parent)
     expect { invoke.call(retitle, {id: gathering.id, notes: "x"}, as_screen(stranger)) }.to have_field_errors(:notes)
-    expect { invoke.call(retitle, {id: gathering.id, notes: "x"}, as_screen(stranger)) }.to raise_error(Saltbox::Actions::Error::Invalid) {
+    expect { invoke.call(retitle, {id: gathering.id, notes: "x"}, as_screen(stranger)) }.to raise_error(Saltbox::Actions::Error::ValidationFailed) {
       expect(it.message).to eq("update_gathering does not take notes. It takes id, title, capacity, parent.")
       expect(it.errors).to eq("notes" => ["is not an input; takes id, title, capacity, parent"])
     }
   end
 
   it "takes a model given to policy_scope as all its records" do
-    open = action("Gatherings::ListAction") { connections :allowed }
-    expect(open.new(actor: as_screen(stranger), params: nil).policy_scope(Gathering)).to be_a(ActiveRecord::Relation)
+    open = action("Gatherings::ListAction") { agents :allowed }
+    expect(open.new(current_caller: as_screen(stranger), params: nil).policy_scope(Gathering)).to be_a(ActiveRecord::Relation)
   end
 
   describe "the README's plain-model adapter" do
@@ -105,7 +105,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
 
     let(:update) do
       action("Gatherings::UpdateAction", base: ModelAction) do
-        connections :allowed
+        agents :allowed
         def perform
           gathering = policy_scope(Gathering).find(params[:id])
           authorize gathering
@@ -117,14 +117,14 @@ RSpec.describe Saltbox::Actions::Authorization::None do
 
     let(:list) do
       action("Gatherings::ListAction", base: ModelAction) do
-        connections :allowed
+        agents :allowed
         def perform = render(json: {titles: policy_scope(Gathering).order(:id).pluck(:title)})
       end
     end
 
     let(:create) do
       action("Gatherings::CreateAction", base: ModelAction) do
-        connections :confirm
+        agents :confirm
         def perform
           @gathering = policy_scope(Gathering).new(permitted_attributes(Gathering))
           authorize @gathering

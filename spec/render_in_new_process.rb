@@ -32,4 +32,4 @@ link = Class.new(ApplicationAction) do
     render "links/show"
   end
 end
-2.times { puts Saltbox::Actions::Invocation.call(name: link, caller: Saltbox::Actions::Caller.system, arguments: {}).body["url"] }
+2.times { puts Saltbox::Actions::Invocation.call(action: link, caller: Saltbox::Actions::Caller.system, arguments: {}).body["url"] }

@@ -17,12 +17,12 @@ module Saltbox
     # - permitted_attribute_names(record): the fields the person may set;
     # - scoped_records(model): the records the person may pick, for a reference;
     # and, on the class:
-    # - permitted?(account): whether the person's role allows the action at all;
+    # - permitted?(user): whether the person's role allows the action at all;
     # - authorization_problems: what rails actions:check reports, such as a missing policy;
     # - supplies_fields?: whether the model's policy says which fields a person
     #   may set; when it does, it is the one list of a create's or update's
     #   fields, and an action may not also name them with `accepts`;
-    # - permitted_attribute_names_for(principal, record), for the input schema;
+    # - permitted_attribute_names_for(user, record), for the input schema;
     # - authorization_errors: the library's refusal, answered as forbidden.
     #
     # Without an adapter, every action is allowed and rails actions:check asks
@@ -39,6 +39,7 @@ module Saltbox
         extend ActiveSupport::Concern
 
         # Guards each action's one warning that its policy is missing.
+        # @api private
         WARNING = Mutex.new
 
         class_methods do
@@ -80,8 +81,8 @@ module Saltbox
           # @api private
           # @return [Symbol] the policy rule the action asks
           # @raise [ArgumentError] for an action with a declared name and no policy_rule, naming the fix
-          def policy_query!
-            policy_query || raise(ArgumentError, "#{name}: #{missing_rule}")
+          def policy_rule!
+            policy_rule || raise(ArgumentError, "#{name}: #{missing_rule}")
           end
 
           # @api private
@@ -95,6 +96,7 @@ module Saltbox
           # reference_scope_name(model).
           #
           # @return [Array<String>] each reference field whose namespaced scope does not exist, and the fix
+          # @api private
           def reference_problems
             return [] if policy_namespace.empty?
             writable_fields.filter_map do |name, field|
@@ -123,15 +125,15 @@ module Saltbox
           def authorization_problems
             return [] unless model
             problems = []
-            if declared_name && declared_query.nil?
+            if declared_name && declared_rule.nil?
               return [missing_rule]
-            elsif more_than_verb? && declared_query.nil? && !declared_name
+            elsif more_than_verb? && declared_rule.nil? && !declared_name
               problems << "#{action_words.join(" ")} says more than #{verb}: name the policy rule, policy_rule :#{verb}? or another"
             end
             if policy_class.nil?
               problems << missing_policy_problem
-            elsif !policy_rule?(policy_query)
-              problems << "#{policy_class}##{policy_query} is missing: add it, or name another with policy_rule"
+            elsif !policy_rule?(policy_rule)
+              problems << "#{policy_class}##{policy_rule} is missing: add it, or name another with policy_rule"
             end
             if accepted_fields.any? && supplies_fields?
               problems << "#{policy_class}#permitted_attributes says which fields a person may set: remove accepts, so the policy is the one list"
@@ -205,7 +207,7 @@ module Saltbox
 
         class_methods do
           # @return [Boolean]
-          def permitted?(_account) = true
+          def permitted?(_user) = true
 
           # @return [Array<String>]
           def authorization_problems = []
@@ -215,6 +217,7 @@ module Saltbox
           def policy_missing? = false
 
           # @return [Array<String>]
+          # @api private
           def reference_problems = []
 
           # @return [Boolean] false: without an adapter, an action names its model fields with `accepts`
@@ -224,7 +227,7 @@ module Saltbox
           def policy_class = nil
 
           # @return [Array<String>]
-          def permitted_attribute_names_for(_principal, _record) = []
+          def permitted_attribute_names_for(_user, _record) = []
 
           # @return [Array<Class<Exception>>]
           def authorization_errors = []

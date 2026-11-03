@@ -22,6 +22,7 @@ module Saltbox
     #     attribute :reason, :string, description: "Why the payment is being voided"
     #     validates :reason, presence: true
     #   end
+    # @api private
     module Inputs
       extend ActiveSupport::Concern
       include ActiveModel::API
@@ -39,6 +40,7 @@ module Saltbox
       # a list of records, each field with its type.
       #
       # @!attribute item [ActiveModel::Type::Value, Hash{String => ActiveModel::Type::Value}]
+      # @api private
       class List < ActiveModel::Type::Value
         attr_reader :item
 
@@ -68,6 +70,7 @@ module Saltbox
       # A date and time read in the app's time zone (Time.zone), as Active
       # Record reads a datetime column: "2026-11-02T18:30" is half past six
       # where the app is, not in UTC. A time with an offset keeps its instant.
+      # @api private
       class ZonedDateTime < ActiveModel::Type::DateTime
         private
 
@@ -97,6 +100,7 @@ module Saltbox
         #   attribute :payments, :array, of: {amount: :decimal, paid_on: :date}
         # @example A described input with a default
         #   attribute :status, :string, description: "Only events with this status"
+        # @api public
         def attribute(name, type = nil, of: nil, nullable: false, description: nil, **options)
           name = name.to_s
           @inputs = nil
@@ -112,11 +116,13 @@ module Saltbox
         end
 
         # @return [Hash{String => Hash}] the attributes declared with `attribute`, including the parent class's
+        # @api private
         def declared_attributes
           @declared_attributes ||= (superclass.respond_to?(:declared_attributes) ? superclass.declared_attributes.dup : {})
         end
 
         # @return [Boolean] whether the action declares `attribute :id`
+        # @api private
         def declares_id? = _declares_id || false
 
         # Names the model fields the action takes, for an app whose
@@ -129,35 +135,38 @@ module Saltbox
         #
         # @param fields [Array<Symbol>]
         # @return [Array<String>]
+        # @api public
         def accepts(*fields)
           @inputs = nil
           self._accepted_fields = fields.map(&:to_s).freeze
         end
 
         # @return [Array<String>] the fields named with `accepts`
+        # @api private
         def accepted_fields = _accepted_fields || []
 
         # Declares the paging inputs a list takes, as attributes the action
         # reads like any other: page, from 1, and page_size, up to
-        # max_per_page. The action pages its records itself, with the app's
+        # max_page_size. The action pages its records itself, with the app's
         # own paging library.
         #
-        # @param per_page [Integer] page_size when the caller leaves it out
-        # @param max_per_page [Integer] the largest page_size a caller may ask for
+        # @param page_size [Integer] page_size when the caller leaves it out
+        # @param max_page_size [Integer] the largest page_size a caller may ask for
         # @return [void]
         #
         # @example
-        #   paginated per_page: 50
+        #   paginated page_size: 50
         #
         #   def perform
         #     @events = policy_scope(Event).order(:starts_on).offset((page - 1) * page_size).limit(page_size)
         #     render :index
         #   end
-        def paginated(per_page: 25, max_per_page: 100)
+        # @api public
+        def paginated(page_size: 25, max_page_size: 100)
           attribute :page, :integer, default: 1
-          attribute :page_size, :integer, default: per_page
+          attribute :page_size, :integer, default: page_size
           validates :page, numericality: {greater_than_or_equal_to: 1}
-          validates :page_size, numericality: {greater_than_or_equal_to: 1, less_than_or_equal_to: max_per_page}
+          validates :page_size, numericality: {greater_than_or_equal_to: 1, less_than_or_equal_to: max_page_size}
         end
 
         # Active Model's; a validation may change the schema, so it is built again.

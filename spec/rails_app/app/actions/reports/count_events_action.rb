@@ -14,7 +14,7 @@ module Reports
     policy_namespace false
     permission "events.view", any_of("events.manage", "events.delete")
     summary :count
-    returns({type: "object", properties: {count: {type: "integer"}}, required: ["count"]})
+    output_schema({type: "object", properties: {count: {type: "integer"}}, required: ["count"]})
 
     attribute :status, :string, description: "Only events with this status"
     attribute :page, :integer, description: "Page number, from 1"

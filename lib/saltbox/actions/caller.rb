@@ -8,7 +8,7 @@ module Saltbox
     # caller sends.
     #
     # The app subclasses it to add its own constructors (from an OAuth token,
-    # say) and #refresh!.
+    # say) and #refresh.
     #
     # Surfaces, by default:
     # - screen: a person clicking on the app's own screens;
@@ -20,54 +20,58 @@ module Saltbox
     # One more surface is fixed, outside Configuration#surfaces: system, the
     # app itself in a job, a rake task or the console (Caller.system). The
     # API, MCP and the assistant refuse it.
-    class Caller < Data.define(:account, :surface, :agent, :scopes, :connection, :credential_id, :access)
-      # @param account [Object] the person the action acts for
+    class Caller < Data.define(:user, :surface, :agent_name, :scopes, :connection, :credential_id, :access)
+      # @param user [Object] the person the action acts for
       # @param surface [String] one of Configuration#surfaces, or system
-      # @param agent [String, nil] the agent's name, for audit and change notes
+      # @param agent_name [String, nil] the agent's name, for audit and change notes
       # @param scopes [Array<String>] the token's scopes; a person on a screen holds every scope
       # @param connection [Object, nil] the app connection behind a token
       # @param credential_id [String, nil] the token's id
       # @param access [#allows?, nil] what the connection may reach, beyond the token's scopes;
       #   nil reaches every action
-      def initialize(account:, surface:, agent: nil, scopes: nil, connection: nil, credential_id: nil, access: nil)
+      def initialize(user:, surface:, agent_name: nil, scopes: nil, connection: nil, credential_id: nil, access: nil)
         raise ArgumentError, "Unknown surface #{surface.inspect}" unless surface.to_s == SYSTEM || Actions.config.surfaces.include?(surface.to_s)
         scopes ||= Actions.config.scopes.values
-        super(account:, surface: surface.to_s, agent:, scopes: scopes.to_a.freeze, connection:, credential_id:, access:)
+        super(user:, surface: surface.to_s, agent_name:, scopes: scopes.to_a.freeze, connection:, credential_id:, access:)
       end
 
-      # @param account [Object]
-      # @param webmcp [Boolean] the page's tool wrapper marked the call as a browser assistant's
+      # @param user [Object]
       # @return [Caller] a person on a screen
-      def self.screen(account, webmcp: false)
-        webmcp ? new(account:, surface: "webmcp", agent: "Browser assistant") : new(account:, surface: "screen")
-      end
+      def self.screen(user) = new(user:, surface: "screen")
 
-      # @param account [Object]
-      # @param agent [String]
+      # For a call the page's tool wrapper marks as a browser assistant's.
+      #
+      # @param user [Object]
+      # @return [Caller] a browser assistant on the person's page
+      def self.webmcp(user) = new(user:, surface: "webmcp", agent_name: "Browser assistant")
+
+      # @param user [Object]
+      # @param agent_name [String]
       # @return [Caller] the app's chat acting for its person
-      def self.assistant(account, agent: "#{Actions.config.app_name} assistant") = new(account:, surface: "assistant", agent:)
+      def self.assistant(user, agent_name: "#{Actions.config.app_name} assistant") = new(user:, surface: "assistant", agent_name:)
 
       # The surface of the app itself, running an action with no request
       # behind it.
+      # @api private
       SYSTEM = "system"
 
       # The app itself, in a job, a rake task or the console. It is not an
-      # agent: its `connections` never bar it, it holds every scope, and no
-      # one is asked to confirm. Its account still goes through the action's
+      # agent: its `agents` never bar it, it holds every scope, and no
+      # one is asked to confirm. Its user still goes through the action's
       # authorization like a person's, so the policy decides what the app may
       # do, and a policy that has no answer for it refuses.
       #
       # The API, MCP and the assistant refuse a system caller: build theirs
       # from the request's credential.
       #
-      # @param account [Object] who the policy sees; SystemAccount by default,
+      # @param user [Object] who the policy sees; SystemUser by default,
       #   or a record of the app's own, such as a system user
-      # @param agent [String, nil] a name for audit and change notes, such as the job's
+      # @param agent_name [String, nil] a name for audit and change notes, such as the job's
       # @return [Caller]
       #
       # @example
       #   Events::UpdateAction.perform_now(caller: ApplicationAction::Caller.system, id: 1, title: "AGM")
-      def self.system(account = SystemAccount.instance, agent: nil) = new(account:, surface: SYSTEM, agent:)
+      def self.system(user = SystemUser.instance, agent_name: nil) = new(user:, surface: SYSTEM, agent_name:)
 
       # @return [Boolean] whether the app itself is calling (Caller.system)
       def system? = surface == SYSTEM
@@ -78,7 +82,7 @@ module Saltbox
 
       # @param scope [String]
       # @return [Boolean]
-      def allows?(scope) = scopes.include?(scope)
+      def includes_scope?(scope) = scopes.include?(scope)
 
       # @param action [Class]
       # @return [Boolean] whether the connection's access reaches the action; always for a caller without one
@@ -89,10 +93,10 @@ module Saltbox
       # an agent or script acting for them may do.
       # - A person on a screen, or the app itself (Caller.system), may run
       #   anything the policy allows.
-      # - Every other caller follows the action's `connections` declaration.
-      # - The chat assistant never runs a :confirm action. Any other agent may,
-      #   unless Configuration#enforce_confirm is on: then Invocation also asks
-      #   the app's Configuration#confirm hook.
+      # - Every other caller follows the action's `agents` declaration.
+      # - The chat assistant never runs a :confirm action. Any other agent may
+      #   once the app's Configuration#confirm hook approves, which Invocation
+      #   asks while Configuration#enforce_confirm is on (the default).
       # - A browser assistant on the page (WebMCP) never runs a destructive action.
       #
       # @param action [Class]
@@ -100,7 +104,7 @@ module Saltbox
       def agent_allowed?(action)
         return true unless agent?
         return false if action.kind == :destructive && surface == "webmcp"
-        case action.connections
+        case action.agents
         when :allowed then true
         when :confirm then surface != "assistant"
         else false
@@ -113,11 +117,11 @@ module Saltbox
       # publish.
       #
       # @example
-      #   actor.confirm!(Events::PublishAction) if state == "published"
+      #   current_caller.confirm!(Events::PublishAction) if state == "published"
       #
       # @param action [Class]
       # @return [void]
-      # @raise [Error::HumanRequired] when its `connections` declaration bars this caller
+      # @raise [Error::HumanRequired] when its `agents` declaration bars this caller
       # @raise [Error::ConfirmationRequired] when it is :confirm, Configuration#enforce_confirm
       #   is on, and the app's Configuration#confirm hook does not approve it
       # @raise [ArgumentError] outside a running action
@@ -127,11 +131,13 @@ module Saltbox
         invocation.confirm!(action)
       end
 
-      # The caller as it stands now, reloaded by the app's around_invocation
-      # hook so a revoked token or ended access stops the next call.
+      # The caller as it stands now, for the app's around_invocation hook,
+      # so a revoked token or ended access stops the next call. A caller
+      # cannot change: an app's subclass returns a new one, and the gem's
+      # returns itself.
       #
-      # @return [Caller]
-      def refresh! = self
+      # @return [Caller] a replacement, or self
+      def refresh = self
 
       # Refuses a system caller at an entry point that serves requests: its
       # caller comes from the request's credential, never from the app
@@ -148,14 +154,14 @@ module Saltbox
       end
     end
 
-    # The account a system caller (Caller.system) acts as when the app names
+    # The user a system caller (Caller.system) acts as when the app names
     # none. It is not a person, so a policy tells it apart and decides what
     # the app itself may do:
     #
-    #   def update? = user.is_a?(Saltbox::Actions::SystemAccount) || record.user_id == user.id
+    #   def update? = user.is_a?(Saltbox::Actions::SystemUser) || record.user_id == user.id
     #
     # It has no id, so an audit trail records no person.
-    class SystemAccount
+    class SystemUser
       include Singleton
 
       # @return [nil]

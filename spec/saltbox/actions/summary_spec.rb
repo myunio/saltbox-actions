@@ -14,13 +14,13 @@ RSpec.describe Saltbox::Actions::Summary do
     end
     Class.new(base) do
       define_singleton_method(:name) { name }
-      connections :allowed
+      agents :allowed
       class_eval(&block) if block
       define_method(:perform, &perform)
     end
   end
 
-  def list_events(caller, action: Events::ListAction) = Saltbox::Actions::Invocation.call(name: action, caller:).as_json
+  def list_events(caller, action: Events::ListAction) = Saltbox::Actions::Invocation.call(action: action, caller:).as_json
 
   it "sends an agent each record's summary, computed fields included, with the meta beside it" do
     expect(list_events(as_mcp(manager))).to eq(
@@ -35,11 +35,11 @@ RSpec.describe Saltbox::Actions::Summary do
     expect(list_events(as_mcp(manager))).to eq("data" => {"events" => []}, "meta" => {"page" => 1})
   end
 
-  it "matches the output schema the catalogue gives agents, in either result format" do
-    expect(Saltbox::Actions::Invocation.call(name: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
+  it "matches the output schema the catalog gives agents, in either result format" do
+    expect(Saltbox::Actions::Invocation.call(action: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
     expect(Events::ListAction.definition["output_schema"]).to eq(Events::ListAction.summary_output_schema)
     with_settings(result_format: :envelope) do
-      expect(Saltbox::Actions::Invocation.call(name: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
+      expect(Saltbox::Actions::Invocation.call(action: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
     end
     expect(Events::ListAction.summary_output_schema.dig("properties", "data", "properties", "events", "items", "properties"))
       .to eq("id" => {"type" => "integer"}, "title" => {"type" => "string"}, "starts_on" => {"type" => %w[string null], "format" => "date"},
@@ -128,13 +128,13 @@ RSpec.describe Saltbox::Actions::Summary do
       authorize @event
       render :show, collection: [@event]
     end)
-    expect { Saltbox::Actions::Invocation.call(name: show, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s}) }.to raise_error(ArgumentError, /render collection: is for a list action with a summary/)
+    expect { Saltbox::Actions::Invocation.call(action: show, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s}) }.to raise_error(ArgumentError, /render collection: is for a list action with a summary/)
   end
 
   it "sends a decimal column as text, as its schema says" do
     Event.last.update!(price: "12.34")
     priced = list { summary :id, :price }
-    result = Saltbox::Actions::Invocation.call(name: priced, caller: as_mcp(manager))
+    result = Saltbox::Actions::Invocation.call(action: priced, caller: as_mcp(manager))
     expect(result.as_json.dig("data", "events", 0, "price")).to eq("12.34")
     expect(priced.summary_output_schema.dig("properties", "data", "properties", "events", "items", "properties", "price"))
       .to eq("type" => %w[number string null])
@@ -183,11 +183,11 @@ RSpec.describe Saltbox::Actions::Summary do
   end
 
   it "sends summaries only from a list action" do
-    show = Saltbox::Actions::Invocation.call(name: Events::ShowAction, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s})
+    show = Saltbox::Actions::Invocation.call(action: Events::ShowAction, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s})
     expect(show.body.dig("data", "event")).to include("capacity" => nil)
   end
 
-  it "gives the catalogue the summary's fields, which the CLI prints as columns" do
+  it "gives the catalog the summary's fields, which the CLI prints as columns" do
     expect(Events::ListAction.definition["summary"]).to eq(%w[id title starts_on status])
     expect(Events::CreateAction.definition["summary"]).to eq(%w[id title starts_on])
     expect(Events::ListAction.definition["cli"]).not_to have_key("columns")
@@ -196,8 +196,8 @@ RSpec.describe Saltbox::Actions::Summary do
   it "tells agents what a list returns, and which action gives the rest" do
     found = Saltbox::Actions::FrontDoor.call("find_action", {"query" => "list events"}, caller: as_mcp(manager))
     expect(found[:actions].find { it[:name] == "list_events" })
-      .to include(response_description: "Returns each event's id, title, starts_on, and status. Call show_event with its id for the rest.")
-    expect(found[:actions].find { it[:name] == "show_event" }).not_to have_key(:response_description)
+      .to include(output_description: "Returns each event's id, title, starts_on, and status. Call show_event with its id for the rest.")
+    expect(found[:actions].find { it[:name] == "show_event" }).not_to have_key(:output_description)
   end
 
   it "points a back-office list at its own show action, never the public one" do

@@ -40,7 +40,7 @@ RSpec.describe "Declared names" do
       model Event
       def perform = render(json: {})
     end
-    expect { Saltbox::Actions::Invocation.call(name: unruled, caller: as_screen(manager), arguments: {}) }
+    expect { Saltbox::Actions::Invocation.call(action: unruled, caller: as_screen(manager), arguments: {}) }
       .to raise_error(ArgumentError, "Events::PeekAction: Event is its model: name the policy rule, policy_rule :show? or another")
   end
 
@@ -54,12 +54,12 @@ RSpec.describe "Declared names" do
       kind :read
     end
     expect(problems.call(read)).to be_empty
-    expect(read.connections).to eq(:allowed)
+    expect(read.agents).to eq(:allowed)
 
     tally = named("Events::TallyAction") do
       action_name "tally"
       kind :read
-      connections :allowed
+      agents :allowed
       model Event
     end
     expect(problems.call(tally)).to eq(["Event is its model: name the policy rule, policy_rule :show? or another"])
@@ -76,7 +76,7 @@ RSpec.describe "Declared names" do
   it "decides only the actions list when permissions are not enforced" do
     with_settings(enforce_permissions: false) do
       expect(action).not_to be_listed_for(as_api(reader))
-      expect(run({}, as: as_api(reader), action:).body).to eq("count" => 0)
+      expect(run_action({}, as: as_api(reader), action:).body).to eq("count" => 0)
     end
   end
 
@@ -84,7 +84,7 @@ RSpec.describe "Declared names" do
     open_to_all = named("Reports::OpenAction") do
       action_name "open_report"
       kind :read
-      connections :allowed
+      agents :allowed
       permission :everyone
     end
     allow(open_to_all).to receive(:permitted?).and_return(false)

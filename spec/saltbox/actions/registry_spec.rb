@@ -26,7 +26,7 @@ RSpec.describe Saltbox::Actions::Registry do
   end
 
   it "finds the actions as the base class's subclasses when the folder holds other files too" do
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       described_class.reset!
       expect(described_class.actions).to include(Events::UpdateAction, Reports::CountEventsAction, WhoamiAction)
     ensure
@@ -43,9 +43,9 @@ RSpec.describe Saltbox::Actions::Registry do
     expect(problems(action("Events::ArchiveAction") { policy_rule :update? })).to include(/declare kind .* or add it with define_verb/)
   end
 
-  it "takes the connections rule from the verb, and refuses a destructive action agents may run without asking" do
+  it "takes the agents rule from the verb, and refuses a destructive action agents may run without asking" do
     expect(problems(action("Events::ShowAction"))).to be_empty
-    expect(problems(action("Events::DeleteAction") { connections :allowed })).to include(/never connections :allowed/)
+    expect(problems(action("Events::DeleteAction") { agents :allowed })).to include(/never agents :allowed/)
   end
 
   it "refuses an action inside its model's namespace, naming the plural one" do
@@ -62,6 +62,16 @@ RSpec.describe Saltbox::Actions::Registry do
     stub_const("Result", Class.new(ActiveRecord::Base) { self.table_name = "events" })
     expect(problems(action("Results::ShowAction")))
       .to include(a_string_starting_with("Saltbox::Actions::Rendering#result is a method every action has"))
+  end
+
+  it "gives a User member action its user reader, beside current_user, the person running it" do
+    stub_const("User", Class.new(ActiveRecord::Base) { self.table_name = "events" })
+    show = action("Users::ShowAction")
+    expect(show.record_reader_conflict).to be_nil
+    expect(problems(show)).not_to include(a_string_matching(/method every action has/))
+    show.define_record_reader
+    expect(show.instance_method(:user).owner).to be_a(Saltbox::Actions::Base::RecordReader)
+    expect(show.instance_method(:current_user).owner).to eq(Saltbox::Actions::Base)
   end
 
   it "takes the record's id as a cli argument of an action that declares attribute :id" do
@@ -118,7 +128,7 @@ RSpec.describe Saltbox::Actions::Registry do
     stub_const("Admin::Customers", Module.new)
     stray = action("Admin::Customers::ExportAction")
     allow(described_class).to receive(:descendants).and_return([stray, Events::ListAction])
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       described_class.reset!
       expect { described_class.actions }.to raise_error(ArgumentError, "Admin::Customers::ExportAction: Admin::Customers names no model (Admin::Customer is not one): declare model, or move the action")
     ensure
@@ -162,15 +172,15 @@ RSpec.describe Saltbox::Actions::Registry do
     Saltbox::Actions.config.action_checks.pop
   end
 
-  it "versions every definition, and lists the definitions as the catalogue file holds them" do
+  it "versions every definition, and lists the definitions as the catalog file holds them" do
     expect(described_class.version).to match(/\A\h{16}\z/)
-    expect(JSON.parse(described_class.catalogue_json).pluck("name")).to eq(described_class.actions.map(&:action_name))
+    expect(JSON.parse(described_class.catalog_json).pluck("name")).to eq(described_class.actions.map(&:action_name))
   end
 
   it "lists each action for a caller with whether they may run it" do
-    entries = described_class.catalogue(as_mcp(manager))
+    entries = described_class.catalog(as_mcp(manager))
     expect(entries.find { it["name"] == "show_event_notes" }).to be_nil
-    expect(entries.find { it["name"] == "delete_event" }).to include("runnable" => true, "connections" => "confirm", "kind" => "destructive")
-    expect(described_class.catalogue(as_read_only(manager)).pluck("kind").uniq).to eq(["read"])
+    expect(entries.find { it["name"] == "delete_event" }).to include("runnable" => true, "agents" => "confirm", "kind" => "destructive")
+    expect(described_class.catalog(as_read_only(manager)).pluck("kind").uniq).to eq(["read"])
   end
 end

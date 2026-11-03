@@ -4,23 +4,23 @@ require "saltbox/actions/test_helper"
 class <%= action_class_name %>Test < ActiveSupport::TestCase
   include Saltbox::Actions::TestHelper
 
-  self.action_class = <%= action_class_name %>
+  tests <%= action_class_name %>
 
   test "runs for a person who may use it" do
     # Replace these with fixtures or records from this app.
-    account = permitted_account
+    user = permitted_user
 <% if takes_id? -%>
     arguments = {id: visible_record.id.to_s}
 <% else -%>
     arguments = {}
 <% end -%>
-    result = run(arguments, as: as_screen(account))
+    result = run_action(arguments, as: as_screen(user))
     assert_operator result.status, :<, 300
   end
 
   private
 
-  def permitted_account
+  def permitted_user
     raise NotImplementedError, "a person who may run <%= action_class_name %>"
   end
 <% if takes_id? -%>

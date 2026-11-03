@@ -15,6 +15,7 @@ module Saltbox
     # "lots" never becomes 0, "yes" never becomes true, and 30 February never
     # becomes 2 March. Casting.invalid? then finds the numbers the schema
     # passes but the type cannot hold.
+    # @api private
     module Casting
       INTEGER = /\A\s*[+-]?\d+\s*\z/
       FLOAT = /\A\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*\z/

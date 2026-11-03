@@ -12,6 +12,7 @@ module Saltbox
     #
     # @!attribute fields [Hash{String => #call, nil}] each field's name, and
     #   the lambda that computes it, or nil for the record's own method
+    # @api private
     class Summary < Data.define(:fields)
       # The JSON a field's value may become.
       PLAIN = [String, Integer, Float, TrueClass, FalseClass, NilClass].freeze

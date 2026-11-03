@@ -1,7 +1,7 @@
 module Saltbox
   module Actions
-    # The catalogue and the run endpoint for a JSON API: every action, on one
-    # route. Include it in a controller and define #resolve_caller, which
+    # The catalog and the run endpoint for a JSON API: every action, on one
+    # route. Include it in a controller and define #current_caller, which
     # decides who is calling from the request's credential and nothing else.
     #
     #   GET  /api/v1/actions          the actions this caller may use
@@ -19,7 +19,7 @@ module Saltbox
     #
     #     private
     #
-    #     def resolve_caller = ApplicationAction::Caller.screen(Current.account)
+    #     def current_caller = ApplicationAction::Caller.screen(Current.user)
     #   end
     module Controller
       extend ActiveSupport::Concern
@@ -31,27 +31,27 @@ module Saltbox
         around_action :as_action_caller
         rescue_from Error, with: :render_action_error
         rescue_from ActionDispatch::Http::Parameters::ParseError do
-          render_action_error(Error::Invalid.new("The request body is not valid JSON"))
+          render_action_error(Error::ValidationFailed.new("The request body is not valid JSON"))
         end
       end
 
-      # @return [void] the caller's catalogue, with an ETag
+      # @return [void] the caller's catalog, with an ETag
       def index
-        entries = Registry.catalogue(@action_caller)
-        json = JSON.generate({data: entries, meta: {version: Registry.version, api_version: "v1", count: entries.size}})
+        entries = Registry.catalog(@action_caller)
+        json = JSON.generate({data: entries, meta: {catalog_version: Registry.version, api_version: "v1", total: entries.size}})
         render json: json if stale?(etag: Digest::SHA256.hexdigest(json), public: false)
       end
 
       # @return [void] one definition the caller can see
       def show
-        entry = Registry.catalogue(@action_caller).find { |candidate| candidate["name"] == params[:name] }
+        entry = Registry.catalog(@action_caller).find { |candidate| candidate["name"] == params[:name] }
         raise Error::UnknownAction, params[:name] unless entry
         render json: {data: entry}
       end
 
       # @return [void] the action's response body and status
       def run
-        result = Invocation.call(name: params[:name], caller: @action_caller, arguments: run_arguments)
+        result = Invocation.call(action: params[:name], caller: @action_caller, arguments: run_arguments)
         return head(result.status) if result.empty?
         # Encoded here, once: Rails sends a String given as json: as is, so
         # a body that is a JSON string would not arrive quoted.
@@ -61,10 +61,10 @@ module Saltbox
       private
 
       # @return [Caller] who is calling, from the request's credential; never Caller.system
-      def resolve_caller = raise(NotImplementedError, "#{self.class.name} must define resolve_caller")
+      def current_caller = raise(NotImplementedError, "#{self.class.name} must define current_caller")
 
       def as_action_caller
-        @action_caller = Caller.from_request!(resolve_caller, self.class.name)
+        @action_caller = Caller.from_request!(current_caller, self.class.name)
         yield
       end
 
@@ -74,12 +74,12 @@ module Saltbox
       # not an object into "_json".
       def run_arguments
         fields = request.request_parameters
-        raise Error::Invalid, 'Send a JSON object: {"arguments": {...}}' if fields.key?("_json")
+        raise Error::ValidationFailed, 'Send a JSON object: {"arguments": {...}}' if fields.key?("_json")
         unknown = fields.keys - ["arguments"]
         if unknown.any? && !request.media_type.to_s.end_with?("json")
-          raise Error::Invalid, "The body was not read as JSON: send it with Content-Type: application/json"
+          raise Error::ValidationFailed, "The body was not read as JSON: send it with Content-Type: application/json"
         end
-        raise Error::Invalid, "Unknown fields: #{unknown.join(", ")}. Put the action's arguments in \"arguments\"." if unknown.any?
+        raise Error::ValidationFailed, "Unknown fields: #{unknown.join(", ")}. Put the action's arguments in \"arguments\"." if unknown.any?
         fields["arguments"]
       end
 

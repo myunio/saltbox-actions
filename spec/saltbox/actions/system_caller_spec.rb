@@ -7,13 +7,13 @@ RSpec.describe "Caller.system" do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
   let(:system) { Saltbox::Actions::Caller.system }
 
-  it "is the app itself: not an agent, holding every scope, acting as SystemAccount" do
-    expect(system).to have_attributes(surface: "system", account: Saltbox::Actions::SystemAccount.instance, agent: nil,
+  it "is the app itself: not an agent, holding every scope, acting as SystemUser" do
+    expect(system).to have_attributes(surface: "system", user: Saltbox::Actions::SystemUser.instance, agent_name: nil,
       scopes: Saltbox::Actions.config.scopes.values)
     expect(system).to be_system
     expect(system).not_to be_agent
     expect(as_screen(manager)).not_to be_system
-    expect(Saltbox::Actions::Caller.system(agent: "Nightly cleanup").agent).to eq("Nightly cleanup")
+    expect(Saltbox::Actions::Caller.system(agent_name: "Nightly cleanup").agent_name).to eq("Nightly cleanup")
   end
 
   it "is a surface of its own, whatever surfaces the app configures" do
@@ -25,7 +25,7 @@ RSpec.describe "Caller.system" do
   it "runs what the policy allows the app, including an action closed to agents" do
     result = Events::UpdateAction.perform_now(caller: system, id: event.id, title: "Renamed")
     expect(result.body.dig("data", "event", "title")).to eq("Renamed")
-    expect(Events::ShowNotesAction.connections).to eq(:never)
+    expect(Events::ShowNotesAction.agents).to eq(:never)
     expect(Events::ShowNotesAction.perform_now(caller: system, id: event.id).status).to eq(200)
     expect { Events::ShowNotesAction.perform_now(caller: as_mcp(manager), id: event.id) }.to be_refused.with(:human_required)
   end
@@ -33,7 +33,7 @@ RSpec.describe "Caller.system" do
   it "is refused what the policy does not allow the app, never let through" do
     expect { Events::DeleteAction.perform_now(caller: system, id: event.id) }.to be_refused.with(:forbidden)
     expect(Event.exists?(event.id)).to be(true)
-    expect { run({}, as: system, action: Reports::CountEventsAction) }.to be_refused.with(:forbidden)
+    expect { run_action({}, as: system, action: Reports::CountEventsAction) }.to be_refused.with(:forbidden)
   end
 
   it "sees every tenant's records when the policy's scope says so" do
@@ -49,17 +49,17 @@ RSpec.describe "Caller.system" do
   end
 
   it "runs later as the same caller, through a job" do
-    Events::UpdateAction.perform_later(caller: Saltbox::Actions::Caller.system(agent: "Nightly"), id: event.id, title: "Later")
+    Events::UpdateAction.perform_later(caller: Saltbox::Actions::Caller.system(agent_name: "Nightly"), id: event.id, title: "Later")
     perform_enqueued_jobs
     expect(event.reload.title).to eq("Later")
     expect(event.versions.last).to have_attributes(whodunnit: nil, agent: "Nightly", surface: "system")
   end
 
-  it "takes an account of the app's own, which the policy then sees" do
-    expect(Saltbox::Actions::Caller.system(manager).account).to equal(manager)
+  it "takes a user of the app's own, which the policy then sees" do
+    expect(Saltbox::Actions::Caller.system(manager).user).to equal(manager)
     expect { Events::DeleteAction.perform_now(caller: Saltbox::Actions::Caller.system(manager), id: event.id) }.not_to raise_error
     expect(as_system).to be_system
-    expect(as_system(manager).account).to equal(manager)
+    expect(as_system(manager).user).to equal(manager)
   end
 
   describe "at an entry point that serves requests" do
@@ -81,13 +81,13 @@ RSpec.describe "Caller.system" do
   end
 end
 
-# A controller whose resolve_caller wrongly returns the system caller.
+# A controller whose current_caller wrongly returns the system caller.
 class SystemCallerActionsController < ActionController::API
   include Saltbox::Actions::Controller
 
   private
 
-  def resolve_caller = Saltbox::Actions::Caller.system
+  def current_caller = Saltbox::Actions::Caller.system
 end
 
 RSpec.describe "Caller.system over the JSON API" do

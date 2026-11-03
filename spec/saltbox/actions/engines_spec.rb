@@ -5,7 +5,7 @@ require "saltbox/actions/mcp"
 RSpec.describe "Actions from an engine" do
   let(:registry) { Saltbox::Actions::Registry }
   let(:engine_folder) { Billing::Engine.root.join("app/actions") }
-  let(:billing_clerk) { Account.new(id: 5, permissions: %w[billing.view]) }
+  let(:billing_clerk) { User.new(id: 5, permissions: %w[billing.view]) }
 
   def with_paths(paths)
     with_settings(action_paths: paths) do
@@ -19,11 +19,11 @@ RSpec.describe "Actions from an engine" do
   it "loads the engine's actions beside the app's, without eager loading" do
     expect(Rails.application.config.eager_load).to be(false)
     expect(registry.actions).to include(Billing::Invoices::ListAction, Events::ListAction)
-    expect(registry.catalogue(as_api(billing_clerk)).pluck("name")).to include("list_billing_invoices")
+    expect(registry.catalog(as_api(billing_clerk)).pluck("name")).to include("list_billing_invoices")
   end
 
   it "finds the engine's actions as subclasses too, as when eager loading" do
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       registry.reset!
       expect(registry.actions).to include(Billing::Invoices::ListAction, Events::ListAction)
     ensure
@@ -50,7 +50,7 @@ RSpec.describe "Actions from an engine" do
   it "names an engine's action on a host model with the folder's namespace once, and asks the engine's policy" do
     expect(Billing::Events::ListAction).to have_attributes(action_name: "list_billing_events",
       cli_command: %w[billing-events list], title: "List billing events", policy_class: Billing::EventPolicy)
-    expect(registry.catalogue(as_api(billing_clerk)).pluck("name")).to include("list_billing_events")
+    expect(registry.catalog(as_api(billing_clerk)).pluck("name")).to include("list_billing_events")
     with_paths(["app/actions", Saltbox::Actions::ActionPaths::Path.new(path: engine_folder, namespace: "pay")]) do
       expect(Billing::Events::ListAction).to have_attributes(action_name: "list_pay_events", cli_command: %w[pay-events list])
     end
@@ -78,7 +78,7 @@ RSpec.describe "Actions from an engine" do
   end
 
   it "loads each action once from overlapping folders when actions are found as subclasses" do
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       with_paths(["app/actions", Rails.root.join("app/actions"), "app/actions/event", engine_folder]) do
         expect(registry.actions.count(Events::ListAction)).to eq(1)
       end

@@ -5,8 +5,9 @@ require "json_schemer"
 
 module Saltbox
   module Actions
-    # Include in ActiveSupport::TestCase and pass action: to #run, or set
-    # self.action_class once on the test class. No RSpec dependency is loaded.
+    # Include in ActiveSupport::TestCase and name the action under test once
+    # with `tests Events::UpdateAction`, or pass action: to #run_action. No
+    # RSpec dependency is loaded.
     module TestHelper
       include Testing::Callers
 
@@ -17,14 +18,30 @@ module Saltbox
 
         def included(base)
           base.class_attribute :action_class, instance_writer: false
+          base.extend(ClassMethods)
         end
       end
 
-      # Minitest calls #run without a caller to execute the test itself.
-      def run(arguments = {}, as: nil, action: action_class)
-        return super() unless as
-        raise ArgumentError, "pass action: or set self.action_class" unless action
-        Invocation.call(name: action, caller: as, arguments:)
+      module ClassMethods
+        # Names the action the test class tests, as ActionMailer::TestCase's
+        # `tests` names its mailer. action_class reads it.
+        #
+        # @param action [Class, String] the action, or its name
+        # @return [Class, String]
+        def tests(action) = self.action_class = action
+      end
+
+      # Runs the action as the caller, through Invocation, the path every
+      # surface takes.
+      #
+      # @param arguments [Hash] the input, as a client would send it
+      # @param as [Caller]
+      # @param action [Class, String] the action, or its name; the one the class `tests` by default
+      # @return [Result]
+      # @raise [Error] when the action refuses
+      def run_action(arguments = {}, as:, action: action_class)
+        raise ArgumentError, "pass action:, or name the action with `tests Events::UpdateAction`" unless action
+        Invocation.call(action:, caller: as, arguments:)
       end
 
       # Returns the refusal so its message and details can also be checked.
@@ -41,25 +58,25 @@ module Saltbox
         error
       end
 
-      # Without `as:` it checks the catalogue's schema, built for
-      # Configuration#schema_principal; pass a caller when the policy needs a person.
+      # Without `as:` it checks the catalog's schema, built for
+      # Configuration#schema_user; pass a caller when the policy needs a person.
       def assert_invalid_against_schema(arguments, action: action_class, as: nil)
-        assert_raises(Error::Invalid) { Arguments.check(action, arguments, as) }
+        assert_raises(Error::ValidationFailed) { Arguments.check(action, arguments, as) }
       end
 
       def assert_matches_output_schema(result, schema: action_class.output_schema)
-        raise ArgumentError, "the action declares no output schema: add returns" unless schema
+        raise ArgumentError, "the action declares no output schema: add output_schema" unless schema
         body = result.respond_to?(:body) ? result.body : result
         failures = JSONSchemer.schema(schema).validate(body.as_json).map { it["error"] }
         assert_empty failures, "expected the body to match the output schema:\n#{failures.join("\n")}"
       end
 
-      def assert_runnable_by(caller, action: action_class)
+      def assert_runnable_for(caller, action: action_class)
         assert Actions.within(caller) { |fresh| action.runnable_for?(fresh) }, "expected #{action.action_name} to be runnable for #{caller.surface}"
       end
 
       def assert_listed_for(caller, action: action_class)
-        assert Actions.within(caller) { |fresh| action.available_to?(fresh) }, "expected #{action.action_name} to be listed for #{caller.surface}"
+        assert Actions.within(caller) { |fresh| action.listed_for?(fresh) }, "expected #{action.action_name} to be listed for #{caller.surface}"
       end
 
       def assert_announces_changes(expected = {})
@@ -85,10 +102,10 @@ module Saltbox
         assert versions.where(attributes).exists?, "expected an audit entry, but none matched"
       end
 
-      def assert_matches_catalogue
-        path = Registry.catalogue_path
-        assert path.exist?, "write the catalogue with bin/rails actions:catalogue"
-        assert_equal Registry.catalogue_json, path.read, "the catalogue is out of date: run bin/rails actions:catalogue"
+      def assert_matches_catalog
+        path = Registry.catalog_path
+        assert path.exist?, "write the catalog with bin/rails actions:dump"
+        assert_equal Registry.catalog_json, path.read, "the catalog is out of date: run bin/rails actions:dump"
       end
 
       # Checks the same registry promises as the RSpec shared example. An
@@ -97,14 +114,14 @@ module Saltbox
       def assert_valid_action_registry(test_root: Rails.root.join("test/actions"))
         refute_empty Registry.check!
         paths = Actions.config.action_paths
-        files = Actions.config.every_file_an_action ? Registry.action_files : Registry.actions.map { Registry.source(it) }
+        files = Actions.config.strict_action_paths ? Registry.action_files : Registry.actions.map { Registry.source(it) }
         missing = files.map { |file| [file, paths.relative(file).sub_ext("_test.rb")] }
           .reject { |file, test| [Pathname(test_root), paths.for(file).root.join("../../test/actions")].any? { it.join(test).exist? } }
           .map(&:last)
         assert_empty missing, "write #{missing.join(", ")} under #{test_root}"
         invalid = Registry.actions.reject { JSONSchemer.valid_schema?(it.input_schema) }
         assert_empty invalid.map(&:action_name)
-        assert_matches_catalogue
+        assert_matches_catalog
       end
 
       private

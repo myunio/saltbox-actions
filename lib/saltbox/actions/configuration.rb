@@ -11,12 +11,14 @@ module Saltbox
     #   Saltbox::Actions.configure do |config|
     #     config.app_name = "Acme"
     #     config.around_invocation { |caller, run| Context.within(caller) { |fresh| run.(fresh) } }
-    #     config.around_run { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.account.id) { run.() } }
+    #     config.around_perform { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
     #     config.on_changes { |changes, invocation| publish(changes, invocation) }
-    #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::Invalid.new(error.message) }
+    #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::ValidationFailed.new(error.message) }
     #   end
     class Configuration
+      # @api private
       SCOPES = {read: "api:read", write: "api:write"}.freeze
+      # @api private
       SURFACES = %w[screen webmcp api mcp assistant].freeze
 
       # @return [String] the app's name in tool titles, agent instructions and default error messages
@@ -25,8 +27,8 @@ module Saltbox
       attr_accessor :base_class
       # @return [ActionPaths] the folders actions load from: app/actions, then any an engine adds
       attr_reader :action_paths
-      # @return [String] the committed catalogue every action is written to, relative to Rails.root
-      attr_accessor :catalogue_path
+      # @return [String] the committed catalog every action is written to, relative to Rails.root
+      attr_accessor :catalog_path
       # @return [String] the class whose renderer draws action views; a controller's name, read when first used
       attr_accessor :renderer
       # @return [Hash{Symbol => String}] the token scope a read needs and the one anything else needs
@@ -46,12 +48,14 @@ module Saltbox
       #   declared permissions; when false they only decide the actions list
       attr_accessor :enforce_permissions
       # @return [Boolean] whether Invocation refuses an agent a :confirm action
-      #   unless the #confirm hook approves it; when false, agents on the API,
-      #   MCP and a browser page run :confirm actions with nothing checked
+      #   unless the #confirm hook approves it (true by default; with no hook,
+      #   every such call is refused); set false on purpose to let agents on
+      #   the API, MCP and a browser page run :confirm actions with nothing checked
       attr_accessor :enforce_confirm
-      # @return [Boolean] whether every file in action_paths is an action ending _action.rb;
-      #   when false, the actions are the base class's subclasses there, beside other files
-      attr_accessor :every_file_an_action
+      # @return [Boolean] whether every Ruby file under action_paths must define an action, in a
+      #   file ending _action.rb (true by default); when false, the actions are the base class's
+      #   subclasses there, beside other files. It checks what the folders hold, nothing more.
+      attr_accessor :strict_action_paths
       # @return [Symbol] the error body: :code ({error: {code, message, errors, details}})
       #   or :type ({error: {type, message, details}}), see Error#as_json
       attr_accessor :error_format
@@ -62,7 +66,7 @@ module Saltbox
         @app_name = "the app"
         @base_class = "ApplicationAction"
         @action_paths = ActionPaths.new(["app/actions"])
-        @catalogue_path = "config/actions.json"
+        @catalog_path = "config/actions.json"
         @renderer = "ApplicationController"
         @scopes = SCOPES
         @surfaces = SURFACES
@@ -71,22 +75,22 @@ module Saltbox
         @area_order = []
         @max_array_items = 100
         @enforce_permissions = true
-        @enforce_confirm = false
-        @every_file_an_action = true
+        @enforce_confirm = true
+        @strict_action_paths = true
         @error_format = :code
         @result_format = :body
         @permissions_held = ->(_caller) { [] }
         @around_invocation = ->(caller, run) { run.call(caller) }
-        @around_run = ->(_invocation, run) { run.call }
+        @around_perform = ->(_invocation, run) { run.call }
         @on_changes = ->(_changes, _invocation) {}
-        @after_change = ->(_invocation, _result) {}
+        @after_change_commit = ->(_invocation, _result) {}
         @confirm = ->(_invocation, _action) { false }
         @on_access_refused = ->(_caller, _action) { Error::InsufficientScope.new }
-        @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.fields(fields) }
+        @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.for_fields(fields) }
         @feature_enabled = ->(_key, _caller) { true }
         @validate_feature = ->(_key) {}
         @area_for = ->(_model) {}
-        @schema_principal = nil
+        @schema_user = nil
         @error_mappings = []
         @action_checks = []
         @registry_checks = []
@@ -98,15 +102,17 @@ module Saltbox
       end
 
       # @return [Class] the base action class
+      # @api private
       def base = base_class.constantize
 
       # @return [Class] the renderer's class
+      # @api private
       def renderer_class = renderer.is_a?(String) ? renderer.constantize : renderer
 
       # @return [Integer]
       def max_array_items = @max_array_items.respond_to?(:call) ? @max_array_items.call : @max_array_items
 
-      # The set-up each invocation, catalogue listing and search runs inside:
+      # The set-up each invocation, catalog listing and search runs inside:
       # tenant, time zone, a fresh copy of the caller from the database.
       # The block calls run with the caller it refreshed.
       #
@@ -119,7 +125,7 @@ module Saltbox
       #
       # @yieldparam invocation [Invocation]
       # @yieldparam run [Proc]
-      def around_run(&block) = block ? @around_run = block : @around_run
+      def around_perform(&block) = block ? @around_perform = block : @around_perform
 
       # Receives every record a change changed, inside the change's
       # transaction, so an event stored in the same database commits with it.
@@ -131,13 +137,13 @@ module Saltbox
       # Runs after a change commits, with its result: once every enclosing
       # transaction has committed, and never when one rolls back. It may run
       # after the invocation and the caller's own request context have
-      # ended (Current, around_invocation's and around_run's set-up), so it
+      # ended (Current, around_invocation's and around_perform's set-up), so it
       # sets up any context it needs itself; invocation.invocation_id and
       # invocation.caller stay readable.
       #
       # @yieldparam invocation [Invocation]
       # @yieldparam result [Result]
-      def after_change(&block) = block ? @after_change = block : @after_change
+      def after_change_commit(&block) = block ? @after_change_commit = block : @after_change_commit
 
       # Called when a caller's access (Caller#access) does not reach the
       # action. Returns the Error to raise; the place to note the refusal
@@ -160,7 +166,7 @@ module Saltbox
       # @yieldreturn [Error::Forbidden]
       def on_forbidden_fields(&block) = block ? @on_forbidden_fields = block : @on_forbidden_fields
 
-      # Approves a :confirm action for an agent, when #enforce_confirm is on:
+      # Approves a :confirm action for an agent, while #enforce_confirm is on (the default):
       # the place to ask the person through the app's own channel. Return
       # true to run it; anything else refuses with confirmation_required.
       # Raise an Error to refuse in your own words. Called after every other
@@ -199,19 +205,19 @@ module Saltbox
       def area_for(&block) = block ? @area_for = block : @area_for
 
       # Who a create or update's input schema is built for where there is
-      # no caller: the committed catalogue (config/actions.json),
+      # no caller: the committed catalog (config/actions.json),
       # `rails actions:check` and the registry spec or test, the generator's
-      # field list, and the schema matchers without `as:`. A principal
-      # holding every permission, so the catalogue lists every field.
+      # field list, and the schema matchers without `as:`. A user
+      # holding every permission, so the catalog lists every field.
       # Callers never see it: each gets the fields their policy permits them. Without it the policy is asked
-      # with no person (nil). The block calls run with the principal, inside
+      # with no person (nil). The block calls run with the user, inside
       # whatever the policy needs, such as a tenant.
       #
       # @example A policy that needs a person, in a multi-tenant app
-      #   config.schema_principal { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
+      #   config.schema_user { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
       #
-      # @yieldparam run [Proc] takes the principal
-      def schema_principal(&block) = block ? @schema_principal = block : @schema_principal
+      # @yieldparam run [Proc] takes the user
+      def schema_user(&block) = block ? @schema_user = block : @schema_user
 
       # Turns an app error raised inside an action into an Error callers
       # see. Checked in the order given, before the gem's own mappings, so an
@@ -225,6 +231,7 @@ module Saltbox
       def map_error(error_class, &block) = @error_mappings << [error_class, block]
 
       # @return [Array<Array(Class, Proc)>]
+      # @api private
       attr_reader :error_mappings
 
       # Adds a check for each action, beside the gem's own, run by
@@ -237,6 +244,7 @@ module Saltbox
       def check_action(&block) = @action_checks << block
 
       # @return [Array<Proc>]
+      # @api private
       attr_reader :action_checks
 
       # Adds a check over every action at once, run by `rails actions:check`
@@ -247,6 +255,7 @@ module Saltbox
       def check_registry(&block) = @registry_checks << block
 
       # @return [Array<Proc>]
+      # @api private
       attr_reader :registry_checks
 
       # @return [String] the scope an action of this kind needs

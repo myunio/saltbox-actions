@@ -5,7 +5,7 @@ RSpec.describe "The actions API", type: :request do
   it "lists the actions this caller may use, with an ETag" do
     get "/api/v1/actions", headers: headers
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body.dig("meta", "version")).to eq(Saltbox::Actions::Registry.version)
+    expect(response.parsed_body["meta"]).to eq("catalog_version" => Saltbox::Actions::Registry.version, "api_version" => "v1", "total" => response.parsed_body["data"].size)
     expect(response.parsed_body["data"].pluck("name")).to include("update_event")
     get "/api/v1/actions", headers: headers.merge("If-None-Match" => response.headers["ETag"])
     expect(response).to have_http_status(:not_modified)
@@ -44,15 +44,14 @@ RSpec.describe "The actions API", type: :request do
     expect(response.headers["WWW-Authenticate"]).to eq("Bearer")
   end
 
-  it "answers a delete with no content" do
+  it "answers an approved delete with no content" do
+    allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
     post "/api/v1/actions/delete_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
     expect(response).to have_http_status(:no_content)
   end
 
-  it "refuses a :confirm action the app has not approved, with enforce_confirm on" do
-    with_settings(enforce_confirm: true) do
-      post "/api/v1/actions/cancel_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
-    end
+  it "refuses a :confirm action the app has not approved, by default" do
+    post "/api/v1/actions/cancel_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
     expect(response).to have_http_status(:forbidden)
     expect(response.parsed_body).to eq("error" => {"code" => "confirmation_required",
                                                    "message" => "The person must approve this in Dummy before it runs.", "details" => {"action" => "cancel_event"}})
@@ -65,13 +64,13 @@ RSpec.describe "The actions API", type: :request do
     expect(response.parsed_body).to eq("error" => {"code" => "forbidden", "message" => "You can't change notes.", "errors" => {"notes" => ["you can't change this"]}})
 
     refusal = ->(caller, action, fields) {
-      Saltbox::Actions::Error::Forbidden.new("Account #{caller.account.id} can't change #{fields.to_sentence} on #{action.action_name}.",
+      Saltbox::Actions::Error::Forbidden.new("User #{caller.user.id} can't change #{fields.to_sentence} on #{action.action_name}.",
         errors: fields.index_with { ["needs events.notes"] }, details: {"needs" => "events.notes"})
     }
     allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
     post "/api/v1/actions/create_event", params: {arguments: {title: "AGM", notes: "x"}}.to_json, headers: headers
     expect(response).to have_http_status(:forbidden)
-    expect(response.parsed_body).to eq("error" => {"code" => "forbidden", "message" => "Account 1 can't change notes on create_event.",
+    expect(response.parsed_body).to eq("error" => {"code" => "forbidden", "message" => "User 1 can't change notes on create_event.",
                                                    "errors" => {"notes" => ["needs events.notes"]}, "details" => {"needs" => "events.notes"}})
   end
 end

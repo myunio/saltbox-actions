@@ -4,7 +4,7 @@ RSpec.describe "Changes and transactions" do
   self.use_transactional_tests = false
 
   let!(:event) { Event.create!(org_id: 1, title: "AGM") }
-  let(:update) { ->(title) { Saltbox::Actions::Invocation.call(name: "update_event", caller: as_screen(manager), arguments: {id: event.id.to_s, title:}) } }
+  let(:update) { ->(title) { Saltbox::Actions::Invocation.call(action: "update_event", caller: as_screen(manager), arguments: {id: event.id.to_s, title:}) } }
 
   after do
     Event.delete_all
@@ -13,18 +13,18 @@ RSpec.describe "Changes and transactions" do
   end
 
   it "undoes a failed change inside the caller's own transaction, even when the caller rescues it" do
-    allow(Saltbox::Actions.config).to receive(:on_changes).and_return(->(*) { raise Saltbox::Actions::Error::Invalid, "store failed" })
+    allow(Saltbox::Actions.config).to receive(:on_changes).and_return(->(*) { raise Saltbox::Actions::Error::ValidationFailed, "store failed" })
     ActiveRecord::Base.transaction do
       update.call("Gone")
-    rescue Saltbox::Actions::Error::Invalid
+    rescue Saltbox::Actions::Error::ValidationFailed
       nil
     end
     expect(event.reload.title).to eq("AGM")
   end
 
-  it "runs after_change once every enclosing transaction commits, and never on rollback" do
+  it "runs after_change_commit once every enclosing transaction commits, and never on rollback" do
     seen = []
-    allow(Saltbox::Actions.config).to receive(:after_change)
+    allow(Saltbox::Actions.config).to receive(:after_change_commit)
       .and_return(->(invocation, _) { seen << [invocation.action.action_name, ActiveRecord::Base.connection.transaction_open?] })
 
     ActiveRecord::Base.transaction do
@@ -45,9 +45,9 @@ RSpec.describe "Changes and transactions" do
     expect(seen.last).to eq(["update_event", false])
   end
 
-  it "keeps the invocation's id for an after_change deferred past its run" do
+  it "keeps the invocation's id for an after_change_commit deferred past its run" do
     ids = []
-    allow(Saltbox::Actions.config).to receive(:after_change).and_return(->(invocation, _) { ids << invocation.invocation_id })
+    allow(Saltbox::Actions.config).to receive(:after_change_commit).and_return(->(invocation, _) { ids << invocation.invocation_id })
     ActiveRecord::Base.transaction { update.call("Annual meeting") }
     expect(ids).to contain_exactly(a_string_matching(/\A\h{8}-/))
   end
@@ -61,7 +61,7 @@ RSpec.describe "Changes and transactions" do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::BookAction"
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :update?
 
       def perform
@@ -70,7 +70,7 @@ RSpec.describe "Changes and transactions" do
         head :no_content
       end
     end
-    Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager))
+    Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager))
     expect(Event.pluck(:title)).to include("Before commit", "After commit")
     expect(Dummy::ANNOUNCED.sole[:changes]).to eq([["Booking", Event.find_by!(title: "Booking").id.to_s, "create"]])
   end
@@ -94,13 +94,13 @@ RSpec.describe "Changes and transactions" do
       Class.new(ApplicationAction) do
         def self.name = "Entry::AddAction"
         kind :change
-        connections :allowed
+        agents :allowed
         policy_rule :update?
 
         def perform
           authorize Event.first
           Entry.create!(title: "Half done")
-          raise Saltbox::Actions::Error::Invalid, "No"
+          raise Saltbox::Actions::Error::ValidationFailed, "No"
         end
       end
     end
@@ -109,7 +109,7 @@ RSpec.describe "Changes and transactions" do
       action = Class.new(ApplicationAction) do
         def self.name = "Events::ArchiveAction"
         kind :change
-        connections :allowed
+        agents :allowed
         policy_rule :update?
 
         def perform
@@ -117,16 +117,16 @@ RSpec.describe "Changes and transactions" do
           authorize event
           event.update!(title: "Archived")
           Entry.create!(title: "Archived AGM")
-          raise Saltbox::Actions::Error::Invalid, "No"
+          raise Saltbox::Actions::Error::ValidationFailed, "No"
         end
       end
-      expect { Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::ValidationFailed)
       expect(event.reload.title).to eq("AGM")
       expect(Entry.count).to eq(1)
     end
 
     it "runs the change in that model's transaction, so a failure undoes it" do
-      expect { Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::ValidationFailed)
       expect(Entry.count).to eq(0)
     end
   end

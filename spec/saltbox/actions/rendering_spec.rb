@@ -4,7 +4,7 @@ RSpec.describe Saltbox::Actions::Rendering do
       define_singleton_method(:name) { "Reports::AnswerAction" }
       action_name "answer"
       kind :read
-      connections :allowed
+      agents :allowed
       define_method(:perform) do
         skip_authorization
         skip_policy_scope
@@ -13,7 +13,7 @@ RSpec.describe Saltbox::Actions::Rendering do
     end
   end
 
-  def run_answer(body) = Saltbox::Actions::Invocation.call(name: answering(body), caller: as_screen(manager))
+  def run_answer(body) = Saltbox::Actions::Invocation.call(action: answering(body), caller: as_screen(manager))
 
   it "renders any JSON value given as json:, false and null included" do
     expect(run_answer(false)).to have_attributes(status: 200, body: false, empty?: false)

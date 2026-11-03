@@ -9,6 +9,7 @@ module Saltbox
     #   adapter that supplies them, the ones named with `accepts`.
     # - Every other input is an attribute (Inputs), shaped by its validations.
     # Descriptions come from config/locales/actions.en.yml, or the class.
+    # @api private
     module Schema
       extend ActiveSupport::Concern
 
@@ -43,6 +44,7 @@ module Saltbox
       # @!attribute required [Boolean] whether a create must send it
       # @!attribute reference [Class, nil] the model a foreign key points to
       # @!attribute type [ActiveModel::Type::Value] the column's type, which casts what a form sends
+      # @api private
       Field = Data.define(:key, :schema, :required, :reference, :type)
 
       # @param type [Symbol]
@@ -93,22 +95,25 @@ module Saltbox
       # @!attribute types [Hash{String => ActiveModel::Type::Value, Array, Hash}] what casts each
       #   input before the schema checks it (Casting.cast)
       # @!attribute fields [Hash{String => Field}] the model fields among them, keyed by the name callers send
+      # @api private
       Input = Data.define(:schema, :types, :fields)
 
       class_methods do
         # The input schema for one caller. A create or update lists the
         # fields the authorization adapter permits that caller, so two callers
         # see different schemas when their policy permits different fields.
-        # Without a caller it is the catalogue's schema, built for
-        # Configuration#schema_principal.
+        # Without a caller it is the catalog's schema, built for
+        # Configuration#schema_user.
         #
         # @param caller [Caller, nil]
         # @return [Hash]
+        # @api public
         def input_schema(caller = nil) = input(caller).schema
 
         # @param caller [Caller, nil]
         # @return [Hash{String => Field}] the model fields the caller may send, keyed by the name callers send
         # @raise [ArgumentError] for a permitted name that is not a column, an association or an attribute
+        # @api private
         def writable_fields(caller = nil) = input(caller).fields
 
         # Asks the adapter which fields the caller may set, on a new record,
@@ -119,8 +124,9 @@ module Saltbox
         # is set: every surface does. Permitting#permitted_attributes checks
         # the fields against the real record again.
         #
-        # @param caller [Caller, nil] nil for the catalogue's schema (Configuration#schema_principal)
+        # @param caller [Caller, nil] nil for the catalog's schema (Configuration#schema_user)
         # @return [Input]
+        # @api private
         def input(caller = nil)
           keys = writes_fields? ? permitted_keys(caller) : []
           input_for(keys)
@@ -128,6 +134,7 @@ module Saltbox
 
         # @return [Input] the action's input without the adapter's fields:
         #   its id, its attributes and any fields it accepts, the same for every caller
+        # @api private
         def declared_input = input_for(accepted_fields.any? ? permitted_keys(nil) : [])
 
         # Checks a caller's input before the action runs. Override it in the
@@ -136,12 +143,14 @@ module Saltbox
         # @param arguments [Hash, nil]
         # @param caller [Caller]
         # @return [Hash] the input the action is built from
-        # @raise [Error::Invalid]
+        # @raise [Error::ValidationFailed]
         # @raise [Error::Forbidden] naming each field of the model the caller may not set
+        # @api public
         def validate_arguments(arguments, caller) = Arguments.for(self, caller).validate!(arguments)
 
         # @return [Boolean] whether the action takes model fields: the ones it accepts, or for a
         #   create or update, the ones its authorization adapter supplies
+        # @api private
         def writes_fields?
           return false unless model.is_a?(Class) && model < ActiveRecord::Base
           accepted_fields.any? || (!declared_name && WRITING_VERBS.include?(verb) && supplies_fields?)
@@ -150,6 +159,7 @@ module Saltbox
         # @param name [String, Symbol]
         # @return [Boolean] whether some caller may send it: an attribute, the
         #   id, or a model field the action takes
+        # @api private
         def declares_input?(name)
           name = name.to_s
           declared_attributes.key?(name) || (name == "id" && takes_id?) || model_field?(name)
@@ -159,6 +169,7 @@ module Saltbox
         # @return [Boolean] whether the action could take it as a model field,
         #   for a caller whose policy permits it: one it accepts, or else a
         #   column, or a belongs_to under its association's name. Not the primary key.
+        # @api private
         def model_field?(name)
           return false unless writes_fields? && name != model.primary_key
           return accepted_fields.include?(name) if accepted_fields.any?
@@ -168,12 +179,13 @@ module Saltbox
         private
 
         # @return [Array<String>] the keys the action accepts; otherwise the
-        #   ones the policy permits the caller, or the schema principal without one
+        #   ones the policy permits the caller, or the schema user without one
+        # @api private
         def permitted_keys(caller)
           return accepted_keys if accepted_fields.any?
-          return policy_keys(caller.account) if caller
-          principal = Actions.config.schema_principal
-          principal ? principal.call(->(account) { policy_keys(account) }) : policy_keys(nil)
+          return policy_keys(caller.user) if caller
+          schema_user = Actions.config.schema_user
+          schema_user ? schema_user.call(->(user) { policy_keys(user) }) : policy_keys(nil)
         end
 
         # The fields named with `accepts`, keyed as the model takes them: a
@@ -185,7 +197,7 @@ module Saltbox
           end.freeze
         end
 
-        def policy_keys(account) = permitted_attribute_names_for(account, model.new).uniq.freeze
+        def policy_keys(user) = permitted_attribute_names_for(user, model.new).uniq.freeze
 
         def input_for(keys)
           (@inputs ||= Concurrent::Map.new).compute_if_absent([keys, I18n.locale]) { build_input(keys) }

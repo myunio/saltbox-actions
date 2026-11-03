@@ -3,10 +3,12 @@ module Saltbox
     # The tools agents see, free of any protocol, shared by the MCP adapter
     # and the assistant tools: the `featured` actions as tools of their own,
     # find_action to search the rest, and one run tool per kind.
+    # @api private
     module FrontDoor
       # A tool as MCP clients and assistants see it: its name, title,
       # description, input schema and behavior hints (read-only, destructive,
       # idempotent).
+      # @api private
       Tool = Data.define(:name, :title, :description, :input_schema, :annotations)
       FIND = "find_action".freeze
       # How many actions find_action lists on one page when there is no query, and the most it takes.
@@ -15,6 +17,7 @@ module Saltbox
       ENTRY = "MCP and the assistant".freeze
       MAX_PAGE_SIZE = 100
       RUN = {read: "run_read_action", change: "run_change_action", destructive: "run_destructive_action"}.freeze
+      # @api private
       RUN_TEXT = {
         read: ["Look something up in %{app}",
           "Use this when find_action has found a read action for the person's request. Runs it by name with its arguments and returns its result. Changes nothing."],
@@ -60,20 +63,21 @@ module Saltbox
           arguments = Arguments.new(find_tool.input_schema).validate!(arguments)
           return list(caller, page: arguments.fetch("page", 1), page_size: arguments.fetch("page_size", PAGE_SIZE)) unless arguments.key?("query")
           paging = arguments.keys & %w[page page_size]
-          raise Error::Invalid.new("page and page_size list actions only with no query", errors: paging.index_with { ["is only for find_action with no query"] }) if paging.any?
+          raise Error::ValidationFailed.new("page and page_size list actions only with no query", errors: paging.index_with { ["is only for find_action with no query"] }) if paging.any?
           return find(arguments.fetch("query"), caller)
         end
         if (kind = RUN.key(tool_name))
           name, action_arguments = run_wrapper!(arguments)
-          return response(Invocation.call(name: name, caller: caller, arguments: action_arguments, expected_kind: kind))
+          return response(Invocation.call(action: name, caller: caller, arguments: action_arguments, expected_kind: kind))
         end
         action = Registry.fetch(tool_name)
         raise Error::UnknownAction, tool_name unless action.featured?
-        response(Invocation.call(name: action, caller: caller, arguments: arguments))
+        response(Invocation.call(action: action, caller: caller, arguments: arguments))
       end
 
       # What FrontDoor.call returns for a response with no body, which each
       # tool adapter reports as "Done.". A JSON null is a body.
+      # @api private
       EMPTY = Object.new.freeze
 
       # @param result [Result]
@@ -85,15 +89,15 @@ module Saltbox
       #
       # @param wrapper [Hash, nil] the run tool's arguments
       # @return [Array(String, Object)] the action's name and its arguments, unchecked
-      # @raise [Error::Invalid] for a wrapper that is not an object, has no name or has other keys
+      # @raise [Error::ValidationFailed] for a wrapper that is not an object, has no name or has other keys
       def self.run_wrapper!(wrapper)
         wrapper = {} if wrapper.nil?
-        raise Error::Invalid.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless wrapper.is_a?(Hash)
+        raise Error::ValidationFailed.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless wrapper.is_a?(Hash)
         wrapper = wrapper.stringify_keys
         errors = (wrapper.keys - %w[name arguments]).index_with { ["is not an argument of a run tool"] }
         name = wrapper["name"]
         errors["name"] = ["must be an action's name from find_action"] unless name.is_a?(String) && name.length.between?(1, 64)
-        raise Error::Invalid.new(errors.map { |key, messages| "#{key} #{messages.first}" }.join("; "), errors: errors) if errors.any?
+        raise Error::ValidationFailed.new(errors.map { |key, messages| "#{key} #{messages.first}" }.join("; "), errors: errors) if errors.any?
         [name, wrapper["arguments"]]
       end
 
@@ -107,7 +111,7 @@ module Saltbox
       # @return [Tool] the plain-words discovery contract
       def self.find_tool
         Tool.new(name: FIND, title: "Find something to do in #{app}",
-          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, their arguments and which run tool to use. Leave query out to list everything you can run, a page at a time, without arguments. #{RecordData::NOTE}",
+          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, each with the input_schema of the arguments it takes and which run tool to use. Leave query out to list everything you can run, a page at a time, without schemas. #{RecordData::NOTE}",
           input_schema: {"type" => "object", "properties" => {
             "query" => {"type" => "string", "minLength" => 1, "maxLength" => 200, "description" => "The request in plain words, or an action's name"},
             "page" => {"type" => "integer", "minimum" => 1, "description" => "With no query: the page of the list, from 1"},
@@ -133,10 +137,10 @@ module Saltbox
       #   or a hint when nothing matched
       def self.find(query, caller)
         Actions.within(caller) do |fresh|
-          available = Registry.actions.select { |action| action.available_to?(fresh) }
+          available = Registry.actions.select { |action| action.listed_for?(fresh) }
           actions = Finder.new(available).find(query).map do |action|
-            entry(action, fresh).merge(description: action.description, arguments: action.input_schema(fresh),
-              response_description: action.summary_note).reject { |key, value| key == :response_description && value.nil? }
+            entry(action, fresh).merge(description: action.description, input_schema: action.input_schema(fresh),
+              output_description: action.summary_note).reject { |key, value| key == :output_description && value.nil? }
           end
           result = {actions: actions}
           result[:hint] = no_match_hint(available) if actions.empty?
@@ -173,7 +177,7 @@ module Saltbox
       def self.entry(action, caller)
         runnable = action.runnable_for?(caller)
         {name: action.action_name, title: action.title, run_with: runnable ? RUN.fetch(action.kind) : nil,
-         confirm_first: action.connections == :confirm, message: ("Only a person can do this, in #{app}" unless runnable)}
+         confirm_first: action.agents == :confirm, message: ("Only a person can do this, in #{app}" unless runnable)}
           .reject { |key, value| key == :message && value.nil? }
       end
 

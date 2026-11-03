@@ -15,10 +15,10 @@ RSpec.describe Saltbox::Actions::Base do
       shown = action("Events::ShowAction") do
         def perform = render(json: {title: event.title, same: event.equal?(@event)})
       end
-      expect(run({id: event.id}, as: as_screen(reader), action: shown).body).to eq("title" => "AGM", "same" => true)
-      expect { run({id: event.id}, as: as_screen(stranger), action: shown) }.to be_refused.with(:forbidden)
+      expect(run_action({id: event.id}, as: as_screen(reader), action: shown).body).to eq("title" => "AGM", "same" => true)
+      expect { run_action({id: event.id}, as: as_screen(stranger), action: shown) }.to be_refused.with(:forbidden)
       elsewhere = Event.create!(org_id: 2, title: "Elsewhere")
-      expect { run({id: elsewhere.id}, as: as_screen(reader), action: shown) }.to be_not_found
+      expect { run_action({id: elsewhere.id}, as: as_screen(reader), action: shown) }.to be_not_found
     end
 
     it "is found with find_<record> when the action's lookup differs, inside the same scope" do
@@ -29,9 +29,9 @@ RSpec.describe Saltbox::Actions::Base do
 
         def find_event(events) = events.find_by!(title: id)
       end
-      expect(run({id: event.title}, as: as_screen(reader), action: by_title).body.dig("data", "event", "id")).to eq(event.id)
+      expect(run_action({id: event.title}, as: as_screen(reader), action: by_title).body.dig("data", "event", "id")).to eq(event.id)
       Event.create!(org_id: 2, title: "Hidden")
-      expect { run({id: "Hidden"}, as: as_screen(reader), action: by_title) }.to be_not_found
+      expect { run_action({id: "Hidden"}, as: as_screen(reader), action: by_title) }.to be_not_found
     end
 
     it "is not found when find_<record> returns nil" do
@@ -42,7 +42,7 @@ RSpec.describe Saltbox::Actions::Base do
 
         def find_event(events) = events.find_by(title: id)
       end
-      expect { run({id: "Nothing"}, as: as_screen(reader), action: by_title) }.to be_not_found
+      expect { run_action({id: "Nothing"}, as: as_screen(reader), action: by_title) }.to be_not_found
     end
 
     it "keeps a parent's own reader in its subclasses" do
@@ -52,7 +52,7 @@ RSpec.describe Saltbox::Actions::Base do
         def event = super.title.upcase
       end
       child = Class.new(parent) { define_singleton_method(:name) { "Events::ShowAction" } }
-      expect(run({id: event.id}, as: as_screen(reader), action: child).body).to eq("title" => "AGM")
+      expect(run_action({id: event.id}, as: as_screen(reader), action: child).body).to eq("title" => "AGM")
     end
   end
 
@@ -71,7 +71,7 @@ RSpec.describe Saltbox::Actions::Base do
         end
       end
       body = Time.use_zone("America/St_Johns") do
-        run({at: "2026-11-02T18:30:12.123456", also: [{at: "2026-11-02T18:30"}]}, as: as_screen(reader), action: scheduled).body
+        run_action({at: "2026-11-02T18:30:12.123456", also: [{at: "2026-11-02T18:30"}]}, as: as_screen(reader), action: scheduled).body
       end
       expect(body).to eq("at" => "2026-11-02T18:30:12.123456-03:30", "also" => "2026-11-02T18:30:00.000000-03:30")
     end
@@ -83,23 +83,23 @@ RSpec.describe Saltbox::Actions::Base do
 
         def perform = render(json: {reason:})
       end
-      expect(run({id: event.id}, as: as_screen(manager), action: cancelled).body).to eq("reason" => "No reason given")
+      expect(run_action({id: event.id}, as: as_screen(manager), action: cancelled).body).to eq("reason" => "No reason given")
     end
   end
 
   describe "inherited declarations" do
     it "carry who may run an action, and how, to its subclasses until they declare their own" do
       parent = action("Events::CancelAction") do
-        connections :never
+        agents :never
         permission "events.manage"
         policy_rule :update?
         featured
         idempotent
       end
       child = Class.new(parent) { define_singleton_method(:name) { "Events::CancelAction" } }
-      expect(child).to have_attributes(connections: :never, permissions: ["events.manage"], declared_query: :update?, featured?: true, idempotent?: true)
-      child.connections :confirm
-      expect([child.connections, parent.connections]).to eq(%i[confirm never])
+      expect(child).to have_attributes(agents: :never, permissions: ["events.manage"], declared_rule: :update?, featured?: true, idempotent?: true)
+      child.agents :confirm
+      expect([child.agents, parent.agents]).to eq(%i[confirm never])
     end
 
     it "carry attribute :id and accepts" do
@@ -118,7 +118,7 @@ RSpec.describe Saltbox::Actions::Base do
       action("Events::RescheduleAction") do
         kind :change
         attribute :id
-        connections :confirm
+        agents :confirm
         policy_rule :update?
         attribute :starts_on, :date
         validate { errors.add(:starts_on, "must be in the future") if starts_on && starts_on < Date.new(2026, 1, 1) }
@@ -132,17 +132,17 @@ RSpec.describe Saltbox::Actions::Base do
 
     it "run before confirmation, refused as validation_failed by field, with nothing written" do
       with_settings(enforce_confirm: true) do
-        expect { run({id: event.id, starts_on: "2020-01-01"}, as: as_mcp(manager), action: reschedule) }
-          .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors).to eq("starts_on" => ["must be in the future"]) }
-        expect { run({id: event.id, starts_on: "2027-01-01"}, as: as_mcp(manager), action: reschedule) }.to be_refused.with(:confirmation_required)
+        expect { run_action({id: event.id, starts_on: "2020-01-01"}, as: as_mcp(manager), action: reschedule) }
+          .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors).to eq("starts_on" => ["must be in the future"]) }
+        expect { run_action({id: event.id, starts_on: "2027-01-01"}, as: as_mcp(manager), action: reschedule) }.to be_refused.with(:confirmation_required)
       end
       expect(event.reload.starts_on).to be_nil
     end
 
     it "give a model's errors by field without its name, so a screen can add them back to its record once" do
       error = begin
-        run({id: event.id, title: ""}, as: as_screen(manager), action: Events::UpdateAction)
-      rescue Saltbox::Actions::Error::Invalid => invalid
+        run_action({id: event.id, title: ""}, as: as_screen(manager), action: Events::UpdateAction)
+      rescue Saltbox::Actions::Error::ValidationFailed => invalid
         invalid
       end
       expect(error.errors).to eq("title" => ["can't be blank"])
@@ -155,7 +155,7 @@ RSpec.describe Saltbox::Actions::Base do
     it "declares page and page_size as attributes, bounded by their validations" do
       listed = action("Events::ExportAction") do
         policy_rule :index?
-        paginated per_page: 2, max_per_page: 3
+        paginated page_size: 2, max_page_size: 3
 
         def perform
           authorize Event
@@ -165,8 +165,8 @@ RSpec.describe Saltbox::Actions::Base do
       end
       expect(listed.input_schema["properties"]).to include("page" => {"type" => "integer", "minimum" => 1, "default" => 1},
         "page_size" => {"type" => "integer", "minimum" => 1, "maximum" => 3, "default" => 2})
-      expect(run({}, as: as_screen(reader), action: listed).body).to eq("page" => 1, "page_size" => 2)
-      expect { run({page_size: 4}, as: as_screen(reader), action: listed) }.to have_field_errors(:page_size)
+      expect(run_action({}, as: as_screen(reader), action: listed).body).to eq("page" => 1, "page_size" => 2)
+      expect { run_action({page_size: 4}, as: as_screen(reader), action: listed) }.to have_field_errors(:page_size)
     end
   end
 

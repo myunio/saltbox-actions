@@ -11,8 +11,8 @@ module Saltbox
     # @example config/initializers/actions.rb
     #   Saltbox::Actions::PaperTrail.install!
     #   Saltbox::Actions.configure do |config|
-    #     config.around_run do |invocation, run|
-    #       Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent) { run.() }
+    #     config.around_perform do |invocation, run|
+    #       Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.() }
     #     end
     #   end
     module PaperTrail
@@ -34,7 +34,7 @@ module Saltbox
       # @yield the action's run
       # @return [Object] the block's value
       def self.request(invocation, **controller_info, &)
-        ::PaperTrail.request(whodunnit: invocation.caller.account.id, controller_info:, &)
+        ::PaperTrail.request(whodunnit: invocation.caller.user.id, controller_info:, &)
       end
     end
   end

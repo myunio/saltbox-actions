@@ -1,22 +1,22 @@
 module Api
   module V1
-    # The catalogue and run endpoint. A test token names the account; a real
+    # The catalog and run endpoint. A test token names the user; a real
     # app resolves an OAuth bearer here.
     class ActionsController < ApplicationController
       include Saltbox::Actions::Controller
 
-      ACCOUNTS = {
+      USERS = {
         "manager" => {id: 1, permissions: %w[events.view events.manage events.delete]},
         "reader" => {id: 2, permissions: %w[events.view]}
       }.freeze
 
       private
 
-      def resolve_caller
+      def current_caller
         token = request.authorization.to_s.delete_prefix("Bearer ")
-        account = ACCOUNTS[token] || raise(Saltbox::Actions::Error::Unauthorized)
+        user = USERS[token] || raise(Saltbox::Actions::Error::Unauthorized)
         scopes = (request.headers["X-Scopes"] || "api:read api:write").split
-        ApplicationAction::Caller.new(account: Account.new(**account), surface: "api", agent: "script", scopes:)
+        ApplicationAction::Caller.new(user: User.new(**user), surface: "api", agent_name: "script", scopes:)
       end
     end
   end

@@ -8,7 +8,7 @@ module TestUnit
       namespace "test_unit:action"
       source_root File.expand_path("templates", __dir__)
 
-      class_option :id, type: :boolean, default: true
+      class_option :member, type: :boolean, default: true
 
       def write_test
         template "action_test.rb.tt", test_path
@@ -28,7 +28,7 @@ module TestUnit
         action_class_name.constantize.takes_id?
       rescue NameError
         entry = Saltbox::Actions.config.base.verbs[file_name.split("_").first]
-        entry ? entry[:member] : options[:id]
+        entry ? entry[:member] : options[:member]
       end
     end
   end

@@ -16,14 +16,14 @@ module Saltbox
       # @return [Hash, nil] its input, once checked
       attr_reader :arguments
 
-      # @param name [String, Class] the action's name, or the action class
+      # @param action [String, Class] the action's name, or the action class (not an instance)
       # @param caller [Caller]
       # @param arguments [Hash]
       # @param expected_kind [Symbol, nil] the kind a generic run tool requires
       # @return [Result]
       # @raise [Error]
-      def self.call(name:, caller:, arguments: {}, expected_kind: nil)
-        action = name.is_a?(Class) ? name : Registry.fetch(name)
+      def self.call(action:, caller:, arguments: {}, expected_kind: nil)
+        action = Registry.fetch(action) unless action.is_a?(Class)
         new(action, caller).call(arguments, expected_kind:)
       end
 
@@ -34,6 +34,7 @@ module Saltbox
       # @return [Array(Object, Array<Array(String, String, String)>)] the
       #   block's value and each changed record's type, id and event, once
       # @raise [ArgumentError] when a collection is already running
+      # @api private
       def self.collect_changes
         raise ArgumentError, "Nested action collection is not supported" if Current.changes
         Current.set(changes: []) do
@@ -69,7 +70,7 @@ module Saltbox
       end
 
       # @return [String, nil] this invocation's id, from when it starts; kept
-      #   for a hook that runs after it, such as a deferred after_change
+      #   for a hook that runs after it, such as a deferred after_change_commit
       attr_reader :invocation_id
 
       # @param arguments [Hash]
@@ -86,11 +87,11 @@ module Saltbox
           Current.set(invocation: self, invocation_id: @invocation_id) do
             refuse!
             if expected_kind && @action.kind != expected_kind
-              raise Error::Invalid, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
+              raise Error::ValidationFailed, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
             end
             @arguments = @action.validate_arguments(arguments, @caller)
-            action = @action.new(actor: @caller, params: Params.new(@arguments, action: @action))
-            raise Error::Invalid.for(action.errors) unless action.valid?
+            action = @action.new(current_caller: @caller, params: Params.new(@arguments, action: @action))
+            raise Error::ValidationFailed.for(action.errors) unless action.valid?
             confirm!(@action)
             run(action)
           end
@@ -111,8 +112,9 @@ module Saltbox
       # @param action [Class]
       # @return [void]
       # @raise [Error::ConfirmationRequired, Error]
+      # @api private
       def confirm!(action)
-        return unless Actions.config.enforce_confirm && @caller.agent? && action.connections == :confirm
+        return unless Actions.config.enforce_confirm && @caller.agent? && action.agents == :confirm
         return if @confirmed.include?(action)
         approved = Actions.config.confirm.call(self, action)
         raise Error::ConfirmationRequired.new(details: {"action" => action.action_name}) unless approved == true
@@ -123,7 +125,7 @@ module Saltbox
 
       # Refuses in this order, so the first check that fails gives the error:
       # - the action's feature is off for the caller: not_found;
-      # - the action's `connections` declaration bars this caller: human_required;
+      # - the action's `agents` declaration bars this caller: human_required;
       # - the connection's access does not reach it: Configuration#on_access_refused's error;
       # - the token lacks the scope: insufficient_scope;
       # - the person's role is not allowed the action, or they lack a permission
@@ -135,13 +137,13 @@ module Saltbox
         raise Error::NotFound unless @action.enabled_for?(@caller)
         raise Error::HumanRequired unless @caller.agent_allowed?(@action)
         raise Actions.config.on_access_refused.call(@caller, @action) unless @caller.reaches?(@action)
-        raise Error::InsufficientScope unless @caller.allows?(@action.scope)
-        allowed = Actions.config.enforce_permissions ? @action.permitted_for?(@caller) : @action.permitted?(@caller.account)
+        raise Error::InsufficientScope unless @caller.includes_scope?(@action.required_scope)
+        allowed = Actions.config.enforce_permissions ? @action.permitted_for?(@caller) : @action.permitted?(@caller.user)
         raise Error::Forbidden unless allowed
       end
 
       def run(action)
-        Actions.config.around_run.call(self, -> do
+        Actions.config.around_perform.call(self, -> do
           next action.perform_now if @action.kind == :read
           # Its own savepoint inside a caller's transaction, so a failure
           # undoes the action's writes even when the caller rescues it.
@@ -152,7 +154,7 @@ module Saltbox
             Actions.config.on_changes.call(changes, self)
             ActiveSupport::Notifications.instrument("changes.saltbox_actions", action: @action, caller: @caller, changes:)
             # Once the caller's transactions commit too; never on rollback.
-            ActiveRecord.after_all_transactions_commit { Actions.config.after_change.call(self, result) }
+            ActiveRecord.after_all_transactions_commit { Actions.config.after_change_commit.call(self, result) }
             result
           end
         end)
@@ -173,8 +175,8 @@ module Saltbox
         case error
         when ActiveRecord::RecordNotFound then Error::NotFound.new
         when ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed
-          Error::Invalid.for(error.record.errors, fallback: error.message)
-        when ActiveRecord::DeleteRestrictionError then Error.new(error.message, code: :in_use, status: :unprocessable_content)
+          Error::ValidationFailed.for(error.record.errors, fallback: error.message)
+        when ActiveRecord::DeleteRestrictionError then Error::InUse.new(error.message)
         when *@action.authorization_errors then Error::Forbidden.new
         end
       end

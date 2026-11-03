@@ -61,7 +61,9 @@ end
 ```
 
 Agents read a JSON Schema of the input, made from these lines: `reason` is a
-string, and it is required.
+string, and it is required. `cancel` is a verb the app declares once, in its
+base class: `define_verb :cancel, kind: :change, on: :member` (see
+[Names and verbs](#names-and-verbs)).
 
 Call an action from a controller, a job or the console:
 
@@ -78,8 +80,8 @@ class McpEndpoint
     token = ApiToken.find_by_bearer(env["HTTP_AUTHORIZATION"])  # your own credential check
     return [401, {}, []] unless token
 
-    caller = ApplicationAction::Caller.new(account: token.user, surface: "mcp",
-      agent: token.client_name, scopes: token.scopes)
+    caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp",
+      agent_name: token.client_name, scopes: token.scopes)
     Saltbox::Actions::MCP.call(env, caller:, name: "events", allowed_hosts: ["events.example.com"])
   end
 end
@@ -94,7 +96,7 @@ RSpec.describe Events::UpdateAction do
     manager = User.create!(email: "ann@example.com", role: "manager")
     event = Event.create!(title: "AGM")
 
-    result = run({id: event.id, title: "Annual meeting"}, as: as_mcp(manager))
+    result = run_action({id: event.id, title: "Annual meeting"}, as: as_mcp(manager))
     expect(result.body.dig("event", "title")).to eq("Annual meeting")
   end
 end
@@ -291,7 +293,7 @@ class McpEndpoint
     token = AccessToken.find_by_bearer(env["HTTP_AUTHORIZATION"])
     return [401, {"www-authenticate" => "Bearer"}, []] unless token
 
-    caller = ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: token.name)
+    caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name)
     Saltbox::Actions::MCP.call(env, caller:, name: "tasks", allowed_hosts: ["tasks.example.com"])
   end
 end
@@ -315,9 +317,9 @@ AccessToken.issue(User.find_by!(email: "ada@example.com"), name: "Claude Code")
 This token can do anything Ada can, changes included: a caller built
 without `scopes:` holds every scope. For a read-only connection, store
 scopes on the token and pass them: `scopes: ["api:read"]`. A delete action
-is `:confirm`, which only tells the agent to ask first (see Connections).
-Until your app has a way for people to approve, keep deletes on screens
-with `connections :never`.
+is `:confirm`: the server refuses it to agents with `confirmation_required`
+until your app's `confirm` hook approves (see Agents). Until it has one,
+deletes run only on screens.
 
 **8. Check it.** With `bin/rails server` running, list the person's tasks
 as an agent would:
@@ -369,20 +371,20 @@ RSpec.describe Tasks::UpdateAction do
   let(:task) { ada.tasks.create!(title: "Write the agenda") }
 
   it "renames the person's own task" do
-    result = run({id: task.id, title: "Send the agenda"}, as: as_mcp(ada))
+    result = run_action({id: task.id, title: "Send the agenda"}, as: as_mcp(ada))
     expect(result.body["title"]).to eq("Send the agenda")
   end
 
   it "hides another person's task" do
-    expect { run({id: task.id, title: "Mine now"}, as: as_mcp(bob)) }.to be_not_found
+    expect { run_action({id: task.id, title: "Mine now"}, as: as_mcp(bob)) }.to be_not_found
   end
 
   it "refuses a read-only token" do
-    expect { run({id: task.id, done: true}, as: as_read_only(ada)) }.to be_refused.with(:insufficient_scope)
+    expect { run_action({id: task.id, done: true}, as: as_read_only(ada)) }.to be_refused.with(:insufficient_scope)
   end
 
   it "refuses a field the policy does not permit" do
-    expect { run({id: task.id, user_id: bob.id}, as: as_screen(ada)) }.to be_refused.with(:forbidden)
+    expect { run_action({id: task.id, user_id: bob.id}, as: as_screen(ada)) }.to be_refused.with(:forbidden)
   end
 end
 ```
@@ -398,7 +400,7 @@ RSpec.describe Tasks::ListAction do
     ada.tasks.create!(title: "Write the agenda")
     bob.tasks.create!(title: "Book the room")
 
-    expect(run({}, as: as_mcp(ada)).body.pluck("title")).to eq(["Write the agenda"])
+    expect(run_action({}, as: as_mcp(ada)).body.pluck("title")).to eq(["Write the agenda"])
   end
 end
 ```
@@ -495,8 +497,9 @@ end
 ```
 
 An attribute may not take the reader's name, and neither may a method every
-action has: an `Account` or a `Result` model gives a reader that would
-replace `account` or `result`. `rails actions:check` refuses both, so name
+action has: a `Result` or a `Params` model gives a reader that would
+replace `result` or `params`. A `User` model's reader is `user`, beside
+the person running the action, `current_user`, so the two never clash. `rails actions:check` refuses both, so name
 such an action's model another way (`model`), or declare `kind` and
 `attribute :id` and look the record up in `perform`.
 
@@ -554,11 +557,11 @@ required in the schema, since the default fills it after the schema check;
 its validations still run on the default.
 
 `paginated` declares the paging inputs a list takes, as attributes: `page`,
-from 1, and `page_size`, from 1 to `max_per_page`. Page the records with
+from 1, and `page_size`, from 1 to `max_page_size`. Page the records with
 your own paging library:
 
 ```ruby
-paginated per_page: 50, max_per_page: 200
+paginated page_size: 50, max_page_size: 200
 ```
 
 Before the schema check, form values are read the way Active Record reads
@@ -597,10 +600,10 @@ anything more, and whether agents may run it:
 | `export` | read | no | no | allowed | `export?` |
 | `create` | change | no | no | allowed | `create?` |
 | `update` | change | yes | yes | allowed | `update?` |
-| `cancel` | change | yes | no | allowed | `cancel?` |
-| `reinstate` | change | yes | no | allowed | `reinstate?` |
-| `publish` | change | yes | no | allowed | `publish?` |
 | `delete` | destructive | yes | yes | confirm | `destroy?` |
+
+Any other verb, such as `cancel` or `publish`, is your app's own: declare it
+once with `define_verb` (below).
 
 So `Events::ListAction` is named `list_events`, and
 `Events::ShowNotesAction` is named `show_event_notes`. The model is the
@@ -640,8 +643,8 @@ nested. If everyone `AttendeePolicy` allows may run it, declare
 `policy_namespace false` to ask that policy; otherwise add
 `Events::AttendeePolicy`. The name stays `list_events_attendees`.
 
-"Agents: confirm" tells the agent to ask the person first. The server
-checks it only when `enforce_confirm` is on (see Connections).
+"Agents: confirm" tells the agent to ask the person first, and the server
+refuses it until your app approves (see Agents).
 
 The **kind** decides what a token needs. A read needs the `api:read` scope.
 A change or a destructive action needs `api:write`.
@@ -654,13 +657,14 @@ inflections:
 class ApplicationAction < Saltbox::Actions::Base
   include Saltbox::Actions::Authorization::Pundit
 
+  define_verb :cancel, :publish, kind: :change, on: :member
   define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
-  define_verb :void, kind: :destructive, on: :member, connections: :never
+  define_verb :void, kind: :destructive, on: :member, agents: :never
 end
 ```
 
 `on: :member` is the routes' word for a verb that works on one record.
-`connections:` is the verb's own rule for agents; left out, it follows the
+`agents:` is the verb's own rule for agents; left out, it follows the
 kind.
 
 A verb used by one action can declare its kind there instead, and
@@ -686,8 +690,8 @@ end
 ### Callers
 
 A **caller** says who runs an action and from where. It holds the person
-(`account`), the **surface** they come from, the agent's name, and the token's
-scopes. The surfaces are:
+(`user`), the **surface** they come from, the agent's name (`agent_name`), and
+the token's scopes. The surfaces are:
 
 - `screen`: a person on your app's own screens;
 - `webmcp`: a browser assistant on the person's page;
@@ -700,8 +704,9 @@ Build a caller from a real credential, never from anything the client sends:
 
 ```ruby
 ApplicationAction::Caller.screen(current_user)
+ApplicationAction::Caller.webmcp(current_user)      # when the page's tool wrapper marks the call
 ApplicationAction::Caller.assistant(current_user)
-ApplicationAction::Caller.new(account: token.user, surface: "api", agent: "Billing script", scopes: token.scopes)
+ApplicationAction::Caller.new(user: token.user, surface: "api", agent_name: "Billing script", scopes: token.scopes)
 ```
 
 ### Jobs, rake tasks and the console
@@ -711,14 +716,14 @@ rake task, a fix in the console. Run it as the app itself:
 
 ```ruby
 Events::UpdateAction.perform_now(caller: ApplicationAction::Caller.system, id: 1, title: "AGM")
-ApplicationAction::Caller.system(agent: "Nightly cleanup")   # named in audit and change notes
+ApplicationAction::Caller.system(agent_name: "Nightly cleanup")   # named in audit and change notes
 ```
 
-The system caller is not an agent. An action's `connections` never bar it,
+The system caller is not an agent. An action's `agents` never bar it,
 even `:never`; it holds every scope, and it is never asked to confirm.
 
-It is not a way around authorization. Its account is
-`Saltbox::Actions::SystemAccount`, and your policy sees it like a person, so
+It is not a way around authorization. Its user is
+`Saltbox::Actions::SystemUser`, and your policy sees it like a person, so
 your policy decides what the app itself may do:
 
 ```ruby
@@ -728,12 +733,12 @@ class EventPolicy < ApplicationPolicy
   def destroy? = !system? && user.manager?
 
   class Scope < ApplicationPolicy::Scope
-    def resolve = user.is_a?(Saltbox::Actions::SystemAccount) ? scope.all : scope.where(team: user.team)
+    def resolve = user.is_a?(Saltbox::Actions::SystemUser) ? scope.all : scope.where(team: user.team)
   end
 
   private
 
-  def system? = user.is_a?(Saltbox::Actions::SystemAccount)
+  def system? = user.is_a?(Saltbox::Actions::SystemUser)
 end
 ```
 
@@ -741,8 +746,8 @@ A policy written only for people does not let it through. In the
 walkthrough above, `TaskPolicy` lets it list tasks but finds none, and
 refuses it any one task as `not_found`. A rule that calls a person's
 method on it, such as `user.manager?`, raises `NoMethodError`. So does any
-hook of yours that reads `caller.account`, such as `permissions_held`:
-answer for `caller.system?` there. `SystemAccount#id` is `nil`, so an audit
+hook of yours that reads `caller.user`, such as `permissions_held`:
+answer for `caller.system?` there. `SystemUser#id` is `nil`, so an audit
 trail records no person.
 
 If your app has a user that stands for the app, pass it instead:
@@ -750,7 +755,7 @@ If your app has a user that stands for the app, pass it instead:
 The policy then sees that user.
 
 The JSON API, MCP and the assistant never run a system caller. If
-`resolve_caller` or your MCP endpoint returns one, the request fails with an
+`current_caller` or your MCP endpoint returns one, the request fails with an
 `ArgumentError` before any action runs. Build their callers from the
 request's credential.
 
@@ -763,7 +768,7 @@ In a multi-tenant app, each call runs inside one tenant. Set it, and your
 runs through it: screens, the API, MCP, jobs and the console.
 
 Here each token belongs to one organization, and the MCP endpoint and
-`resolve_caller` pass the token as the caller's `connection`. A screen's
+`current_caller` pass the token as the caller's `connection`. A screen's
 tenant is already set by the request, and a job's by acts_as_tenant, which
 keeps the tenant a job was enqueued in:
 
@@ -778,7 +783,7 @@ Saltbox::Actions.configure do |config|
   config.around_invocation do |caller, run|
     organization = caller.connection&.organization || ActsAsTenant.current_tenant
     ActsAsTenant.with_tenant(organization) do
-      Current.set(user: (caller.account unless caller.system?)) { run.call(caller) }
+      Current.set(user: (caller.user unless caller.system?)) { run.call(caller) }
     end
   end
 end
@@ -786,7 +791,7 @@ end
 
 ```ruby
 # app/endpoints/mcp_endpoint.rb, in call
-caller = ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: token.name, connection: token)
+caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name, connection: token)
 ```
 
 A system caller has no token. Set the tenant around it:
@@ -802,32 +807,32 @@ end
 Without acts_as_tenant, keep the tenant in `Current` the same way. Rails
 resets `Current` before a job runs, so take the tenant from what the caller
 carries, which travels with the job: its token (`caller.connection`), or
-the person (`caller.account`) when each person belongs to one organization.
+the person (`caller.user`) when each person belongs to one organization.
 
 A back-office action that works across tenants turns the tenant off for
-its run. `around_invocation` sees only the caller, so do it in `around_run`,
+its run. `around_invocation` sees only the caller, so do it in `around_perform`,
 which sees the action:
 
 ```ruby
-config.around_run do |invocation, run|
+config.around_perform do |invocation, run|
   next run.call unless invocation.action.outer_namespace == ["admin"]
   ActsAsTenant.without_tenant { run.call }
 end
 ```
 
-With acts_as_tenant's `require_tenant`, set `schema_principal` (see
+With acts_as_tenant's `require_tenant`, set `schema_user` (see
 Authorization) before you generate a create or update action. The generator
 builds a record to read its fields, which needs a tenant. In specs, create
 records inside `ActsAsTenant.with_tenant`, or set the tenant in a `before`.
 
-### Connections
+### Agents
 
-An action's `connections` rule says whether anything other than the
+An action's `agents` rule says whether anything other than the
 person's own click may run it:
 
 - `:allowed`: agents, scripts and assistants may run it.
-- `:confirm`: agents are told to ask the person first. The chat assistant
-  never runs it.
+- `:confirm`: agents are told to ask the person first, and the server
+  refuses them until your app approves. The chat assistant never runs it.
 - `:never`: only the person, on a screen, or the app itself (`Caller.system`).
 
 The verb gives the rule: `:confirm` for a destructive action, `:allowed` for
@@ -836,43 +841,47 @@ an action departs from that:
 
 ```ruby
 class Events::CancelAction < ApplicationAction
-  connections :confirm
+  agents :confirm
 end
 ```
 
 A destructive action is never `:allowed`. A browser assistant (`webmcp`)
-never runs a destructive action. The committed catalogue lists every
+never runs a destructive action. The committed catalog lists every
 action's rule, so a change to one shows up in review.
 
-By default, nothing on the server checks that an agent asked before a
-`:confirm` action. The agent is only told to. To make the server check, turn
-on `enforce_confirm` and say how a person approves:
+`enforce_confirm` is on by default: the server refuses a `:confirm` action
+to every agent until your app approves it. That includes a script on the API:
+every surface but the person's own screen and the app itself counts. With no
+`confirm` hook, every such call gets `confirmation_required`. Say how a person
+approves:
 
 ```ruby
 Saltbox::Actions.configure do |config|
-  config.enforce_confirm = true
   config.confirm do |invocation, action|
-    Approval.granted?(invocation.caller.account, action.action_name, invocation.arguments)
+    Approval.granted?(invocation.caller.user, action.action_name, invocation.arguments)
   end
 end
 ```
 
-With it on, an agent on the API, MCP or a browser page gets
-`confirmation_required` for a `:confirm` action, until the hook returns
-`true`. The hook sees the caller, the action and the checked arguments, so it
-can ask the person in your app. It can also raise an error of its own, such as
+An agent on the API, MCP or a browser page gets `confirmation_required` for a
+`:confirm` action until the hook returns `true`. The hook sees the caller, the
+action and the checked arguments, so it can ask the person in your app. It can
+also raise an error of its own, such as
 `Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
-A person on a screen is never asked. Without a hook, every such call is
-refused.
+A person on a screen and the app itself (`Caller.system`) are never asked.
+
+To let agents run `:confirm` actions with nothing checked, on purpose, set
+`config.enforce_confirm = false`. Then the agent is only told to ask first;
+nothing on the server checks that it did.
 
 Some actions can reach what a stricter action guards: a create that can also
 publish, say. Check the stricter rule inside `perform`:
 
 ```ruby
-actor.confirm!(Events::PublishAction) if status == "published"
+current_caller.confirm!(Events::PublishAction) if status == "published"
 ```
 
-`confirm!` refuses with `human_required` when that action's `connections`
+`confirm!` refuses with `human_required` when that action's `agents`
 bar the caller, and with `confirmation_required` when it is `:confirm` and
 not approved. Call it before the action writes anything: a refusal rolls
 back the change, including anything the hook wrote.
@@ -883,16 +892,17 @@ Every surface runs an action through `Saltbox::Actions::Invocation`. It
 refuses in the same order every time, so the same call gets the same answer:
 
 1. The action's feature flag is off: `not_found`.
-2. Its `connections` rule bars this caller: `human_required`.
+2. Its `agents` rule bars this caller: `human_required`.
 3. The caller's access does not reach the action.
 4. The token lacks the scope: `insufficient_scope`.
 5. The person's role or permissions do not allow it: `forbidden`.
 
 Then the input is checked against the action's JSON Schema, then against
 its validations. A bad field gives `validation_failed`, with errors by field
-name. With `enforce_confirm` on, a `:confirm` action the app has not
-approved gives `confirmation_required` before it runs. Last, a record the
-person cannot see gives `not_found`, so its existence never shows.
+name. A `:confirm` action the app has not approved gives an agent
+`confirmation_required` before it runs (unless `enforce_confirm` is off).
+Last, a record the person cannot see gives `not_found`, so its existence
+never shows.
 
 A change runs in its own database transaction, on its model's database. If
 it fails, its writes on that database are undone. Writes to another
@@ -911,6 +921,19 @@ To refuse in your own words, raise an error from `perform`:
 raise ApplicationAction::Error.new("Published events are locked", code: :event_locked, status: :unprocessable_content)
 ```
 
+Each refusal is a class under `ApplicationAction::Error`, whose code is its
+name in snake case: `Unauthorized`, `Forbidden`, `HumanRequired`,
+`ConfirmationRequired`, `InsufficientScope`, `NotFound`, `UnknownAction`,
+`ValidationFailed` and `InUse` (a delete that other records still depend on,
+from Active Record's `DeleteRestrictionError`). Three build a refusal for you:
+
+- `Error::ValidationFailed.for(record.errors, fallback: "Could not save")`:
+  the full messages, and the errors by field;
+- `Error::ValidationFailed.from_result(result)`: a failed result object's
+  `errors`, joined as the message, with no field errors;
+- `Error::Forbidden.for_fields(%w[notes])`: fields the person sent but may not
+  change.
+
 ### Limit what a connection reaches
 
 A token's scopes are broad: read, or read and write, across every action. To
@@ -928,11 +951,11 @@ Build the caller with it wherever you build one from a token. Here
 `token.action_names` stands for your own record of what the person allowed:
 
 ```ruby
-ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: "Claude",
+ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: "Claude",
   scopes: token.scopes, access: ConnectionAccess.new(token.action_names))
 ```
 
-The caller then sees only those actions. The catalogue, `find_action` and the
+The caller then sees only those actions. The catalog, `find_action` and the
 MCP tools leave the rest out, and a call to one of them is refused with
 `insufficient_scope`. The default message talks about read-only tokens, so
 set `on_access_refused` to say what happened in your words. It is also the
@@ -958,20 +981,20 @@ give them.
 | `validates :reason, presence: true` | A check on an attribute. The ones that always run shape the schema. |
 | `accepts :title, :starts_on` | The model fields it takes, when no authorization adapter supplies them. |
 | `paginated` | The paging inputs `page` and `page_size`, as attributes. |
-| `connections :confirm` | Who besides the person may run it, when the verb's rule is not right. |
+| `agents :confirm` | Who besides the person may run it, when the verb's rule is not right. |
 | `kind :read` | The kind, for a verb outside the table. `:read`, `:change` or `:destructive`. |
 | `policy_rule :archive?` | The policy rule, when it is not the verb's own. |
 | `idempotent` | Running it twice with the same input changes nothing more, when the verb does not say so. `idempotent false` says it does. |
-| `featured` | Lists it as an MCP tool of its own (see MCP). The catalogue marks it `"featured": true`. |
+| `featured` | Lists it as an MCP tool of its own (see MCP). The catalog marks it `"featured": true`. |
 | `feature "key"` | A feature flag. While it is off, callers get `not_found`. |
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
-| `returns(schema)` | The JSON Schema of the body it renders. |
+| `output_schema(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
 | `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_reports_customers` and asks `Admin::Reports::CustomerPolicy`. |
 | `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy. It holds for subclasses in its modules and below them (see Authorization). |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too, and its `model` and `policy_rule` if it has a model: a declared name gives neither. |
 | `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
-| `cli "events count"` | The command for a command-line client you build on the catalogue. |
+| `cli "events count"` | The command for a command-line client you build on the catalog. |
 
 In the base class, `define_verb` adds verbs (see Names and verbs) and
 `summary Event, ...` sets a model's summary for every action.
@@ -1008,7 +1031,7 @@ with the action's errors by field:
 def update
   Tasks::UpdateAction.perform_now(caller: ApplicationAction::Caller.screen(current_user), id: @task.id, **task_params)
   redirect_to tasks_path, notice: "Task updated.", status: :see_other
-rescue Saltbox::Actions::Error::Invalid => error
+rescue Saltbox::Actions::Error::ValidationFailed => error
   @task.assign_attributes(task_params)
   error.errors.each { |field, messages| messages.each { @task.errors.add(field, it) } }
   render :edit, status: :unprocessable_content
@@ -1034,7 +1057,7 @@ Form values work as they are (see Input). Other refusals, such as
 `not_found` or `forbidden`, are best answered once, with `rescue_from
 Saltbox::Actions::Error` in `ApplicationController`.
 
-A subclass of an action keeps its parent's `connections`, `policy_rule`,
+A subclass of an action keeps its parent's `agents`, `policy_rule`,
 `permission`, `feature`, `featured`, `idempotent`, `attribute :id` and
 `accepts`, as `class_attribute` does, until it declares its own. Its name,
 title, description and `cli` are its own.
@@ -1090,7 +1113,7 @@ render json: ProjectResource.new(@projects), collection: @projects
 ```
 
 A model with no summary sends the view to everyone. An action can declare its
-own `summary :id, :title` in place of its model's. The catalogue lists the
+own `summary :id, :title` in place of its model's. The catalog lists the
 summary's fields as `summary`, which a command-line client prints as a table's
 columns, on every action of the model. For a list, its `output_schema`
 describes the summaries agents get, and `find_action` tells agents which
@@ -1201,9 +1224,9 @@ class Api::V1::ActionsController < ActionController::API
 
   private
 
-  def resolve_caller
+  def current_caller
     token = ApiToken.find_by_bearer(request.authorization) || raise(Saltbox::Actions::Error::Unauthorized)
-    ApplicationAction::Caller.new(account: token.user, surface: "api", agent: token.name, scopes: token.scopes)
+    ApplicationAction::Caller.new(user: token.user, surface: "api", agent_name: token.name, scopes: token.scopes)
   end
 end
 ```
@@ -1217,7 +1240,10 @@ The walkthrough's `AccessToken` stores none: leave `scopes:` out there, and
 the caller holds every scope.
 
 `GET /api/v1/actions` lists the actions this caller may run, as
-`{"data": [...], "meta": {...}}`, whatever the `result_format`.
+`{"data": [...], "meta": {"catalog_version": "...", "api_version": "v1", "total": 12}}`,
+whatever the `result_format`. `catalog_version` is a digest of every action's
+definition, leaving out what depends on the caller, so it changes when an
+action does; the response's ETag is of this caller's list.
 `POST /api/v1/actions/update_event` runs one, with a body of
 `{"arguments": {"id": "42", "title": "AGM"}}`.
 
@@ -1237,8 +1263,13 @@ Agents see a short list of tools, not one per action:
 - `run_read_action`, `run_change_action` and `run_destructive_action`, to run
   what `find_action` found.
 
+Each match `find_action` gives with a query carries the action's `input_schema`
+(the JSON Schema of its arguments, with the fields this caller may send) and,
+for a list with a summary, an `output_description` of what comes back. The run
+tools take the values as `arguments`.
+
 `find_action` marks each action `confirm_first` when it is declared
-`connections :confirm`. The change tool tells the agent to ask before those
+`agents :confirm`. The change tool tells the agent to ask before those
 and to go ahead with the rest, saying what it is changing. The remove tool
 always asks first.
 
@@ -1295,7 +1326,7 @@ What it does not do:
 - stop a model that follows the planted text anyway. How much the mark
   helps depends on the model, and it is not measured here. The control
   that holds is the server's:
-  `connections :confirm` with `enforce_confirm` (see Connections), so an
+  `agents :confirm`, refused until the app approves (see Agents), so an
   agent cannot run a risky action without the person's yes;
 - mark text the agent reads anywhere else, such as a page or a file;
 - cover your own `featured` tools' descriptions. Those are your words, not
@@ -1378,20 +1409,20 @@ the error to raise:
 
 ```ruby
 config.on_forbidden_fields do |caller, action, fields|
-  Saltbox::Actions::Error::Forbidden.new("Your role, #{caller.account.role_name}, can't change #{fields.to_sentence}.",
+  Saltbox::Actions::Error::Forbidden.new("Your role, #{caller.user.role_name}, can't change #{fields.to_sentence}.",
     errors: fields.index_with { ["your role can't change this"] })
 end
 ```
 
-Some places have no caller: the committed catalogue, `rails actions:check`
+Some places have no caller: the committed catalog, `rails actions:check`
 and the registry spec, the generator's field list, and
 `be_invalid_against_schema` or `assert_invalid_against_schema` without `as:`.
-They build the schema for `config.schema_principal`, a person who may set
+They build the schema for `config.schema_user`, a person who may set
 every field. Without it the policy is asked with no person. If your policy
 needs a person or a tenant, set it:
 
 ```ruby
-config.schema_principal { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
+config.schema_user { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
 ```
 
 With neither, every action is allowed: `authorize` and `policy_scope` pass
@@ -1433,9 +1464,9 @@ class ApplicationAction < Saltbox::Actions::Base
 
   # The app itself (Caller.system) sees every record.
   def own(records)
-    return records if actor.system?
-    return records.where(id: account.id) if records.klass == User
-    records.klass.column_names.include?("user_id") ? records.where(user: account) : records
+    return records if current_caller.system?
+    return records.where(id: current_user.id) if records.klass == User
+    records.klass.column_names.include?("user_id") ? records.where(user: current_user) : records
   end
 end
 ```
@@ -1450,15 +1481,15 @@ rules need; the rest keep the allow-everything defaults.
 
 | Method | Where | Answers |
 |---|---|---|
-| `authorize(record, rule = nil)` | action | Raises unless the person may; `rule` defaults to the action's (`self.class.policy_query`, such as `:update?`). Returns the record. |
+| `authorize(record, rule = nil)` | action | Raises unless the person may; `rule` defaults to the action's (`self.class.policy_rule`, such as `:update?`). Returns the record. |
 | `policy_scope(scope)` | action | The records the person may see. |
 | `skip_authorization`, `skip_policy_scope` | action | Marks the check done, for an action that needs none. |
 | `verify_authorized`, `verify_policy_scoped` | action | Raise when `perform` skipped the check. Run after `perform`. |
 | `permitted_attribute_names(record)` | action | The fields the person may set. `record` is a record, or the model class for a create (`permitted_attributes(Event)`). |
 | `supplies_fields?` | class | Whether the adapter says which fields a person may set. When true, a create or update takes the fields below, and `accepts` is refused. Default: false. |
 | `scoped_records(model)` | action | The records the person may pick for a `belongs_to` field. |
-| `permitted?(account)` | class | Whether the person may run the action at all, before any record loads. Decides the actions list too. |
-| `permitted_attribute_names_for(account, record)` | class | The fields a create or update takes, for the input schema. The account is the caller's; where there is no caller it is `schema_principal`'s, or `nil`, and `record` a record or a model class. |
+| `permitted?(user)` | class | Whether the person may run the action at all, before any record loads. Decides the actions list too. |
+| `permitted_attribute_names_for(user, record)` | class | The fields a create or update takes, for the input schema. The user is the caller's; where there is no caller it is `schema_user`'s, or `nil`, and `record` a record or a model class. |
 | `authorization_errors` | class | Your refusal's exception classes. They are answered as `forbidden`. |
 | `authorization_problems` | class | What `rails actions:check` should report, such as a missing rule. Default: nothing. |
 
@@ -1482,21 +1513,21 @@ module ApplicationAction::ModelAuthorization
 
   def authorize(record, rule = nil)
     @authorized = true
-    raise NotAllowed unless account.can?(rule || self.class.policy_query, record)
+    raise NotAllowed unless current_user.can?(rule || self.class.policy_rule, record)
     record
   end
 
   def policy_scope(scope)
     @scoped = true
-    scope.visible_to(account)
+    scope.visible_to(current_user)
   end
 
   def skip_authorization = @authorized = true
   def skip_policy_scope = @scoped = true
   def verify_authorized = @authorized || raise(Saltbox::Actions::AuthorizationNotPerformedError, "#{self.class.name} never called authorize")
   def verify_policy_scoped = @scoped || raise(Saltbox::Actions::PolicyScopingNotPerformedError, "#{self.class.name} never called policy_scope")
-  def permitted_attribute_names(record) = self.class.permitted_attribute_names_for(account, record)
-  def scoped_records(model) = model.visible_to(account)
+  def permitted_attribute_names(record) = self.class.permitted_attribute_names_for(current_user, record)
+  def scoped_records(model) = model.visible_to(current_user)
 end
 
 # app/actions/application_action.rb
@@ -1505,8 +1536,8 @@ class ApplicationAction < Saltbox::Actions::Base
 end
 ```
 
-Answer for the system caller in `policy_scope` (`actor.system?`). Under a
-scope written only for people, `scope.where(user: account)` finds nothing
+Answer for the system caller in `policy_scope` (`current_caller.system?`). Under a
+scope written only for people, `scope.where(user: current_user)` finds nothing
 for it, so a nightly job lists nothing and finds no record.
 
 Files under `app/actions/application_action/` hold shared code, not actions.
@@ -1536,7 +1567,7 @@ ids.each { Saltbox::Actions::Invocation.note("Event", it, "update") }
 
 `on_changes` runs before commit. If the caller's own transaction later
 rolls back, the changes it heard of are undone; do anything outside the
-database in `after_change`.
+database in `after_change_commit`.
 
 Using another audit gem, such as Audited or Logidze? Skip the concern and
 note each entry it writes yourself:
@@ -1560,8 +1591,8 @@ and each version can record the agent and surface:
 Rails.application.config.after_initialize { Saltbox::Actions::PaperTrail.install! }
 
 Saltbox::Actions.configure do |config|
-  config.around_run do |invocation, run|
-    Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent) { run.call }
+  config.around_perform do |invocation, run|
+    Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.call }
   end
 end
 ```
@@ -1579,14 +1610,14 @@ require "saltbox/actions/rspec"
 ```
 
 Specs under `spec/actions/` get `type: :action`, and `described_class` is the
-action. `run(arguments, as: caller)` runs it the way every surface does.
+action. `run_action(arguments, as: caller)` runs it the way every surface does.
 
-`run` returns the action's `Result`. Its `body` is what the view rendered.
+`run_action` returns the action's `Result`. Its `body` is what the view rendered.
 Its `as_json` is what the API and MCP send: the same body, unless you set
 `config.result_format = :envelope`, which wraps it with the action's meta:
 
 ```ruby
-result = run({id: event.id}, as: as_mcp(manager))
+result = run_action({id: event.id}, as: as_mcp(manager))
 result.body     # => {"event" => {"id" => 7, "title" => "AGM"}}
 result.as_json  # => the same; with :envelope, {"data" => {"event" => {...}}, "meta" => {"page" => 2}}
 ```
@@ -1600,7 +1631,7 @@ a factory for each surface:
 Saltbox::Actions::RSpec.configure do |config|
   config.caller_for(:mcp) do |user, scopes:|
     token = ApiToken.create!(user:, scopes:)
-    ApplicationAction::Caller.new(account: user, surface: "mcp", agent: "Test agent", scopes: token.scopes)
+    ApplicationAction::Caller.new(user:, surface: "mcp", agent_name: "Test agent", scopes: token.scopes)
   end
 end
 ```
@@ -1614,7 +1645,7 @@ block:
 - `change_audit_trail.on(event).by(user).with(agent: "Test agent")` (needs PaperTrail).
 
 ```ruby
-expect { run({id: event.id, capacity: "lots"}, as: as_screen(manager)) }.to have_field_errors(:capacity)
+expect { run_action({id: event.id, capacity: "lots"}, as: as_screen(manager)) }.to have_field_errors(:capacity)
 ```
 
 Some check a value and run nothing:
@@ -1622,32 +1653,32 @@ Some check a value and run nothing:
 - `be_invalid_against_schema` takes raw input and checks it against the
   input schema, as a client would send it;
 - `match_output_schema` takes a result, or a body, and checks it against
-  the schema from `returns`.
+  the schema from `output_schema`.
 
 ```ruby
 expect({id: event.id, capacity: "lots"}).to be_invalid_against_schema
-expect(run({id: event.id}, as: as_mcp(manager))).to match_output_schema
+expect(run_action({id: event.id}, as: as_mcp(manager))).to match_output_schema
 ```
 
 And two take the action and ask about a caller:
 
 ```ruby
-expect(described_class).to be_runnable_by(as_mcp(manager))
+expect(described_class).to be_runnable_for(as_mcp(manager))
 expect(described_class).not_to be_listed_for(as_read_only(manager))
 ```
 
 **Shared examples** are optional. The generated spec uses them, and they
 suit an app where roles decide who may run an action. In an app where
 everyone may, and only ownership differs, write plain examples instead, as
-in the walkthrough's step 11. In the shared examples, `unpermitted_account`
+in the walkthrough's step 11. In the shared examples, `unpermitted_user`
 is optional too. Leave it out when everyone who can sign in may run the
 action.
 
 ```ruby
 RSpec.describe Events::UpdateAction do
-  let(:permitted_account) { User.create!(email: "ann@example.com", role: "manager") }
-  let(:unpermitted_account) { User.create!(email: "bo@example.com", role: "member") }
-  let(:event) { Event.create!(title: "AGM", team: permitted_account.team) }
+  let(:permitted_user) { User.create!(email: "ann@example.com", role: "manager") }
+  let(:unpermitted_user) { User.create!(email: "bo@example.com", role: "member") }
+  let(:event) { Event.create!(title: "AGM", team: permitted_user.team) }
   let(:arguments) { {id: event.id, title: "AGM"} }
 
   it_behaves_like "refuses callers the action does not allow"
@@ -1656,7 +1687,7 @@ RSpec.describe Events::UpdateAction do
   end
 
   it "refuses a bad capacity" do
-    expect { run({id: event.id, capacity: "lots"}, as: as_screen(permitted_account)) }
+    expect { run_action({id: event.id, capacity: "lots"}, as: as_screen(permitted_user)) }
       .to have_field_errors(:capacity)
   end
 end
@@ -1682,7 +1713,7 @@ end
 There is also `"renders its declared output schema"`, and
 `"a valid action registry"`. Put the registry one in a single spec. It runs
 every check `rails actions:check` runs, and checks that every action has a
-spec file and a valid input schema, and that the committed catalogue is up
+spec file and a valid input schema, and that the committed catalog is up
 to date.
 
 ## Testing with Minitest
@@ -1693,31 +1724,32 @@ Load the helper in `test/test_helper.rb`:
 require "saltbox/actions/test_helper"
 ```
 
-Include it in each action test and set `self.action_class`. Use your app's
+Include it in each action test and name the action with `tests`, as
+`ActionMailer::TestCase` names its mailer. Use your app's
 own fixtures or records for the person and event:
 
 ```ruby
 class Events::UpdateActionTest < ActiveSupport::TestCase
   include Saltbox::Actions::TestHelper
 
-  self.action_class = Events::UpdateAction
+  tests Events::UpdateAction
 
   test "renames the event" do
     event = events(:agm)
-    result = run({id: event.id.to_s, title: "Annual meeting"},
+    result = run_action({id: event.id.to_s, title: "Annual meeting"},
       as: as_screen(users(:manager)))
     assert_equal "Annual meeting", result.body.dig("event", "title")
   end
 
   test "refuses a read-only token" do
     assert_refused :insufficient_scope do
-      run({id: events(:agm).id.to_s}, as: as_read_only(users(:manager)))
+      run_action({id: events(:agm).id.to_s}, as: as_read_only(users(:manager)))
     end
   end
 
   test "names a field the person may not change" do
     assert_field_errors :notes do
-      run({id: events(:agm).id.to_s, notes: "private"},
+      run_action({id: events(:agm).id.to_s, notes: "private"},
         as: as_screen(users(:manager)))
     end
   end
@@ -1727,22 +1759,22 @@ end
 All seven caller helpers work as they do in RSpec. Set your own factories
 with `Saltbox::Actions::TestHelper.configure` and `config.caller_for`.
 Factories run in the test, so they can use fixtures and test helpers.
-Pass `action:` to `run` to call a different class or action name.
-A call to `run` with no caller still runs the Minitest test itself.
+Pass `action:` to `run_action` to call a different class or action name.
+`run_action` leaves Minitest's own `run` alone.
 
 The helper also has these checks:
 
 - `assert_invalid_against_schema(arguments)` checks raw input.
-- `assert_matches_output_schema(result)` checks the schema from `returns`.
-- `assert_runnable_by(caller)` and `assert_listed_for(caller)` check access.
-- `assert_announces_changes(event => :update) { run(...) }` checks change events.
+- `assert_matches_output_schema(result)` checks the schema from `output_schema`.
+- `assert_runnable_for(caller)` and `assert_listed_for(caller)` check access.
+- `assert_announces_changes(event => :update) { run_action(...) }` checks change events.
   It needs change tracking (`include Saltbox::Actions::ChangeTracking` in
   `ApplicationRecord`) or PaperTrail.
-- `assert_changes_audit_trail(on: event, by: user) { run(...) }` needs PaperTrail.
-- `assert_matches_catalogue` checks the committed catalogue.
+- `assert_changes_audit_trail(on: event, by: user) { run_action(...) }` needs PaperTrail.
+- `assert_matches_catalog` checks the committed catalog.
 - `assert_valid_action_registry` runs every check `rails actions:check` runs,
   and checks that every action has a test under `test/actions/` and a valid
-  input schema, and matches the catalogue.
+  input schema, and matches the catalog.
   Pass `test_root:` if your tests live elsewhere.
 
 Put the registry check in one test:
@@ -1764,8 +1796,9 @@ details. A missing refusal, wrong code or missing field fails the test.
 
 ```sh
 bin/rails g action Events::Update                  # a verb from the table
-bin/rails g action Events::Archive --kind change   # any other verb
-bin/rails actions:catalogue                        # rewrite config/actions.json
+bin/rails g action Events::Archive --kind change   # any other verb, on one record
+bin/rails g action Events::Import --kind change --no-member   # one that works on no one record
+bin/rails actions:dump                             # rewrite config/actions.json
 bin/rails actions:check                            # check every action (in CI)
 ```
 
@@ -1777,12 +1810,14 @@ A singular name, `Event::Update`, writes the same files.
 
 First it checks the action the way `rails actions:check` will: the model, the
 policy and its rule (when the base class has an adapter), and the fields. On
-a problem it writes nothing, prints the fix and exits 1. If the catalogue
+a problem it writes nothing, prints the fix and exits 1. If the catalog
 step fails after that, it puts back every file it wrote or changed.
 
 A verb from the table needs no declarations: the verb gives its kind, its
 record and its rule for agents. Any other verb gets `kind`, `attribute :id`
-when it works on one record, and its `policy_rule`. With no adapter that
+when it works on one record (`--member`, the default; `--no-member` for a
+verb that works on none), and its `policy_rule`. `--member` never changes a
+verb from the table. With no adapter that
 supplies fields, a create or update lists the model's columns with
 `accepts`; remove the ones people may not set. A `belongs_to`, such as a
 note's `user`, is left commented out: a caller could point it at any record
@@ -1794,7 +1829,7 @@ To change the templates, copy them to `lib/templates/action/action.rb.tt`
 and `lib/templates/test_unit/action/action_test.rb.tt` (Minitest) or
 `lib/templates/rspec/action/action_spec.rb.tt` (RSpec).
 
-`config/actions.json` is the **catalogue**: every action as callers see it.
+`config/actions.json` is the **catalog**: every action as callers see it.
 Commit it, so a change to any action's name or input shows up in review.
 Writing it needs the database, like `actions:check`.
 
@@ -1811,16 +1846,16 @@ Saltbox::Actions.configure do |config|
   config.instructions = "Events keeps a team's events. Use find_action for anything not listed."
 
   # Run each call inside your own context: tenant, time zone, a fresh user (see The tenant).
-  config.around_invocation { |caller, run| Current.set(user: caller.account) { run.call(caller) } }
+  config.around_invocation { |caller, run| Current.set(user: caller.user) { run.call(caller) } }
 
   # Hear about every changed record, inside the transaction (see Change tracking).
   config.on_changes { |changes, invocation| EventLog.record(changes, invocation.caller) }
 
   # Run something once the change has committed. Never runs on rollback.
-  config.after_change { |invocation, result| }
+  config.after_change_commit { |invocation, result| }
 
-  config.feature_enabled { |key, caller| Flipper.enabled?(key, caller.account) }
-  config.permissions_held { |caller| caller.account.permission_keys }
+  config.feature_enabled { |key, caller| Flipper.enabled?(key, caller.user) }
+  config.permissions_held { |caller| caller.user.permission_keys }
 
   # Turn your own errors into ones callers see.
   config.map_error("Events::Locked") { |error| Saltbox::Actions::Error.new(error.message, code: :locked) }
@@ -1831,15 +1866,17 @@ end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
-`action_paths` (the folders actions load from), `catalogue_path`, `enforce_confirm`
-with `confirm` (see Connections), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
+`action_paths` (the folders actions load from), `strict_action_paths`,
+`catalog_path`, `enforce_confirm` (on by default) with `confirm` (see Agents),
+`around_perform`, `schema_user`, `error_format` and `result_format`. See
+`lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits
 
 - The unknown-action message always names `/api/v1/actions`, even if you
   mount the controller somewhere else.
-- `returns` is in the catalogue and in specs, but is not yet sent to MCP
-  clients as the tool's output schema. On a list with a summary, `returns`
+- `output_schema` is in the catalog and in specs, but is not yet sent to MCP
+  clients as the tool's output schema. On a list with a summary, `output_schema`
   describes the view screens get; check an agent's result with
   `match_output_schema(described_class.summary_output_schema)`.
 - A literal `%` in a default error message must be written `%%`.
@@ -1855,7 +1892,7 @@ small Rails app in `spec/rails_app`, with Pundit and ActionPolicy:
 bundle install
 bundle exec rake             # RSpec and Minitest
 bundle exec standardrb
-bundle exec rake catalogue   # rewrite the test app's actions.json
+bundle exec rake dump        # rewrite the test app's actions.json
 ```
 
 ## License
