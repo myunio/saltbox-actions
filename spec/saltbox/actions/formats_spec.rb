@@ -27,6 +27,7 @@ RSpec.describe "Error and result formats" do
     with_settings(result_format: :envelope) do
       expect(result.as_json).to eq("data" => {"count" => 1}, "meta" => {"page" => 1})
       expect(Saltbox::Actions::Result.new(status: 200, body: [], meta: nil).as_json).to eq("data" => [])
+      expect(Saltbox::Actions::Result.new(status: 200, body: nil).as_json).to eq("data" => nil)
     end
   end
 

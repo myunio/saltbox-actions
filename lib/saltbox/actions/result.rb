@@ -19,13 +19,14 @@ module Saltbox
       def empty? = empty
 
       # The body, so a Result renders as its body. With
-      # Configuration#result_format :envelope it is {data:, meta:}, without
-      # meta when there is none.
+      # Configuration#result_format :envelope it is {data:, meta:}: data is
+      # always there, null and false included, and meta only when there is one.
       #
       # @return [Hash, nil]
       def as_json(*)
         return body unless Actions.config.result_format == :envelope
-        {"data" => body.as_json, "meta" => meta&.as_json}.compact
+        envelope = {"data" => body.as_json}
+        meta.nil? ? envelope : envelope.merge("meta" => meta.as_json)
       end
     end
   end

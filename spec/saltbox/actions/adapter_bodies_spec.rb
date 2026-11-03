@@ -41,8 +41,18 @@ RSpec.describe "Response bodies on every surface" do
     end
   end
 
+  {false => '{"data":false}', nil => '{"data":null}', {"ok" => true} => '{"data":{"ok":true}}'}.each do |body, json|
+    it "sends #{body.inspect} as #{json} in the envelope format" do
+      with_settings(result_format: :envelope) do
+        expect(mcp_text(body)).to eq("<record-data>\n#{json}\n</record-data>")
+        expect(assistant_answer(body)).to eq("<record-data>\n#{json}\n</record-data>")
+      end
+    end
+  end
+
   it "says Done. for a response with no body" do
     expect(mcp_text(:head)).to eq("Done.")
     expect(assistant_answer(:head)).to eq("Done.")
+    with_settings(result_format: :envelope) { expect(mcp_text(:head)).to eq("Done.") }
   end
 end

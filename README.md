@@ -1642,7 +1642,9 @@ action. `run_action(arguments, as: caller)` runs it the way every surface does.
 
 `run_action` returns the action's `Result`. Its `body` is what the view rendered.
 Its `as_json` is what the API and MCP send: the same body, unless you set
-`config.result_format = :envelope`, which wraps it with the action's meta:
+`config.result_format = :envelope`, which wraps it with the action's meta.
+The envelope always has `data`, `null` and `false` included, and `meta` only
+when the action sent one:
 
 ```ruby
 result = run_action({id: event.id}, as: as_mcp(manager))
