@@ -25,8 +25,8 @@ module Saltbox
       attr_accessor :base_class
       # @return [ActionPaths] the folders actions load from: app/actions, then any an engine adds
       attr_reader :action_paths
-      # @return [String] the committed catalogue every action is written to, relative to Rails.root
-      attr_accessor :catalogue_path
+      # @return [String] the committed catalog every action is written to, relative to Rails.root
+      attr_accessor :catalog_path
       # @return [String] the class whose renderer draws action views; a controller's name, read when first used
       attr_accessor :renderer
       # @return [Hash{Symbol => String}] the token scope a read needs and the one anything else needs
@@ -62,7 +62,7 @@ module Saltbox
         @app_name = "the app"
         @base_class = "ApplicationAction"
         @action_paths = ActionPaths.new(["app/actions"])
-        @catalogue_path = "config/actions.json"
+        @catalog_path = "config/actions.json"
         @renderer = "ApplicationController"
         @scopes = SCOPES
         @surfaces = SURFACES
@@ -106,7 +106,7 @@ module Saltbox
       # @return [Integer]
       def max_array_items = @max_array_items.respond_to?(:call) ? @max_array_items.call : @max_array_items
 
-      # The set-up each invocation, catalogue listing and search runs inside:
+      # The set-up each invocation, catalog listing and search runs inside:
       # tenant, time zone, a fresh copy of the caller from the database.
       # The block calls run with the caller it refreshed.
       #
@@ -199,10 +199,10 @@ module Saltbox
       def area_for(&block) = block ? @area_for = block : @area_for
 
       # Who a create or update's input schema is built for where there is
-      # no caller: the committed catalogue (config/actions.json),
+      # no caller: the committed catalog (config/actions.json),
       # `rails actions:check` and the registry spec or test, the generator's
       # field list, and the schema matchers without `as:`. A principal
-      # holding every permission, so the catalogue lists every field.
+      # holding every permission, so the catalog lists every field.
       # Callers never see it: each gets the fields their policy permits them. Without it the policy is asked
       # with no person (nil). The block calls run with the principal, inside
       # whatever the policy needs, such as a tenant.

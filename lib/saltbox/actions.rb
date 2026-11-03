@@ -19,7 +19,7 @@ require "saltbox/actions/inputs"
 require "saltbox/actions/casting"
 require "saltbox/actions/schema"
 require "saltbox/actions/arguments"
-require "saltbox/actions/catalogue"
+require "saltbox/actions/catalog"
 require "saltbox/actions/rendering"
 require "saltbox/actions/permitting"
 require "saltbox/actions/authorization"
@@ -74,7 +74,7 @@ module Saltbox
 
       # Runs the block as the caller, inside the app's set-up for an
       # invocation (Configuration#around_invocation): its tenant, time zone
-      # and a fresh copy of the caller. Every invocation, catalogue listing
+      # and a fresh copy of the caller. Every invocation, catalog listing
       # and find_action search runs inside it.
       #
       # @param caller [Caller]

@@ -99,7 +99,7 @@ module Saltbox
         # The input schema for one caller. A create or update lists the
         # fields the authorization adapter permits that caller, so two callers
         # see different schemas when their policy permits different fields.
-        # Without a caller it is the catalogue's schema, built for
+        # Without a caller it is the catalog's schema, built for
         # Configuration#schema_principal.
         #
         # @param caller [Caller, nil]
@@ -119,7 +119,7 @@ module Saltbox
         # is set: every surface does. Permitting#permitted_attributes checks
         # the fields against the real record again.
         #
-        # @param caller [Caller, nil] nil for the catalogue's schema (Configuration#schema_principal)
+        # @param caller [Caller, nil] nil for the catalog's schema (Configuration#schema_principal)
         # @return [Input]
         def input(caller = nil)
           keys = writes_fields? ? permitted_keys(caller) : []

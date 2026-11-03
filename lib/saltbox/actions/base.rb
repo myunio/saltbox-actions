@@ -16,7 +16,7 @@ module Saltbox
     # - Naming: what the class name and the verb table give;
     # - Declarations: what the class declares;
     # - Inputs: its attributes and validations;
-    # - Catalogue: who sees the action in the actions list;
+    # - Catalog: who sees the action in the actions list;
     # - Schema: the JSON Schema of the action's input;
     # - Rendering: render and head;
     # - Permitting: permitted_attributes;
@@ -29,7 +29,7 @@ module Saltbox
       include Naming
       include Declarations
       include Inputs
-      include Catalogue
+      include Catalog
       include Schema
       include Rendering
       include Permitting
@@ -48,7 +48,7 @@ module Saltbox
       Declarations = Actions::Declarations
       Inputs = Actions::Inputs
       Schema = Actions::Schema
-      Catalogue = Actions::Catalogue
+      Catalog = Actions::Catalog
       Rendering = Actions::Rendering
       Permitting = Actions::Permitting
 
@@ -154,7 +154,7 @@ module Saltbox
       # verify_policy_scoped do after every controller action. A list action
       # needs only policy_scope, as a controller's index does: whether the
       # person may list at all was asked before #perform (see
-      # Catalogue#permitted?).
+      # Catalog#permitted?).
       #
       # @return [Result] the response #perform rendered, or a 204 when it rendered nothing
       def perform_now

@@ -19,7 +19,7 @@ RSpec.describe "Actions from an engine" do
   it "loads the engine's actions beside the app's, without eager loading" do
     expect(Rails.application.config.eager_load).to be(false)
     expect(registry.actions).to include(Billing::Invoices::ListAction, Events::ListAction)
-    expect(registry.catalogue(as_api(billing_clerk)).pluck("name")).to include("list_billing_invoices")
+    expect(registry.catalog(as_api(billing_clerk)).pluck("name")).to include("list_billing_invoices")
   end
 
   it "finds the engine's actions as subclasses too, as when eager loading" do
@@ -50,7 +50,7 @@ RSpec.describe "Actions from an engine" do
   it "names an engine's action on a host model with the folder's namespace once, and asks the engine's policy" do
     expect(Billing::Events::ListAction).to have_attributes(action_name: "list_billing_events",
       cli_command: %w[billing-events list], title: "List billing events", policy_class: Billing::EventPolicy)
-    expect(registry.catalogue(as_api(billing_clerk)).pluck("name")).to include("list_billing_events")
+    expect(registry.catalog(as_api(billing_clerk)).pluck("name")).to include("list_billing_events")
     with_paths(["app/actions", Saltbox::Actions::ActionPaths::Path.new(path: engine_folder, namespace: "pay")]) do
       expect(Billing::Events::ListAction).to have_attributes(action_name: "list_pay_events", cli_command: %w[pay-events list])
     end

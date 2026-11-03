@@ -1,6 +1,6 @@
 module Api
   module V1
-    # The catalogue and run endpoint. A test token names the account; a real
+    # The catalog and run endpoint. A test token names the account; a real
     # app resolves an OAuth bearer here.
     class ActionsController < ApplicationController
       include Saltbox::Actions::Controller

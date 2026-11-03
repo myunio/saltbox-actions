@@ -2,7 +2,7 @@ module Saltbox
   module Actions
     # Checks what each action declares when an eager-loading app boots
     # (production, CI), without touching the database; adds
-    # `rails actions:check` for the rest and `rails actions:catalogue`; and
+    # `rails actions:check` for the rest and `rails actions:dump`; and
     # points `rails g action` at the gem's generator.
     class Railtie < Rails::Railtie
       # What a task that reads the models needs, said when it cannot connect.
@@ -22,11 +22,11 @@ module Saltbox
             end
           end
 
-          desc "Write every action as callers see it to the committed catalogue (config/actions.json; needs the database)"
-          task catalogue: :environment do
-            Railtie.with_database("actions:catalogue") do
-              path = Registry.catalogue_path
-              path.write(Registry.catalogue_json)
+          desc "Write every action as callers see it to the committed catalog (config/actions.json; needs the database)"
+          task dump: :environment do
+            Railtie.with_database("actions:dump") do
+              path = Registry.catalog_path
+              path.write(Registry.catalog_json)
               puts "Wrote #{Registry.actions.size} actions to #{path.relative_path_from(Rails.root)}"
             end
           end

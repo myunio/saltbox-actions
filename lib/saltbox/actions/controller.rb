@@ -1,6 +1,6 @@
 module Saltbox
   module Actions
-    # The catalogue and the run endpoint for a JSON API: every action, on one
+    # The catalog and the run endpoint for a JSON API: every action, on one
     # route. Include it in a controller and define #resolve_caller, which
     # decides who is calling from the request's credential and nothing else.
     #
@@ -35,16 +35,16 @@ module Saltbox
         end
       end
 
-      # @return [void] the caller's catalogue, with an ETag
+      # @return [void] the caller's catalog, with an ETag
       def index
-        entries = Registry.catalogue(@action_caller)
+        entries = Registry.catalog(@action_caller)
         json = JSON.generate({data: entries, meta: {version: Registry.version, api_version: "v1", count: entries.size}})
         render json: json if stale?(etag: Digest::SHA256.hexdigest(json), public: false)
       end
 
       # @return [void] one definition the caller can see
       def show
-        entry = Registry.catalogue(@action_caller).find { |candidate| candidate["name"] == params[:name] }
+        entry = Registry.catalog(@action_caller).find { |candidate| candidate["name"] == params[:name] }
         raise Error::UnknownAction, params[:name] unless entry
         render json: {data: entry}
       end

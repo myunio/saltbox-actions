@@ -285,7 +285,7 @@ module Saltbox
         problems.concat(summary_problems(action))
       end
 
-      # Builds the catalogue's input schema, which asks the policy's
+      # Builds the catalog's input schema, which asks the policy's
       # permitted_attributes of the schema principal.
       #
       # @param action [Class] an action with a model
@@ -299,7 +299,7 @@ module Saltbox
         raise
       rescue => error
         ["building its input schema asked #{action.policy_class ? "#{action.policy_class}#permitted_attributes" : "permitted_attribute_names_for"}, which raised #{error.class}: #{error.message}. " \
-          "If the policy needs a person or a tenant, set config.schema_principal, which actions:check and the catalogue build schemas for"]
+          "If the policy needs a person or a tenant, set config.schema_principal, which actions:check and the catalog build schemas for"]
       end
 
       # @param action [Class] an action with a model
@@ -327,20 +327,20 @@ module Saltbox
       # @param caller [Caller]
       # @return [Array<Hash>] visible definitions, each marked runnable or not
       #   for this caller, from one fresh check of the caller
-      def self.catalogue(caller)
+      def self.catalog(caller)
         Actions.within(caller) do |fresh|
           actions.select { |action| action.available_to?(fresh) }
             .map { |action| action.definition(fresh).merge("runnable" => fresh.agent_allowed?(action)) }
         end
       end
 
-      # @return [Array<Hash>] every action's definition, as written to the catalogue file:
+      # @return [Array<Hash>] every action's definition, as written to the catalog file:
       #   a create or update lists the fields the policy permits Configuration#schema_principal
       def self.definitions = actions.map(&:definition)
 
       # The version of the actions' code, for the API's meta and the MCP
       # server: a hash of every definition without the policy's fields, so
-      # no caller is needed. A caller's own fields change their catalogue's
+      # no caller is needed. A caller's own fields change their catalog's
       # ETag instead.
       #
       # @return [String]
@@ -348,11 +348,11 @@ module Saltbox
         @version ||= Digest::SHA256.hexdigest(JSON.generate(actions.map { it.definition(input: it.declared_input) }))[0, 16]
       end
 
-      # @return [Pathname] the committed catalogue, which a spec checks matches the code
-      def self.catalogue_path = Rails.root.join(Actions.config.catalogue_path)
+      # @return [Pathname] the committed catalog, which a spec checks matches the code
+      def self.catalog_path = Rails.root.join(Actions.config.catalog_path)
 
-      # @return [String] the catalogue file's contents for the code as it stands
-      def self.catalogue_json = "#{JSON.pretty_generate(definitions)}\n"
+      # @return [String] the catalog file's contents for the code as it stands
+      def self.catalog_json = "#{JSON.pretty_generate(definitions)}\n"
 
       def self.relative(path) = Pathname(path).relative_path_from(Rails.root).to_s
       private_class_method :relative, :named_descendants, :warn_outside, :unique!

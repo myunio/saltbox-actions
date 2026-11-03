@@ -9,7 +9,7 @@ Rake::TestTask.new(:test) do |task|
 end
 task default: [:spec, :test]
 
-desc "Rewrite the dummy app's committed catalogue (spec/rails_app/config/actions.json)"
-task :catalogue do
-  ruby "-Ispec", "spec/write_catalogue.rb"
+desc "Rewrite the dummy app's committed catalog (spec/rails_app/config/actions.json)"
+task :dump do
+  ruby "-Ispec", "spec/write_catalog.rb"
 end

@@ -162,15 +162,15 @@ RSpec.describe Saltbox::Actions::Registry do
     Saltbox::Actions.config.action_checks.pop
   end
 
-  it "versions every definition, and lists the definitions as the catalogue file holds them" do
+  it "versions every definition, and lists the definitions as the catalog file holds them" do
     expect(described_class.version).to match(/\A\h{16}\z/)
-    expect(JSON.parse(described_class.catalogue_json).pluck("name")).to eq(described_class.actions.map(&:action_name))
+    expect(JSON.parse(described_class.catalog_json).pluck("name")).to eq(described_class.actions.map(&:action_name))
   end
 
   it "lists each action for a caller with whether they may run it" do
-    entries = described_class.catalogue(as_mcp(manager))
+    entries = described_class.catalog(as_mcp(manager))
     expect(entries.find { it["name"] == "show_event_notes" }).to be_nil
     expect(entries.find { it["name"] == "delete_event" }).to include("runnable" => true, "connections" => "confirm", "kind" => "destructive")
-    expect(described_class.catalogue(as_read_only(manager)).pluck("kind").uniq).to eq(["read"])
+    expect(described_class.catalog(as_read_only(manager)).pluck("kind").uniq).to eq(["read"])
   end
 end

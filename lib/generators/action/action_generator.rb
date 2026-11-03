@@ -29,10 +29,10 @@ module Saltbox
           desc: "The kind of a verb outside the verb table (read, change or destructive)"
         class_option :id, type: :boolean, default: true,
           desc: "Whether a verb outside the verb table works on one record named by an id"
-        class_option :catalogue, type: :boolean, default: true,
-          desc: "Rewrite the committed catalogue (config/actions.json) with the new action"
+        class_option :catalog, type: :boolean, default: true,
+          desc: "Rewrite the committed catalog (config/actions.json) with the new action"
 
-        # A refused check or a failed catalogue step exits 1, so scripts see it.
+        # A refused check or a failed catalog step exits 1, so scripts see it.
         #
         # @return [Boolean]
         def self.exit_on_failure? = true
@@ -64,16 +64,16 @@ module Saltbox
           invoke generator, ["#{resource_name}::#{words.map(&:camelize).join}"], id: takes_id?
         end
 
-        # Rewrites the catalogue with the new action. If that fails, every
+        # Rewrites the catalog with the new action. If that fails, every
         # file this generator wrote or changed is put back as it was.
         #
         # @return [void]
-        # @raise [Thor::Error] when the catalogue step fails
-        def write_catalogue
-          return unless behavior == :invoke && options[:catalogue] && !options[:pretend]
-          return if rails_command("actions:catalogue")
+        # @raise [Thor::Error] when the catalog step fails
+        def write_catalog
+          return unless behavior == :invoke && options[:catalog] && !options[:pretend]
+          return if rails_command("actions:dump")
           restore_files
-          raise Thor::Error, "bin/rails actions:catalogue failed, so nothing was written: fix the error above, then run the generator again"
+          raise Thor::Error, "bin/rails actions:dump failed, so nothing was written: fix the error above, then run the generator again"
         end
 
         # @return [void]
@@ -82,7 +82,7 @@ module Saltbox
           undescribed = probe.input_schema["properties"].reject { |_, schema| schema.key?("description") }.keys
           if undescribed.any?
             say "Describe #{undescribed.to_sentence} for agents in config/locales/actions.en.yml, under actions.#{probe.resource_locale_key}.fields, " \
-              "then rerun bin/rails actions:catalogue.", :green
+              "then rerun bin/rails actions:dump.", :green
           end
           if accepted_references.present?
             say "Left #{accepted_references.to_sentence} out of accepts: a caller could point #{(accepted_references.size > 1) ? "them" : "it"} " \
@@ -96,12 +96,12 @@ module Saltbox
         private
 
         # The files the generator may write or change: the action, the test
-        # framework's file and the catalogue.
+        # framework's file and the catalog.
         def touched_paths
           [File.join(Actions.config.action_paths.first.path.to_s, "#{action_path}_action.rb"),
             File.join("spec/actions", "#{action_path}_action_spec.rb"),
             File.join("test/actions", "#{action_path}_action_test.rb"),
-            Actions.config.catalogue_path.to_s]
+            Actions.config.catalog_path.to_s]
         end
 
         # Notes each file's contents (nil when it does not exist) before any is written.

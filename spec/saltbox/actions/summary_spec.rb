@@ -35,7 +35,7 @@ RSpec.describe Saltbox::Actions::Summary do
     expect(list_events(as_mcp(manager))).to eq("data" => {"events" => []}, "meta" => {"page" => 1})
   end
 
-  it "matches the output schema the catalogue gives agents, in either result format" do
+  it "matches the output schema the catalog gives agents, in either result format" do
     expect(Saltbox::Actions::Invocation.call(name: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
     expect(Events::ListAction.definition["output_schema"]).to eq(Events::ListAction.summary_output_schema)
     with_settings(result_format: :envelope) do
@@ -187,7 +187,7 @@ RSpec.describe Saltbox::Actions::Summary do
     expect(show.body.dig("data", "event")).to include("capacity" => nil)
   end
 
-  it "gives the catalogue the summary's fields, which the CLI prints as columns" do
+  it "gives the catalog the summary's fields, which the CLI prints as columns" do
     expect(Events::ListAction.definition["summary"]).to eq(%w[id title starts_on status])
     expect(Events::CreateAction.definition["summary"]).to eq(%w[id title starts_on])
     expect(Events::ListAction.definition["cli"]).not_to have_key("columns")

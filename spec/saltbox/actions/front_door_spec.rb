@@ -2,8 +2,8 @@ RSpec.describe Saltbox::Actions::FrontDoor do
   let(:event) { Event.create!(org_id: 1, title: "Annual general meeting") }
 
   it "offers featured actions as tools of their own, then find_action and one run tool per kind the caller may run" do
-    expect(Saltbox::Actions::Registry.catalogue(as_mcp(manager)).select { it["featured"] }.map { it["name"] }).to eq(%w[show_event whoami])
-    expect(Saltbox::Actions::Registry.catalogue(as_mcp(manager)).flat_map(&:keys)).not_to include("mcp_core")
+    expect(Saltbox::Actions::Registry.catalog(as_mcp(manager)).select { it["featured"] }.map { it["name"] }).to eq(%w[show_event whoami])
+    expect(Saltbox::Actions::Registry.catalog(as_mcp(manager)).flat_map(&:keys)).not_to include("mcp_core")
     expect(described_class.tools(as_mcp(manager)).map(&:name)).to eq(%w[show_event whoami find_action run_read_action run_change_action run_destructive_action])
     expect(described_class.tools(as_read_only(manager)).map(&:name)).to eq(%w[show_event whoami find_action run_read_action])
     expect(described_class.tools(as_assistant(manager)).map(&:name)).not_to include("run_destructive_action")
@@ -93,12 +93,12 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     expect(destructive).to include("get a yes first")
   end
 
-  it "lists only what a connection's access reaches, in its tools, find_action and the catalogue" do
+  it "lists only what a connection's access reaches, in its tools, find_action and the catalog" do
     reads_only = Struct.new(:kind) { def allows?(action) = action.kind == kind }.new(:read)
     connection = Saltbox::Actions::Caller.new(account: manager, surface: "mcp", agent: "Claude", access: reads_only)
     expect(described_class.tools(connection).map(&:name)).to eq(%w[show_event whoami find_action run_read_action])
     expect(described_class.call("find_action", {"query" => "cancel the meeting"}, caller: connection)[:actions]).to be_empty
-    listed = Saltbox::Actions::Registry.catalogue(connection).pluck("name")
+    listed = Saltbox::Actions::Registry.catalog(connection).pluck("name")
     expect(listed).to include("list_events")
     expect(listed).not_to include("cancel_event", "delete_event")
   end

@@ -841,7 +841,7 @@ end
 ```
 
 A destructive action is never `:allowed`. A browser assistant (`webmcp`)
-never runs a destructive action. The committed catalogue lists every
+never runs a destructive action. The committed catalog lists every
 action's rule, so a change to one shows up in review.
 
 By default, nothing on the server checks that an agent asked before a
@@ -932,7 +932,7 @@ ApplicationAction::Caller.new(account: token.user, surface: "mcp", agent: "Claud
   scopes: token.scopes, access: ConnectionAccess.new(token.action_names))
 ```
 
-The caller then sees only those actions. The catalogue, `find_action` and the
+The caller then sees only those actions. The catalog, `find_action` and the
 MCP tools leave the rest out, and a call to one of them is refused with
 `insufficient_scope`. The default message talks about read-only tokens, so
 set `on_access_refused` to say what happened in your words. It is also the
@@ -962,7 +962,7 @@ give them.
 | `kind :read` | The kind, for a verb outside the table. `:read`, `:change` or `:destructive`. |
 | `policy_rule :archive?` | The policy rule, when it is not the verb's own. |
 | `idempotent` | Running it twice with the same input changes nothing more, when the verb does not say so. `idempotent false` says it does. |
-| `featured` | Lists it as an MCP tool of its own (see MCP). The catalogue marks it `"featured": true`. |
+| `featured` | Lists it as an MCP tool of its own (see MCP). The catalog marks it `"featured": true`. |
 | `feature "key"` | A feature flag. While it is off, callers get `not_found`. |
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
 | `returns(schema)` | The JSON Schema of the body it renders. |
@@ -971,7 +971,7 @@ give them.
 | `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy. It holds for subclasses in its modules and below them (see Authorization). |
 | `action_name "count_events"` | A name of your own, in place of the one from the class. The action then declares its `kind` too, and its `model` and `policy_rule` if it has a model: a declared name gives neither. |
 | `summary :id, :title` | The fields a list sends agents, and the columns a command-line client prints (see below). |
-| `cli "events count"` | The command for a command-line client you build on the catalogue. |
+| `cli "events count"` | The command for a command-line client you build on the catalog. |
 
 In the base class, `define_verb` adds verbs (see Names and verbs) and
 `summary Event, ...` sets a model's summary for every action.
@@ -1090,7 +1090,7 @@ render json: ProjectResource.new(@projects), collection: @projects
 ```
 
 A model with no summary sends the view to everyone. An action can declare its
-own `summary :id, :title` in place of its model's. The catalogue lists the
+own `summary :id, :title` in place of its model's. The catalog lists the
 summary's fields as `summary`, which a command-line client prints as a table's
 columns, on every action of the model. For a list, its `output_schema`
 describes the summaries agents get, and `find_action` tells agents which
@@ -1383,7 +1383,7 @@ config.on_forbidden_fields do |caller, action, fields|
 end
 ```
 
-Some places have no caller: the committed catalogue, `rails actions:check`
+Some places have no caller: the committed catalog, `rails actions:check`
 and the registry spec, the generator's field list, and
 `be_invalid_against_schema` or `assert_invalid_against_schema` without `as:`.
 They build the schema for `config.schema_principal`, a person who may set
@@ -1682,7 +1682,7 @@ end
 There is also `"renders its declared output schema"`, and
 `"a valid action registry"`. Put the registry one in a single spec. It runs
 every check `rails actions:check` runs, and checks that every action has a
-spec file and a valid input schema, and that the committed catalogue is up
+spec file and a valid input schema, and that the committed catalog is up
 to date.
 
 ## Testing with Minitest
@@ -1739,10 +1739,10 @@ The helper also has these checks:
   It needs change tracking (`include Saltbox::Actions::ChangeTracking` in
   `ApplicationRecord`) or PaperTrail.
 - `assert_changes_audit_trail(on: event, by: user) { run(...) }` needs PaperTrail.
-- `assert_matches_catalogue` checks the committed catalogue.
+- `assert_matches_catalog` checks the committed catalog.
 - `assert_valid_action_registry` runs every check `rails actions:check` runs,
   and checks that every action has a test under `test/actions/` and a valid
-  input schema, and matches the catalogue.
+  input schema, and matches the catalog.
   Pass `test_root:` if your tests live elsewhere.
 
 Put the registry check in one test:
@@ -1765,7 +1765,7 @@ details. A missing refusal, wrong code or missing field fails the test.
 ```sh
 bin/rails g action Events::Update                  # a verb from the table
 bin/rails g action Events::Archive --kind change   # any other verb
-bin/rails actions:catalogue                        # rewrite config/actions.json
+bin/rails actions:dump                        # rewrite config/actions.json
 bin/rails actions:check                            # check every action (in CI)
 ```
 
@@ -1777,7 +1777,7 @@ A singular name, `Event::Update`, writes the same files.
 
 First it checks the action the way `rails actions:check` will: the model, the
 policy and its rule (when the base class has an adapter), and the fields. On
-a problem it writes nothing, prints the fix and exits 1. If the catalogue
+a problem it writes nothing, prints the fix and exits 1. If the catalog
 step fails after that, it puts back every file it wrote or changed.
 
 A verb from the table needs no declarations: the verb gives its kind, its
@@ -1794,7 +1794,7 @@ To change the templates, copy them to `lib/templates/action/action.rb.tt`
 and `lib/templates/test_unit/action/action_test.rb.tt` (Minitest) or
 `lib/templates/rspec/action/action_spec.rb.tt` (RSpec).
 
-`config/actions.json` is the **catalogue**: every action as callers see it.
+`config/actions.json` is the **catalog**: every action as callers see it.
 Commit it, so a change to any action's name or input shows up in review.
 Writing it needs the database, like `actions:check`.
 
@@ -1831,14 +1831,14 @@ end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
-`action_paths` (the folders actions load from), `catalogue_path`, `enforce_confirm`
+`action_paths` (the folders actions load from), `catalog_path`, `enforce_confirm`
 with `confirm` (see Connections), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits
 
 - The unknown-action message always names `/api/v1/actions`, even if you
   mount the controller somewhere else.
-- `returns` is in the catalogue and in specs, but is not yet sent to MCP
+- `returns` is in the catalog and in specs, but is not yet sent to MCP
   clients as the tool's output schema. On a list with a summary, `returns`
   describes the view screens get; check an agent's result with
   `match_output_schema(described_class.summary_output_schema)`.
@@ -1855,7 +1855,7 @@ small Rails app in `spec/rails_app`, with Pundit and ActionPolicy:
 bundle install
 bundle exec rake             # RSpec and Minitest
 bundle exec standardrb
-bundle exec rake catalogue   # rewrite the test app's actions.json
+bundle exec rake dump      # rewrite the test app's actions.json
 ```
 
 ## License

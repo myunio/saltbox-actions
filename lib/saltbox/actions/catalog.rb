@@ -9,7 +9,7 @@ module Saltbox
     # - the token has the scope the action needs;
     # - the person holds the permissions it declares, or, declaring none, the policy allows their role.
     # Permission on the specific record is checked again when the action runs.
-    module Catalogue
+    module Catalog
       extend ActiveSupport::Concern
 
       class_methods do

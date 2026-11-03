@@ -9,7 +9,7 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
   def generate(*args)
     capture = StringIO.new
     $stdout = capture
-    described_class.start([*args, "--no-catalogue", "--test-framework=rspec"], destination_root: destination.to_s)
+    described_class.start([*args, "--no-catalog", "--test-framework=rspec"], destination_root: destination.to_s)
     capture.string
   ensure
     $stdout = STDOUT
@@ -25,7 +25,7 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     err = StringIO.new
     $stdout = out
     $stderr = err
-    expect { described_class.start([*args, "--no-catalogue", "--test-framework=rspec"], destination_root: destination.to_s) }
+    expect { described_class.start([*args, "--no-catalog", "--test-framework=rspec"], destination_root: destination.to_s) }
       .to raise_error(SystemExit) { expect(it.status).to eq(1) }
     out.string + err.string
   ensure
@@ -114,17 +114,17 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     expect(Dir.children(destination)).to be_empty
   end
 
-  it "puts back every file it wrote or changed when the catalogue step fails" do
-    catalogue = destination.join("config/actions.json")
-    FileUtils.mkdir_p(catalogue.dirname)
-    catalogue.write("[]\n")
+  it "puts back every file it wrote or changed when the catalog step fails" do
+    catalog = destination.join("config/actions.json")
+    FileUtils.mkdir_p(catalog.dirname)
+    catalog.write("[]\n")
     generator = described_class.new(["Events::Update"], {"test_framework" => "rspec"}, destination_root: destination.to_s)
-    allow(generator).to receive(:rails_command).with("actions:catalogue").and_return(false)
+    allow(generator).to receive(:rails_command).with("actions:dump").and_return(false)
     $stdout = StringIO.new
-    expect { generator.invoke_all }.to raise_error(Thor::Error, /actions:catalogue failed, so nothing was written/)
+    expect { generator.invoke_all }.to raise_error(Thor::Error, /actions:dump failed, so nothing was written/)
     expect(destination.join("app/actions/events/update_action.rb")).not_to exist
     expect(destination.join("spec/actions/events/update_action_spec.rb")).not_to exist
-    expect(catalogue.read).to eq("[]\n")
+    expect(catalog.read).to eq("[]\n")
   ensure
     $stdout = STDOUT
   end

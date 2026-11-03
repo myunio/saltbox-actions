@@ -9,7 +9,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
     assert_equal TestUnit::Generators::ActionGenerator, Rails::Generators.find_by_namespace("test_unit:action")
     Dir.mktmpdir("action-generator") do |destination|
       output, = capture_io do
-        Saltbox::Actions::Generators::ActionGenerator.start(["Events::Update", "--no-catalogue"], destination_root: destination)
+        Saltbox::Actions::Generators::ActionGenerator.start(["Events::Update", "--no-catalog"], destination_root: destination)
       end
       assert_includes output, "Fill in the placeholders in test/actions/events/update_action_test.rb"
       test_file = Pathname(destination).join("test/actions/events/update_action_test.rb")
@@ -38,7 +38,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
       Dir.mktmpdir("action-generator") do |destination|
         capture_io do
           Saltbox::Actions::Generators::ActionGenerator.start(
-            ["Events::Archive", "--kind=change", "--no-catalogue", (takes_id ? "--id" : "--no-id")],
+            ["Events::Archive", "--kind=change", "--no-catalog", (takes_id ? "--id" : "--no-id")],
             destination_root: destination
           )
         end

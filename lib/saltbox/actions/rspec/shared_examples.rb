@@ -80,8 +80,8 @@ end
 #   end
 #
 # Every action loads and passes rails actions:check, has a spec file beside the
-# others, compiles its input schema, and the committed catalogue matches the
-# code (rewrite it with `bin/rails actions:catalogue`).
+# others, compiles its input schema, and the committed catalog matches the
+# code (rewrite it with `bin/rails actions:dump`).
 RSpec.shared_examples "a valid action registry" do
   let(:registry) { Saltbox::Actions::Registry }
 
@@ -107,9 +107,9 @@ RSpec.shared_examples "a valid action registry" do
     expect(invalid.map(&:action_name)).to be_empty
   end
 
-  it "matches the committed catalogue" do
-    path = registry.catalogue_path
-    expect(path).to exist, "write it with bin/rails actions:catalogue"
-    expect(path.read).to eq(registry.catalogue_json), "the catalogue is out of date: run bin/rails actions:catalogue"
+  it "matches the committed catalog" do
+    path = registry.catalog_path
+    expect(path).to exist, "write it with bin/rails actions:dump"
+    expect(path.read).to eq(registry.catalog_json), "the catalog is out of date: run bin/rails actions:dump"
   end
 end

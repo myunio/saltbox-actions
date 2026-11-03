@@ -57,9 +57,9 @@ RSpec.describe Saltbox::Actions::Finder do
     expect(found("say why Jane Smith called it off")).to eq(found("say why it was called off"))
   end
 
-  # A small app's catalogue makes every word's rarity much the same; a match
+  # A small app's catalog makes every word's rarity much the same; a match
   # in the description alone must still count there.
-  context "with a five-action catalogue" do
+  context "with a five-action catalog" do
     let(:five) { described_class.new([Events::ListAction, Events::CreateAction, Events::CancelAction, Reports::CountEventsAction, WhoamiAction]) }
 
     {

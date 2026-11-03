@@ -230,7 +230,7 @@ module Saltbox
         def have_field_errors(*fields) = HaveFieldErrors.new(fields)
 
         # Passes when the action's input schema refuses the arguments, before
-        # any caller is checked. Without `as:` it is the catalogue's schema,
+        # any caller is checked. Without `as:` it is the catalog's schema,
         # built for Configuration#schema_principal; pass a caller when the
         # policy needs a person, or to check that caller's fields.
         #

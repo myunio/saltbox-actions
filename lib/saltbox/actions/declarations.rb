@@ -209,7 +209,7 @@ module Saltbox
         # Declares the JSON Schema of the body the action renders, so agents
         # know what comes back and specs can check it (match_output_schema).
         # On a list action with a summary it describes the view screens get;
-        # the catalogue gives agents summary_output_schema instead.
+        # the catalog gives agents summary_output_schema instead.
         #
         # @param schema [Hash]
         # @return [Hash]

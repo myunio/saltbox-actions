@@ -149,8 +149,8 @@ class ActionsTest < ActiveSupport::TestCase
     paper_trail.instance_variable_set(:@installed, saved[1])
   end
 
-  test "checks the committed catalogue and all registry promises" do
-    assert_matches_catalogue
+  test "checks the committed catalog and all registry promises" do
+    assert_matches_catalog
     Dir.mktmpdir("action-tests") do |directory|
       Saltbox::Actions::Registry.action_files.each do |file|
         relative = Saltbox::Actions.config.action_paths.relative(file).sub_ext("_test.rb")
@@ -164,15 +164,15 @@ class ActionsTest < ActiveSupport::TestCase
     end
   end
 
-  test "catalogue check fails on a missing or stale file" do
-    original = Saltbox::Actions.config.catalogue_path
-    Dir.mktmpdir("catalogue") do |directory|
-      Saltbox::Actions.config.catalogue_path = File.join(directory, "actions.json")
-      assert_raises(Minitest::Assertion) { assert_matches_catalogue }
-      Pathname(Saltbox::Actions.config.catalogue_path).write("[]")
-      assert_raises(Minitest::Assertion) { assert_matches_catalogue }
+  test "catalog check fails on a missing or stale file" do
+    original = Saltbox::Actions.config.catalog_path
+    Dir.mktmpdir("catalog") do |directory|
+      Saltbox::Actions.config.catalog_path = File.join(directory, "actions.json")
+      assert_raises(Minitest::Assertion) { assert_matches_catalog }
+      Pathname(Saltbox::Actions.config.catalog_path).write("[]")
+      assert_raises(Minitest::Assertion) { assert_matches_catalog }
     end
   ensure
-    Saltbox::Actions.config.catalogue_path = original
+    Saltbox::Actions.config.catalog_path = original
   end
 end

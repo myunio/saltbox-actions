@@ -41,7 +41,7 @@ module Saltbox
         error
       end
 
-      # Without `as:` it checks the catalogue's schema, built for
+      # Without `as:` it checks the catalog's schema, built for
       # Configuration#schema_principal; pass a caller when the policy needs a person.
       def assert_invalid_against_schema(arguments, action: action_class, as: nil)
         assert_raises(Error::Invalid) { Arguments.check(action, arguments, as) }
@@ -85,10 +85,10 @@ module Saltbox
         assert versions.where(attributes).exists?, "expected an audit entry, but none matched"
       end
 
-      def assert_matches_catalogue
-        path = Registry.catalogue_path
-        assert path.exist?, "write the catalogue with bin/rails actions:catalogue"
-        assert_equal Registry.catalogue_json, path.read, "the catalogue is out of date: run bin/rails actions:catalogue"
+      def assert_matches_catalog
+        path = Registry.catalog_path
+        assert path.exist?, "write the catalog with bin/rails actions:dump"
+        assert_equal Registry.catalog_json, path.read, "the catalog is out of date: run bin/rails actions:dump"
       end
 
       # Checks the same registry promises as the RSpec shared example. An
@@ -104,7 +104,7 @@ module Saltbox
         assert_empty missing, "write #{missing.join(", ")} under #{test_root}"
         invalid = Registry.actions.reject { JSONSchemer.valid_schema?(it.input_schema) }
         assert_empty invalid.map(&:action_name)
-        assert_matches_catalogue
+        assert_matches_catalog
       end
 
       private

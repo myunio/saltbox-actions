@@ -11,7 +11,7 @@ RSpec.describe Saltbox::Actions::Schema do
     expect(schema["additionalProperties"]).to be(false)
   end
 
-  it "builds the catalogue's schema, with no caller, for the schema principal" do
+  it "builds the catalog's schema, with no caller, for the schema principal" do
     expect(Events::CreateAction.input_schema["properties"]).to have_key("notes")
     expect(Events::UpdateAction.input_schema["required"]).to eq(%w[id])
   end
@@ -25,7 +25,7 @@ RSpec.describe Saltbox::Actions::Schema do
       expect(fields.call(note_keeper)).to include("notes")
       expect(fields.call(manager)).not_to include("notes")
       expect(Saltbox::Actions::FrontDoor.find("add an event", as_mcp(manager))[:actions].find { it[:name] == "create_event" }[:arguments]["properties"]).not_to have_key("notes")
-      expect(Saltbox::Actions::Registry.catalogue(as_screen(note_keeper)).find { it["name"] == "create_event" }.dig("input_schema", "properties")).to have_key("notes")
+      expect(Saltbox::Actions::Registry.catalog(as_screen(note_keeper)).find { it["name"] == "create_event" }.dig("input_schema", "properties")).to have_key("notes")
     end
 
     it "runs with a policy that needs a person, with no schema principal set" do

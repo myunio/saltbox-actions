@@ -26,7 +26,7 @@ module Saltbox
       end
 
       # @param action [Class]
-      # @param caller [Caller, nil] whose schema; nil for the catalogue's
+      # @param caller [Caller, nil] whose schema; nil for the catalog's
       # @return [Arguments] a checker for the action's input schema for that caller,
       #   refusing a field they may not set with Configuration#on_forbidden_fields
       def self.for(action, caller = nil)
@@ -40,7 +40,7 @@ module Saltbox
       #
       # @param action [Class]
       # @param arguments [Hash, nil]
-      # @param caller [Caller, nil] nil for the catalogue's schema
+      # @param caller [Caller, nil] nil for the catalog's schema
       # @return [Hash] the checked input
       # @raise [Error::Invalid, Error::Forbidden]
       def self.check(action, arguments, caller = nil)
