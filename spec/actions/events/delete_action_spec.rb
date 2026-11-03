@@ -18,7 +18,7 @@ RSpec.describe Events::DeleteAction do
   end
 
   it "is never run by the chat or a browser assistant" do
-    expect(described_class).not_to be_runnable_by(as_assistant(manager))
-    expect(described_class).not_to be_runnable_by(as_webmcp(manager))
+    expect(described_class).not_to be_runnable_for(as_assistant(manager))
+    expect(described_class).not_to be_runnable_for(as_webmcp(manager))
   end
 end

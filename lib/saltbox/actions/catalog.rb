@@ -19,7 +19,7 @@ module Saltbox
 
         # @param caller [Caller]
         # @return [Boolean] whether the actions list shows it to this caller: its policy exists, and all four checks above
-        def available_to?(caller)
+        def listed_for?(caller)
           !policy_missing? && enabled_for?(caller) && caller.reaches?(self) && caller.includes_scope?(required_scope) && permitted_for?(caller)
         end
 
@@ -40,7 +40,7 @@ module Saltbox
         #
         # @param caller [Caller]
         # @return [Boolean]
-        def runnable_for?(caller) = available_to?(caller) && caller.agent_allowed?(self)
+        def runnable_for?(caller) = listed_for?(caller) && caller.agent_allowed?(self)
 
         # @return [String] the token scope it needs: the read scope for a read, the write scope for anything else
         def required_scope = Actions.config.scope_for(kind)

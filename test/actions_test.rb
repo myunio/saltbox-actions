@@ -114,12 +114,12 @@ class ActionsTest < ActiveSupport::TestCase
   end
 
   test "checks listing and run permission" do
-    assert_runnable_by as_mcp(@manager)
+    assert_runnable_for as_mcp(@manager)
     assert_listed_for as_api(@manager)
-    assert_raises(Minitest::Assertion) { assert_runnable_by as_read_only(@manager) }
+    assert_raises(Minitest::Assertion) { assert_runnable_for as_read_only(@manager) }
     assert_raises(Minitest::Assertion) { assert_listed_for as_api(@reader) }
     assert_listed_for as_mcp(@manager), action: Events::DeleteAction
-    assert_raises(Minitest::Assertion) { assert_runnable_by as_assistant(@manager), action: Events::DeleteAction }
+    assert_raises(Minitest::Assertion) { assert_runnable_for as_assistant(@manager), action: Events::DeleteAction }
   end
 
   test "checks audit attribution and change announcements" do

@@ -133,10 +133,10 @@ module Saltbox
       #   or a hint when nothing matched
       def self.find(query, caller)
         Actions.within(caller) do |fresh|
-          available = Registry.actions.select { |action| action.available_to?(fresh) }
+          available = Registry.actions.select { |action| action.listed_for?(fresh) }
           actions = Finder.new(available).find(query).map do |action|
-            entry(action, fresh).merge(description: action.description, arguments: action.input_schema(fresh),
-              response_description: action.summary_note).reject { |key, value| key == :response_description && value.nil? }
+            entry(action, fresh).merge(description: action.description, input_schema: action.input_schema(fresh),
+              output_description: action.summary_note).reject { |key, value| key == :output_description && value.nil? }
           end
           result = {actions: actions}
           result[:hint] = no_match_hint(available) if actions.empty?

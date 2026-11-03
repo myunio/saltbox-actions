@@ -54,12 +54,12 @@ module Saltbox
         assert_empty failures, "expected the body to match the output schema:\n#{failures.join("\n")}"
       end
 
-      def assert_runnable_by(caller, action: action_class)
+      def assert_runnable_for(caller, action: action_class)
         assert Actions.within(caller) { |fresh| action.runnable_for?(fresh) }, "expected #{action.action_name} to be runnable for #{caller.surface}"
       end
 
       def assert_listed_for(caller, action: action_class)
-        assert Actions.within(caller) { |fresh| action.available_to?(fresh) }, "expected #{action.action_name} to be listed for #{caller.surface}"
+        assert Actions.within(caller) { |fresh| action.listed_for?(fresh) }, "expected #{action.action_name} to be listed for #{caller.surface}"
       end
 
       def assert_announces_changes(expected = {})

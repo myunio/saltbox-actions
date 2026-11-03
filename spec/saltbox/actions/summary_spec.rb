@@ -196,8 +196,8 @@ RSpec.describe Saltbox::Actions::Summary do
   it "tells agents what a list returns, and which action gives the rest" do
     found = Saltbox::Actions::FrontDoor.call("find_action", {"query" => "list events"}, caller: as_mcp(manager))
     expect(found[:actions].find { it[:name] == "list_events" })
-      .to include(response_description: "Returns each event's id, title, starts_on, and status. Call show_event with its id for the rest.")
-    expect(found[:actions].find { it[:name] == "show_event" }).not_to have_key(:response_description)
+      .to include(output_description: "Returns each event's id, title, starts_on, and status. Call show_event with its id for the rest.")
+    expect(found[:actions].find { it[:name] == "show_event" }).not_to have_key(:output_description)
   end
 
   it "points a back-office list at its own show action, never the public one" do

@@ -28,7 +28,7 @@ RSpec.describe Events::UpdateAction do
   end
 
   it "is listed for and runnable by an agent, but not on a read-only token" do
-    expect(described_class).to be_runnable_by(as_mcp(manager))
+    expect(described_class).to be_runnable_for(as_mcp(manager))
     expect(described_class).not_to be_listed_for(as_read_only(manager))
   end
 end

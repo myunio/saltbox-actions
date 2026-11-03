@@ -189,8 +189,8 @@ module Saltbox
           def description = "announce changes"
         end
 
-        # @see Matchers#be_runnable_by
-        class BeRunnableBy
+        # @see Matchers#be_runnable_for
+        class BeRunnableFor
           include ::RSpec::Matchers::Composable
 
           def initialize(caller, listed_only:)
@@ -200,7 +200,7 @@ module Saltbox
 
           def matches?(action)
             @action = action
-            Actions.within(@caller) { |fresh| @listed_only ? action.available_to?(fresh) : action.runnable_for?(fresh) }
+            Actions.within(@caller) { |fresh| @listed_only ? action.listed_for?(fresh) : action.runnable_for?(fresh) }
           end
 
           def failure_message = "expected #{@action.action_name} to be #{verb} for #{@caller.surface}, but it is not"
@@ -261,11 +261,11 @@ module Saltbox
         # Passes when the caller may run the action: listed for them, and not barred by `agents`.
         #
         # @example
-        #   expect(described_class).not_to be_runnable_by(as_assistant(manager))
-        def be_runnable_by(caller) = BeRunnableBy.new(caller, listed_only: false)
+        #   expect(described_class).not_to be_runnable_for(as_assistant(manager))
+        def be_runnable_for(caller) = BeRunnableFor.new(caller, listed_only: false)
 
         # Passes when the actions list shows the action to the caller.
-        def be_listed_for(caller) = BeRunnableBy.new(caller, listed_only: true)
+        def be_listed_for(caller) = BeRunnableFor.new(caller, listed_only: true)
       end
     end
   end

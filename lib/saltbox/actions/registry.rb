@@ -329,7 +329,7 @@ module Saltbox
       #   for this caller, from one fresh check of the caller
       def self.catalog(caller)
         Actions.within(caller) do |fresh|
-          actions.select { |action| action.available_to?(fresh) }
+          actions.select { |action| action.listed_for?(fresh) }
             .map { |action| action.definition(fresh).merge("runnable" => fresh.agent_allowed?(action)) }
         end
       end

@@ -33,8 +33,8 @@ RSpec.describe "Schemas for the caller, on every surface", type: :request do
   it "lists each caller's own fields in tools, find_action, the actions list and the catalog" do
     expect(Saltbox::Actions::FrontDoor.tools(as_mcp(note_keeper)).map(&:name)).to include("find_action")
     found = ->(user) { Saltbox::Actions::FrontDoor.find("add an event", as_mcp(user))[:actions].find { it[:name] == "create_event" } }
-    expect(found.call(note_keeper)[:arguments]["properties"]).to have_key("notes")
-    expect(found.call(manager)[:arguments]["properties"]).not_to have_key("notes")
+    expect(found.call(note_keeper)[:input_schema]["properties"]).to have_key("notes")
+    expect(found.call(manager)[:input_schema]["properties"]).not_to have_key("notes")
     expect(Saltbox::Actions::FrontDoor.list(as_mcp(manager), page: 1, page_size: 50)[:actions]).not_to be_empty
     entry = Saltbox::Actions::Registry.catalog(as_screen(note_keeper)).find { it["name"] == "create_event" }
     expect(entry.dig("input_schema", "properties")).to have_key("notes")

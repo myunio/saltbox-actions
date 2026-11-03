@@ -1241,7 +1241,10 @@ Agents see a short list of tools, not one per action:
 - `run_read_action`, `run_change_action` and `run_destructive_action`, to run
   what `find_action` found.
 
-`find_action` marks each action `confirm_first` when it is declared
+Each match `find_action` gives with a query carries the action's `input_schema`
+(the JSON Schema of its arguments, with the fields this caller may send) and,
+for a list with a summary, an `output_description` of what comes back. The run
+tools take the values as `arguments`. `find_action` marks each action `confirm_first` when it is declared
 `agents :confirm`. The change tool tells the agent to ask before those
 and to go ahead with the rest, saying what it is changing. The remove tool
 always asks first.
@@ -1636,7 +1639,7 @@ expect(run({id: event.id}, as: as_mcp(manager))).to match_output_schema
 And two take the action and ask about a caller:
 
 ```ruby
-expect(described_class).to be_runnable_by(as_mcp(manager))
+expect(described_class).to be_runnable_for(as_mcp(manager))
 expect(described_class).not_to be_listed_for(as_read_only(manager))
 ```
 
@@ -1738,7 +1741,7 @@ The helper also has these checks:
 
 - `assert_invalid_against_schema(arguments)` checks raw input.
 - `assert_matches_output_schema(result)` checks the schema from `output_schema`.
-- `assert_runnable_by(caller)` and `assert_listed_for(caller)` check access.
+- `assert_runnable_for(caller)` and `assert_listed_for(caller)` check access.
 - `assert_announces_changes(event => :update) { run(...) }` checks change events.
   It needs change tracking (`include Saltbox::Actions::ChangeTracking` in
   `ApplicationRecord`) or PaperTrail.
