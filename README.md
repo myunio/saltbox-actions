@@ -806,11 +806,11 @@ carries, which travels with the job: its token (`caller.connection`), or
 the person (`caller.user`) when each person belongs to one organization.
 
 A back-office action that works across tenants turns the tenant off for
-its run. `around_invocation` sees only the caller, so do it in `around_run`,
+its run. `around_invocation` sees only the caller, so do it in `around_perform`,
 which sees the action:
 
 ```ruby
-config.around_run do |invocation, run|
+config.around_perform do |invocation, run|
   next run.call unless invocation.action.outer_namespace == ["admin"]
   ActsAsTenant.without_tenant { run.call }
 end
@@ -1540,7 +1540,7 @@ ids.each { Saltbox::Actions::Invocation.note("Event", it, "update") }
 
 `on_changes` runs before commit. If the caller's own transaction later
 rolls back, the changes it heard of are undone; do anything outside the
-database in `after_change`.
+database in `after_change_commit`.
 
 Using another audit gem, such as Audited or Logidze? Skip the concern and
 note each entry it writes yourself:
@@ -1564,7 +1564,7 @@ and each version can record the agent and surface:
 Rails.application.config.after_initialize { Saltbox::Actions::PaperTrail.install! }
 
 Saltbox::Actions.configure do |config|
-  config.around_run do |invocation, run|
+  config.around_perform do |invocation, run|
     Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.call }
   end
 end
@@ -1821,7 +1821,7 @@ Saltbox::Actions.configure do |config|
   config.on_changes { |changes, invocation| EventLog.record(changes, invocation.caller) }
 
   # Run something once the change has committed. Never runs on rollback.
-  config.after_change { |invocation, result| }
+  config.after_change_commit { |invocation, result| }
 
   config.feature_enabled { |key, caller| Flipper.enabled?(key, caller.user) }
   config.permissions_held { |caller| caller.user.permission_keys }

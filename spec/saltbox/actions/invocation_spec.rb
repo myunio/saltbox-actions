@@ -139,9 +139,9 @@ RSpec.describe Saltbox::Actions::Invocation do
       expect(refusal.as_json.dig("error", "details")).to eq("area" => "events", "needs" => "change")
     end
 
-    it "runs the app's after_change hook once a change commits" do
+    it "runs the app's after_change_commit hook once a change commits" do
       seen = []
-      allow(Saltbox::Actions.config).to receive(:after_change).and_return(->(invocation, result) { seen << [invocation.action, result.status] })
+      allow(Saltbox::Actions.config).to receive(:after_change_commit).and_return(->(invocation, result) { seen << [invocation.action, result.status] })
       invoke.call("update_event", {id: event.id.to_s, title: "AGM 2026"}, as_mcp(manager))
       expect(seen).to eq([[Events::UpdateAction, 200]])
     end

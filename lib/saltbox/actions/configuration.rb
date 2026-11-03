@@ -11,7 +11,7 @@ module Saltbox
     #   Saltbox::Actions.configure do |config|
     #     config.app_name = "Acme"
     #     config.around_invocation { |caller, run| Context.within(caller) { |fresh| run.(fresh) } }
-    #     config.around_run { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
+    #     config.around_perform { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
     #     config.on_changes { |changes, invocation| publish(changes, invocation) }
     #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::Invalid.new(error.message) }
     #   end
@@ -49,9 +49,10 @@ module Saltbox
       #   unless the #confirm hook approves it; when false, agents on the API,
       #   MCP and a browser page run :confirm actions with nothing checked
       attr_accessor :enforce_confirm
-      # @return [Boolean] whether every file in action_paths is an action ending _action.rb;
-      #   when false, the actions are the base class's subclasses there, beside other files
-      attr_accessor :every_file_an_action
+      # @return [Boolean] whether every Ruby file under action_paths must define an action, in a
+      #   file ending _action.rb (true by default); when false, the actions are the base class's
+      #   subclasses there, beside other files. It checks what the folders hold, nothing more.
+      attr_accessor :strict_action_paths
       # @return [Symbol] the error body: :code ({error: {code, message, errors, details}})
       #   or :type ({error: {type, message, details}}), see Error#as_json
       attr_accessor :error_format
@@ -72,14 +73,14 @@ module Saltbox
         @max_array_items = 100
         @enforce_permissions = true
         @enforce_confirm = false
-        @every_file_an_action = true
+        @strict_action_paths = true
         @error_format = :code
         @result_format = :body
         @permissions_held = ->(_caller) { [] }
         @around_invocation = ->(caller, run) { run.call(caller) }
-        @around_run = ->(_invocation, run) { run.call }
+        @around_perform = ->(_invocation, run) { run.call }
         @on_changes = ->(_changes, _invocation) {}
-        @after_change = ->(_invocation, _result) {}
+        @after_change_commit = ->(_invocation, _result) {}
         @confirm = ->(_invocation, _action) { false }
         @on_access_refused = ->(_caller, _action) { Error::InsufficientScope.new }
         @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.fields(fields) }
@@ -119,7 +120,7 @@ module Saltbox
       #
       # @yieldparam invocation [Invocation]
       # @yieldparam run [Proc]
-      def around_run(&block) = block ? @around_run = block : @around_run
+      def around_perform(&block) = block ? @around_perform = block : @around_perform
 
       # Receives every record a change changed, inside the change's
       # transaction, so an event stored in the same database commits with it.
@@ -131,13 +132,13 @@ module Saltbox
       # Runs after a change commits, with its result: once every enclosing
       # transaction has committed, and never when one rolls back. It may run
       # after the invocation and the caller's own request context have
-      # ended (Current, around_invocation's and around_run's set-up), so it
+      # ended (Current, around_invocation's and around_perform's set-up), so it
       # sets up any context it needs itself; invocation.invocation_id and
       # invocation.caller stay readable.
       #
       # @yieldparam invocation [Invocation]
       # @yieldparam result [Result]
-      def after_change(&block) = block ? @after_change = block : @after_change
+      def after_change_commit(&block) = block ? @after_change_commit = block : @after_change_commit
 
       # Called when a caller's access (Caller#access) does not reach the
       # action. Returns the Error to raise; the place to note the refusal

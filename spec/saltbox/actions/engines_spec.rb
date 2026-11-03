@@ -23,7 +23,7 @@ RSpec.describe "Actions from an engine" do
   end
 
   it "finds the engine's actions as subclasses too, as when eager loading" do
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       registry.reset!
       expect(registry.actions).to include(Billing::Invoices::ListAction, Events::ListAction)
     ensure
@@ -78,7 +78,7 @@ RSpec.describe "Actions from an engine" do
   end
 
   it "loads each action once from overlapping folders when actions are found as subclasses" do
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       with_paths(["app/actions", Rails.root.join("app/actions"), "app/actions/event", engine_folder]) do
         expect(registry.actions.count(Events::ListAction)).to eq(1)
       end

@@ -14,7 +14,7 @@ module Saltbox
       # @return [Array<Class>] every action, sorted by name
       def self.actions
         @actions ||= begin
-          entries = Actions.config.every_file_an_action ? action_files.map { |path| action_at(path) } : descendants
+          entries = Actions.config.strict_action_paths ? action_files.map { |path| action_at(path) } : descendants
           validate!(entries)
           entries.each(&:define_record_reader)
           warn_outside(entries)
@@ -51,7 +51,7 @@ module Saltbox
       end
 
       # For an app whose action folders hold other files too
-      # (Configuration#every_file_an_action off): the base class's named
+      # (Configuration#strict_action_paths off): the base class's named
       # subclasses defined in those folders, once they are loaded.
       #
       # @return [Array<Class>]

@@ -22,9 +22,9 @@ RSpec.describe "Changes and transactions" do
     expect(event.reload.title).to eq("AGM")
   end
 
-  it "runs after_change once every enclosing transaction commits, and never on rollback" do
+  it "runs after_change_commit once every enclosing transaction commits, and never on rollback" do
     seen = []
-    allow(Saltbox::Actions.config).to receive(:after_change)
+    allow(Saltbox::Actions.config).to receive(:after_change_commit)
       .and_return(->(invocation, _) { seen << [invocation.action.action_name, ActiveRecord::Base.connection.transaction_open?] })
 
     ActiveRecord::Base.transaction do
@@ -45,9 +45,9 @@ RSpec.describe "Changes and transactions" do
     expect(seen.last).to eq(["update_event", false])
   end
 
-  it "keeps the invocation's id for an after_change deferred past its run" do
+  it "keeps the invocation's id for an after_change_commit deferred past its run" do
     ids = []
-    allow(Saltbox::Actions.config).to receive(:after_change).and_return(->(invocation, _) { ids << invocation.invocation_id })
+    allow(Saltbox::Actions.config).to receive(:after_change_commit).and_return(->(invocation, _) { ids << invocation.invocation_id })
     ActiveRecord::Base.transaction { update.call("Annual meeting") }
     expect(ids).to contain_exactly(a_string_matching(/\A\h{8}-/))
   end

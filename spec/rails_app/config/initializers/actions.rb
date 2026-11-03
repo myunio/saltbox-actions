@@ -17,7 +17,7 @@ Saltbox::Actions.configure do |config|
     caller.user.permissions
   end
   config.schema_user { |run| run.call(User.new(id: 0, permissions: :all)) }
-  config.around_run do |invocation, run|
+  config.around_perform do |invocation, run|
     Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent_name,
       surface: invocation.caller.surface, invocation_id: invocation.invocation_id) { run.call }
   end

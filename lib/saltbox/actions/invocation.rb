@@ -69,7 +69,7 @@ module Saltbox
       end
 
       # @return [String, nil] this invocation's id, from when it starts; kept
-      #   for a hook that runs after it, such as a deferred after_change
+      #   for a hook that runs after it, such as a deferred after_change_commit
       attr_reader :invocation_id
 
       # @param arguments [Hash]
@@ -141,7 +141,7 @@ module Saltbox
       end
 
       def run(action)
-        Actions.config.around_run.call(self, -> do
+        Actions.config.around_perform.call(self, -> do
           next action.perform_now if @action.kind == :read
           # Its own savepoint inside a caller's transaction, so a failure
           # undoes the action's writes even when the caller rescues it.
@@ -152,7 +152,7 @@ module Saltbox
             Actions.config.on_changes.call(changes, self)
             ActiveSupport::Notifications.instrument("changes.saltbox_actions", action: @action, caller: @caller, changes:)
             # Once the caller's transactions commit too; never on rollback.
-            ActiveRecord.after_all_transactions_commit { Actions.config.after_change.call(self, result) }
+            ActiveRecord.after_all_transactions_commit { Actions.config.after_change_commit.call(self, result) }
             result
           end
         end)

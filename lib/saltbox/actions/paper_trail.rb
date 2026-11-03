@@ -11,7 +11,7 @@ module Saltbox
     # @example config/initializers/actions.rb
     #   Saltbox::Actions::PaperTrail.install!
     #   Saltbox::Actions.configure do |config|
-    #     config.around_run do |invocation, run|
+    #     config.around_perform do |invocation, run|
     #       Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.() }
     #     end
     #   end

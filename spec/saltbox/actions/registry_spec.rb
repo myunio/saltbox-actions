@@ -26,7 +26,7 @@ RSpec.describe Saltbox::Actions::Registry do
   end
 
   it "finds the actions as the base class's subclasses when the folder holds other files too" do
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       described_class.reset!
       expect(described_class.actions).to include(Events::UpdateAction, Reports::CountEventsAction, WhoamiAction)
     ensure
@@ -118,7 +118,7 @@ RSpec.describe Saltbox::Actions::Registry do
     stub_const("Admin::Customers", Module.new)
     stray = action("Admin::Customers::ExportAction")
     allow(described_class).to receive(:descendants).and_return([stray, Events::ListAction])
-    with_settings(every_file_an_action: false) do
+    with_settings(strict_action_paths: false) do
       described_class.reset!
       expect { described_class.actions }.to raise_error(ArgumentError, "Admin::Customers::ExportAction: Admin::Customers names no model (Admin::Customer is not one): declare model, or move the action")
     ensure
