@@ -10,8 +10,9 @@ module Saltbox
     # @example
     #   Saltbox::Actions.configure do |config|
     #     config.app_name = "Acme"
+    #     config.adapters = [:pundit, :controller, :mcp, :paper_trail]
     #     config.around_invocation { |caller, run| Context.within(caller) { |fresh| run.(fresh) } }
-    #     config.around_perform { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
+    #     config.around_perform { |invocation, run| ::PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
     #     config.on_changes { |changes, invocation| publish(changes, invocation) }
     #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::ValidationFailed.new(error.message) }
     #   end
@@ -63,7 +64,12 @@ module Saltbox
       # @return [Symbol] the result body: :body (the rendered body) or :envelope ({data, meta}), see Result#as_json
       attr_accessor :result_format
 
+      # @return [Array<Symbol>] the optional adapters the app switched on (see Adapters);
+      #   none by default
+      attr_reader :adapters
+
       def initialize
+        @adapters = [].freeze
         @app_name = "the app"
         @base_class = "ApplicationAction"
         @action_paths = ActionPaths.new(["app/actions"])
@@ -95,6 +101,15 @@ module Saltbox
         @error_mappings = []
         @action_checks = []
         @registry_checks = []
+      end
+
+      # Declares the optional adapters, the one switch for each: only these
+      # load. Checked now, at boot; see Adapters.
+      #
+      # @param names [Array<Symbol>] such as [:pundit, :mcp, :paper_trail]
+      # @raise [ArgumentError, Adapters::MissingGem] naming the fix
+      def adapters=(names)
+        @adapters = Adapters.declare(names)
       end
 
       # @param paths [Enumerable<String, Pathname>] the folders actions load from, replacing the list

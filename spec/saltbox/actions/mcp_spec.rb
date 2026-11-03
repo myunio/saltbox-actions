@@ -1,6 +1,4 @@
-require "saltbox/actions/mcp"
-
-RSpec.describe Saltbox::Actions::MCP do
+RSpec.describe Saltbox::Actions::Adapters::FrontDoors::MCP do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
 
   def rpc(method, params = {}, caller: as_mcp(manager))

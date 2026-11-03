@@ -144,7 +144,7 @@ RSpec.describe "Names in the README and CHANGELOG" do
   # or Admin::EventPolicy#update? with its rule.
   it "has an example here for each policy the README and CHANGELOG name" do
     prose = docs.values.map { it.gsub(/^```.*?^```/m, "") }.join
-    named = prose.scan(/`((?:[A-Z]\w*::)*[A-Z]\w*Policy(?:#\w+\?)?)`/).flatten.uniq - ["Saltbox::Actions::Authorization::ActionPolicy"]
+    named = prose.scan(/`((?:[A-Z]\w*::)*[A-Z]\w*Policy(?:#\w+\?)?)`/).flatten.uniq - ["Saltbox::Actions::Adapters::Authorization::ActionPolicy"]
     given = examples.flat_map do |example|
       policy = example.dig(:gives, :expected_policy_name) || example[:asks]&.last
       [policy, example.dig(:gives, :policy_rule)&.then { "#{policy}##{it}" }]

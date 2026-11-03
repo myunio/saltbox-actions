@@ -6,6 +6,7 @@ require "digest"
 
 require "saltbox/actions/version"
 require "saltbox/actions/action_paths"
+require "saltbox/actions/adapters"
 require "saltbox/actions/configuration"
 require "saltbox/actions/current"
 require "saltbox/actions/error"
@@ -38,12 +39,18 @@ module Saltbox
   # into the app runs the same class: the screens, a JSON API, the CLI, MCP
   # for AI agents, and an in-app assistant.
   #
-  # The app's base class inherits from Base and picks an authorization
-  # adapter, the way a controller includes Pundit:
+  # The app's base class inherits from Base. The optional parts (an
+  # authorization library, the JSON API, MCP, an audit trail) are adapters,
+  # each switched on by name in the one configure block; the base class then
+  # includes the declared authorization adapter itself:
+  #
+  # @example config/initializers/actions.rb
+  #   Saltbox::Actions.configure do |config|
+  #     config.adapters = [:pundit, :controller, :mcp]
+  #   end
   #
   # @example
   #   class ApplicationAction < Saltbox::Actions::Base
-  #     include Saltbox::Actions::Authorization::Pundit
   #   end
   #
   #   class Events::UpdateAction < ApplicationAction
@@ -54,16 +61,9 @@ module Saltbox
   #   end
   #
   # What the app decides (its name, its tenancy, its audit trail, how a
-  # change is announced) goes in one configure block; see Configuration.
+  # change is announced) goes in the same configure block; see Configuration
+  # and Adapters.
   module Actions
-    # Adapters, loaded when first named, so an app needs only the gems of
-    # those it uses.
-    autoload :Controller, "saltbox/actions/controller"
-    autoload :MCP, "saltbox/actions/mcp"
-    autoload :RubyLLMTool, "saltbox/actions/ruby_llm"
-    autoload :PaperTrail, "saltbox/actions/paper_trail"
-    autoload :InvocationJob, "saltbox/actions/invocation_job"
-
     class << self
       # @return [Configuration]
       def config = @config ||= Configuration.new

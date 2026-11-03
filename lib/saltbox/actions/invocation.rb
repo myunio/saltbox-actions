@@ -45,7 +45,7 @@ module Saltbox
 
       # Notes one changed record. ChangeTracking calls it for each record
       # saved or destroyed, and an audit trail may call it for each entry it
-      # writes (see Saltbox::Actions::PaperTrail). A note is dropped if the
+      # writes (see the :paper_trail adapter). A note is dropped if the
       # transaction it was made in rolls back. Outside a collection it does
       # nothing.
       #

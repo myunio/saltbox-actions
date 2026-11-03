@@ -1,6 +1,4 @@
-require "saltbox/actions/ruby_llm"
-
-RSpec.describe Saltbox::Actions::RubyLLMTool do
+RSpec.describe Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
 
   it "gives the chat the tools its person may run, each with the front door's schema" do

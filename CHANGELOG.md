@@ -2,6 +2,32 @@
 
 ## 0.1.0 (unreleased)
 
+### Optional adapters, declared in one list
+
+**Breaking.** What is optional is now in one folder and switched on in one place:
+
+- Everything optional moved under `lib/saltbox/actions/adapters/`, grouped by job, and each
+  constant follows its path: `front_doors/` (`Controller`, `MCP`, `RubyLLMTool`,
+  `InvocationJob`), `authorization/` (`Pundit`, `ActionPolicy`, and the `Policies` they
+  share), `audit/` (`PaperTrail`) and `testing/` (`RSpec`, `Minitest`, formerly `TestHelper`).
+  `Saltbox::Actions::MCP` is now `Saltbox::Actions::Adapters::FrontDoors::MCP`, and so on.
+  Everything outside `adapters/` is core and always loads.
+- `config.adapters = [:pundit, :mcp, :paper_trail]` declares the adapters an app uses; only
+  those load. The names are each adapter's file name: `:pundit`, `:action_policy`,
+  `:controller`, `:mcp`, `:ruby_llm_tool`, `:invocation_job`, `:paper_trail`. The boot refuses
+  an unknown name, two authorization adapters, and a declared adapter whose gem is not in the
+  bundle, naming the gem to add. Code that uses an undeclared adapter raises
+  `Saltbox::Actions::Adapters::NotDeclared`, naming the line to add. The `autoload`s are gone.
+- The declaration is the one switch. The app's base class (`config.base_class`) includes the
+  declared authorization adapter as it is defined, so remove `include
+  Saltbox::Actions::Authorization::Pundit` from it. Declaring `:paper_trail` installs its
+  version hook, so remove the `after_initialize { ...PaperTrail.install! }` line.
+  `perform_later` needs `:invocation_job`.
+- The test helpers are required, not declared: `require "saltbox/actions/adapters/testing/rspec"`
+  or `require "saltbox/actions/adapters/testing/minitest"`.
+- `rails g actions:install` writes `config/initializers/actions.rb` with every adapter listed
+  and commented out, each with what it does and the gem it needs.
+
 ### Fixes from the 1.0 review
 
 **Breaking.** Each changes what an app may already rely on:

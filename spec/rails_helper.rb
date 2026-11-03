@@ -7,9 +7,6 @@ require "pundit"
 require "action_policy"
 require "paper_trail"
 require "saltbox/actions"
-require "saltbox/actions/authorization/pundit"
-require "saltbox/actions/authorization/action_policy"
-require "saltbox/actions/controller"
 
 require_relative "rails_app/engines/billing/lib/billing"
 
@@ -20,8 +17,12 @@ Combustion.initialize! :active_record, :action_controller, :action_view, :active
   config.eager_load = false
 end
 
+# The suite tests both authorization adapters. An app declares one, and the
+# dummy app declares :pundit, so the ActionPolicy specs use this one directly.
+require "saltbox/actions/adapters/authorization/action_policy"
+
 require "rspec/rails"
-require "saltbox/actions/rspec"
+require "saltbox/actions/adapters/testing/rspec"
 
 Dir[File.expand_path("support/**/*.rb", __dir__)].each { require it }
 

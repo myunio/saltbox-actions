@@ -10,8 +10,8 @@ RSpec.configure do |config|
   config.include Users
   # The gem's own specs use the helpers too; specs under spec/actions get
   # them from `type: :action`, as an app's do.
-  config.include Saltbox::Actions::RSpec::Helpers, file_path: %r{/spec/(saltbox|requests)/}
-  config.include Saltbox::Actions::RSpec::Matchers, file_path: %r{/spec/(saltbox|requests)/}
+  config.include Saltbox::Actions::Adapters::Testing::RSpec::Helpers, file_path: %r{/spec/(saltbox|requests)/}
+  config.include Saltbox::Actions::Adapters::Testing::RSpec::Matchers, file_path: %r{/spec/(saltbox|requests)/}
 end
 
-Saltbox::Actions::RSpec.config.spec_root = File.expand_path("../actions", __dir__)
+Saltbox::Actions::Adapters::Testing::RSpec.config.spec_root = File.expand_path("../actions", __dir__)
