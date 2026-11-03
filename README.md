@@ -1855,7 +1855,7 @@ small Rails app in `spec/rails_app`, with Pundit and ActionPolicy:
 bundle install
 bundle exec rake             # RSpec and Minitest
 bundle exec standardrb
-bundle exec rake dump      # rewrite the test app's actions.json
+bundle exec rake dump        # rewrite the test app's actions.json
 ```
 
 ## License
