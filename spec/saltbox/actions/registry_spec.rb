@@ -35,7 +35,10 @@ RSpec.describe Saltbox::Actions::Registry do
   end
 
   it "finds an action other actions inherit from, as it does in strict folders, leaving out only the base class's own files" do
-    parent = action("Events::ArchiveAction") { kind :change; policy_rule :update? }
+    parent = action("Events::ArchiveAction") {
+      kind :change
+      policy_rule :update?
+    }
     child = Class.new(parent) { define_singleton_method(:name) { "Events::ArchiveAllAction" } }
     shared = action("Events::ApplicationAction") { kind :read }
     root = Rails.root.join("app/actions")
@@ -161,7 +164,12 @@ RSpec.describe Saltbox::Actions::Registry do
   end
 
   it "refuses a name a tool cannot have: one of the gem's own tools, other characters, or more than 64 characters" do
-    named = ->(name) { action("Reports::PeekAction") { action_name name; kind :read } }
+    named = ->(name) {
+      action("Reports::PeekAction") {
+        action_name name
+        kind :read
+      }
+    }
     expect { described_class.validate!([named.call("find_action")]) }
       .to raise_error(ArgumentError, "Reports::PeekAction: find_action is one of the gem's own tools (find_action, run_read_action, run_change_action, run_destructive_action): declare another action_name")
     expect { described_class.validate!([named.call("run_change_action")]) }.to raise_error(ArgumentError, /run_change_action is one of the gem's own tools/)

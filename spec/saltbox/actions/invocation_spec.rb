@@ -69,6 +69,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     let(:create) do
       Class.new(ApplicationAction) do
         def self.name = "Venues::CreateAction"
+
         def perform
           venue = authorize(policy_scope(Venue).new(org_id: 1, **permitted_attributes(Venue)))
           render json: {id: venue.tap(&:save!).id}
@@ -180,6 +181,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect { described_class.call(action: unasked, caller: as_screen(stranger)) }.to raise_error(Pundit::AuthorizationNotPerformedError)
     asked = Class.new(unasked) do
       def self.name = "ListEventsAction"
+
       def perform
         authorize Event, :index?
         super

@@ -2,6 +2,35 @@
 
 ## 0.1.0 (unreleased)
 
+### Fixes from the 1.0 review
+
+**Breaking.** Each changes what an app may already rely on:
+
+- A list action with no model must call `authorize` (or `skip_authorization`), as every other
+  action does. Its role was never asked before `perform`, so any caller with the read scope
+  could run it. A list action on a model still needs only `policy_scope`.
+- A `belongs_to` with `foreign_key:` is taken under its association's name and looked up
+  through the person's scope: `belongs_to :account, foreign_key: :organization_id` takes
+  `account`, no longer `organization_id` as a plain value. A foreign key that no one scope can
+  check (polymorphic, part of a composite key, or shared by two associations) fails
+  `rails actions:check`.
+- A callable `default:` is filled in before the schema check and checked as if sent, as a
+  literal one is: a callable returning `"lots"` for an integer is refused, no longer cast to 0.
+  `invocation.arguments`, which the `confirm` hook sees, holds every default.
+- The boot refuses an action name over 64 characters, with characters other than letters,
+  digits, `_` and `-`, or that is one of the gem's own tools (`find_action`, `run_read_action`,
+  `run_change_action`, `run_destructive_action`).
+- A time of day is `00:00` to `23:59`: `24:00` and `99:99` are refused.
+- With `strict_action_paths` off, an action other actions inherit from is an action, as in
+  strict folders. Only `application_action.rb` files and `application_action/` folders hold
+  base classes and shared code.
+
+**Fixed:**
+
+- ActionPolicy gets the context from `authorization_context_for` in every check, inside
+  `perform` too, so a policy that declares `authorize :tenant` works once the action runs.
+- With `result_format = :envelope`, a body of `null` is sent as `{"data": null}`, not `{}`.
+
 ### Names and defaults before 1.0
 
 These names are the ones 1.0 keeps. Each rename is breaking and has no alias: an app on an
