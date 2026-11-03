@@ -1244,7 +1244,9 @@ Agents see a short list of tools, not one per action:
 Each match `find_action` gives with a query carries the action's `input_schema`
 (the JSON Schema of its arguments, with the fields this caller may send) and,
 for a list with a summary, an `output_description` of what comes back. The run
-tools take the values as `arguments`. `find_action` marks each action `confirm_first` when it is declared
+tools take the values as `arguments`.
+
+`find_action` marks each action `confirm_first` when it is declared
 `agents :confirm`. The change tool tells the agent to ask before those
 and to go ahead with the rest, saying what it is changing. The remove tool
 always asks first.
