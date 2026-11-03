@@ -6,8 +6,6 @@ require "jbuilder"
 require "pundit"
 require "paper_trail"
 require "saltbox/actions"
-require "saltbox/actions/authorization/pundit"
-require "saltbox/actions/controller"
 
 require_relative "../spec/rails_app/engines/billing/lib/billing"
 
@@ -18,6 +16,6 @@ Combustion.initialize! :active_record, :action_controller, :action_view, :active
 end
 
 require "rails/test_help"
-require "saltbox/actions/test_helper"
+require "saltbox/actions/adapters/testing/minitest"
 
 Rails.application.load_generators

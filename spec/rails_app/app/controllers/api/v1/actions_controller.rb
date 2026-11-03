@@ -3,7 +3,7 @@ module Api
     # The catalog and run endpoint. A test token names the user; a real
     # app resolves an OAuth bearer here.
     class ActionsController < ApplicationController
-      include Saltbox::Actions::Controller
+      include Saltbox::Actions::Adapters::FrontDoors::Controller
 
       USERS = {
         "manager" => {id: 1, permissions: %w[events.view events.manage events.delete]},

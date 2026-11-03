@@ -1,8 +1,8 @@
 require "test_helper"
-require "saltbox/actions/test_helper"
+require "saltbox/actions/adapters/testing/minitest"
 
 class <%= action_class_name %>Test < ActiveSupport::TestCase
-  include Saltbox::Actions::TestHelper
+  include Saltbox::Actions::Adapters::Testing::Minitest
 
   tests <%= action_class_name %>
 

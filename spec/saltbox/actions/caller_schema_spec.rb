@@ -44,7 +44,7 @@ RSpec.describe "Schemas for the caller, on every surface", type: :request do
   it "serves MCP tools/list and the API's actions list" do
     env = Rack::MockRequest.env_for("http://dummy.test/mcp", :method => "POST", "CONTENT_TYPE" => "application/json",
       "HTTP_ACCEPT" => "application/json, text/event-stream", :input => {jsonrpc: "2.0", id: 1, method: "tools/list", params: {}}.to_json)
-    status, _, body = Saltbox::Actions::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
+    status, _, body = Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
     expect(status).to eq(200)
     expect(JSON.parse(body.each.to_a.join).dig("result", "tools").pluck("name")).to include("find_action")
     get "/api/v1/actions", headers: {"Authorization" => "Bearer manager"}

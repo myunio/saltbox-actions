@@ -1,6 +1,3 @@
-require "saltbox/actions/mcp"
-require "saltbox/actions/ruby_llm"
-
 RSpec.describe "Caller.system" do
   include ActiveJob::TestHelper
 
@@ -68,22 +65,22 @@ RSpec.describe "Caller.system" do
         "HTTP_ACCEPT" => "application/json, text/event-stream",
         :input => {jsonrpc: "2.0", id: 1, method: "tools/call", params: {name: "run_change_action",
                                                                          arguments: {name: "update_event", arguments: {id: event.id.to_s, title: "X"}}}}.to_json)
-      expect { Saltbox::Actions::MCP.call(env, caller: system, name: "dummy", allowed_hosts: ["dummy.test"]) }
+      expect { Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller: system, name: "dummy", allowed_hosts: ["dummy.test"]) }
         .to raise_error(ArgumentError, /MCP and the assistant refuses Caller.system/)
-      expect { Saltbox::Actions::MCP.invoke("run_change_action", {"name" => "update_event", "arguments" => {"id" => event.id.to_s, "title" => "X"}}, system) }
+      expect { Saltbox::Actions::Adapters::FrontDoors::MCP.invoke("run_change_action", {"name" => "update_event", "arguments" => {"id" => event.id.to_s, "title" => "X"}}, system) }
         .to raise_error(ArgumentError)
       expect(event.reload.title).to eq("AGM")
     end
 
     it "is refused by the assistant's tools" do
-      expect { Saltbox::Actions::RubyLLMTool.for(system) }.to raise_error(ArgumentError, /Caller.system/)
+      expect { Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool.for(system) }.to raise_error(ArgumentError, /Caller.system/)
     end
   end
 end
 
 # A controller whose current_caller wrongly returns the system caller.
 class SystemCallerActionsController < ActionController::API
-  include Saltbox::Actions::Controller
+  include Saltbox::Actions::Adapters::FrontDoors::Controller
 
   private
 

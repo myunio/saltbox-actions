@@ -4,6 +4,39 @@
 once, as one class, and serve it to your screens, a JSON API, AI agents over
 MCP and an in-app chat assistant.**
 
+## What it needs
+
+The core needs only Rails and `json_schemer`, and always loads. Everything
+else is an optional adapter, under `lib/saltbox/actions/adapters/`, that
+loads only when your app switches it on:
+
+| Part | Gem it needs | Switch it on |
+|---|---|---|
+| Core: actions, checks, catalog, generators | `rails` (8.0+), `json_schemer` | Always on |
+| Pundit authorization | `pundit` | `:pundit` in `config.adapters` |
+| ActionPolicy authorization | `action_policy` | `:action_policy` in `config.adapters` |
+| JSON API controller | none | `:controller` in `config.adapters` |
+| MCP server for AI agents | `mcp` | `:mcp` in `config.adapters` |
+| Tools for an in-app RubyLLM chat | `ruby_llm` | `:ruby_llm_tool` in `config.adapters` |
+| Running an action later (`perform_later`) | none (Active Job) | `:invocation_job` in `config.adapters` |
+| PaperTrail versions as changes | `paper_trail` | `:paper_trail` in `config.adapters` |
+| RSpec helpers and matchers | `rspec-rails` | `require "saltbox/actions/adapters/testing/rspec"` in `spec/rails_helper.rb` |
+| Minitest helpers | none | `require "saltbox/actions/adapters/testing/minitest"` in `test/test_helper.rb` |
+
+`config.adapters` is one list in `config/initializers/actions.rb`:
+
+```ruby
+Saltbox::Actions.configure do |config|
+  config.adapters = [:pundit, :controller, :mcp, :paper_trail]
+end
+```
+
+An adapter you declare without its gem stops the boot, naming the gem to
+add. Code that uses an adapter you did not declare raises
+`Saltbox::Actions::Adapters::NotDeclared`, naming the line to add. Action
+views render with any Rails template handler: the examples use Jbuilder,
+which a new Rails app already has.
+
 ## Why
 
 A Rails app used to have one way in: its screens. Now people also reach it
@@ -82,7 +115,7 @@ class McpEndpoint
 
     caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp",
       agent_name: token.client_name, scopes: token.scopes)
-    Saltbox::Actions::MCP.call(env, caller:, name: "events", allowed_hosts: ["events.example.com"])
+    Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller:, name: "events", allowed_hosts: ["events.example.com"])
   end
 end
 ```
@@ -123,30 +156,32 @@ RubyGems yet, so install it from GitHub and pin a commit:
 ```ruby
 # Gemfile
 gem "saltbox-actions", github: "myunio/saltbox-actions", ref: "<commit sha>"
-gem "jbuilder"   # action views; a new Rails app already has it. Not needed if you render json: from a serializer
-gem "pundit"     # optional: or gem "action_policy", or neither
 ```
 
-Add these too, but only for the parts you use:
+Add the gem of each optional part you use (see [What it needs](#what-it-needs)),
+then write the initializer:
 
-| Gem | Needed for |
-|---|---|
-| `mcp` | Serving actions to AI agents over MCP |
-| `ruby_llm` | Tools for an in-app chat assistant |
-| `paper_trail` | The audit trail helper and the `change_audit_trail` matcher |
+```sh
+bin/rails g actions:install
+```
 
-Then make a base class for your actions. If you use Pundit or ActionPolicy,
-include its adapter:
+It writes `config/initializers/actions.rb` with every adapter listed and
+commented out, each with what it does and the gem it needs. Uncomment the
+ones you use.
+
+Then make a base class for your actions:
 
 ```ruby
 # app/actions/application_action.rb
 class ApplicationAction < Saltbox::Actions::Base
-  include Saltbox::Actions::Authorization::Pundit   # or ::ActionPolicy
 end
 ```
 
-With no adapter, every action is allowed and `rails actions:check` asks for no
-policy. To use your own rules, see [Authorization](#authorization).
+It needs no `include`: declaring `:pundit` or `:action_policy` includes the
+adapter in `Saltbox::Actions::Base`, so every action has it, an engine's own
+base class too, whenever it was defined and after each reload. With neither, every action is allowed and
+`rails actions:check` asks for no policy. To use your own rules, see
+[Authorization](#authorization).
 
 To hear about the records each change writes (see `on_changes` under
 Configuration), include change tracking in your models:
@@ -183,14 +218,21 @@ gem "pundit"
 gem "mcp"
 ```
 
-Run `bundle install`, then `bin/rails g pundit:install`.
+Run `bundle install`, then `bin/rails g pundit:install` and
+`bin/rails g actions:install`.
 
-**2. Make the base class.**
+**2. Switch on the adapters and make the base class.**
+
+```ruby
+# config/initializers/actions.rb
+Saltbox::Actions.configure do |config|
+  config.adapters = [:pundit, :mcp]
+end
+```
 
 ```ruby
 # app/actions/application_action.rb
 class ApplicationAction < Saltbox::Actions::Base
-  include Saltbox::Actions::Authorization::Pundit
 end
 ```
 
@@ -286,15 +328,13 @@ end
 
 ```ruby
 # app/endpoints/mcp_endpoint.rb
-require "saltbox/actions/mcp"
-
 class McpEndpoint
   def call(env)
     token = AccessToken.find_by_bearer(env["HTTP_AUTHORIZATION"])
     return [401, {"www-authenticate" => "Bearer"}, []] unless token
 
     caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name)
-    Saltbox::Actions::MCP.call(env, caller:, name: "tasks", allowed_hosts: ["tasks.example.com"])
+    Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller:, name: "tasks", allowed_hosts: ["tasks.example.com"])
   end
 end
 ```
@@ -358,7 +398,7 @@ next request gets `401`.
 
 ```ruby
 # spec/rails_helper.rb, after require "rspec/rails"
-require "saltbox/actions/rspec"
+require "saltbox/actions/adapters/testing/rspec"
 ```
 
 ```ruby
@@ -677,8 +717,6 @@ inflections:
 ```ruby
 # app/actions/application_action.rb
 class ApplicationAction < Saltbox::Actions::Base
-  include Saltbox::Actions::Authorization::Pundit
-
   define_verb :cancel, :publish, kind: :change, on: :member
   define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
   define_verb :void, kind: :destructive, on: :member, agents: :never
@@ -1026,8 +1064,8 @@ In the base class, `define_verb` adds verbs (see Names and verbs) and
 ### Running an action from your code
 
 `perform_now` runs an action through the same checks every surface uses,
-and returns its result. `perform_later` runs it as an Active Job, as the
-same caller:
+and returns its result. With `:invocation_job` declared, `perform_later`
+runs it as an Active Job, as the same caller:
 
 ```ruby
 caller = ApplicationAction::Caller.screen(current_user)
@@ -1096,8 +1134,6 @@ record's summary instead:
 ```ruby
 # app/actions/application_action.rb
 class ApplicationAction < Saltbox::Actions::Base
-  include Saltbox::Actions::Authorization::Pundit
-
   summary Event, :id, :title, :starts_on, status: ->(event) { event.status.humanize }
 end
 ```
@@ -1229,12 +1265,18 @@ folder is added.
 
 ## Adapters
 
-Each adapter loads only when you first use it, so you add only the gems you
-need.
+Each adapter loads only when `config.adapters` lists it, so you add only the
+gems you need (see [What it needs](#what-it-needs)). They live under
+`lib/saltbox/actions/adapters/`, grouped by job: `front_doors/` (the JSON
+API, MCP, RubyLLM tools, the job that runs an action later),
+`authorization/` (Pundit, ActionPolicy), `audit/` (PaperTrail) and
+`testing/` (the RSpec and Minitest helpers). Each constant follows its path:
+`adapters/front_doors/mcp.rb` is `Saltbox::Actions::Adapters::FrontDoors::MCP`.
 
 ### JSON API
 
-Include `Saltbox::Actions::Controller` and say who is calling:
+Declare `:controller`, include `Saltbox::Actions::Adapters::FrontDoors::Controller`
+and say who is calling:
 
 ```ruby
 # config/routes.rb
@@ -1248,7 +1290,7 @@ end
 
 # app/controllers/api/v1/actions_controller.rb
 class Api::V1::ActionsController < ActionController::API
-  include Saltbox::Actions::Controller
+  include Saltbox::Actions::Adapters::FrontDoors::Controller
 
   private
 
@@ -1277,8 +1319,8 @@ action does; the response's ETag is of this caller's list.
 
 ### MCP
 
-`Saltbox::Actions::MCP.call` answers one MCP request over stateless HTTP,
-using the `mcp` gem. Your app keeps its own credential check, as in the
+With `:mcp` declared, `Saltbox::Actions::Adapters::FrontDoors::MCP.call`
+answers one MCP request over stateless HTTP, using the `mcp` gem. Your app keeps its own credential check, as in the
 example at the top.
 
 Agents see a short list of tools, not one per action:
@@ -1307,13 +1349,13 @@ those areas first.
 
 ### In-app assistant
 
-`Saltbox::Actions::RubyLLMTool` turns the same tools into RubyLLM tools for a
-chat:
+With `:ruby_llm_tool` declared, `Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool`
+turns the same tools into RubyLLM tools for a chat:
 
 ```ruby
 caller = ApplicationAction::Caller.assistant(current_user)
 chat.with_instructions(Saltbox::Actions::RecordData::NOTE)
-chat.with_tools(*Saltbox::Actions::RubyLLMTool.for(caller))
+chat.with_tools(*Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool.for(caller))
 ```
 
 Each tool returns its result as text marked as record data (see Text from
@@ -1362,21 +1404,26 @@ What it does not do:
 
 ### Authorization
 
-`Saltbox::Actions::Authorization::Pundit` asks your Pundit policies.
+Declare one authorization adapter; `Saltbox::Actions::Base` includes it, so
+every action has it. Declaring both is refused at boot. An action authorized
+by anything else, such as a class that includes the other adapter itself, is
+refused when it is run, before it performs.
+
+`:pundit` (`Saltbox::Actions::Adapters::Authorization::Pundit`) asks your
+Pundit policies.
 `Events::UpdateAction` asks `EventPolicy#update?`, and its input takes the
 fields from the policy's `permitted_attributes`.
 
-`Saltbox::Actions::Authorization::ActionPolicy` does the same with
-ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
+`:action_policy` (`Saltbox::Actions::Adapters::Authorization::ActionPolicy`)
+does the same with ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
 the model's fields. The policy's authorization context is `{user:}`. A
 policy that declares more, such as `authorize :tenant`, gets it from one
 class method, used for every check before and during `perform`:
 
 ```ruby
+# config/initializers/actions.rb: config.adapters = [:action_policy]
 class ApplicationAction < Saltbox::Actions::Base
-  include Saltbox::Actions::Authorization::ActionPolicy
-
   def self.authorization_context_for(user) = {user:, tenant: user.organization}
 end
 ```
@@ -1520,8 +1567,9 @@ note is `not_found`. Leave the owner (`user`) out of `accepts`.
 
 #### Writing your own adapter
 
-An adapter is a concern your base class includes. Define the methods your
-rules need; the rest keep the allow-everything defaults.
+An adapter of your own is a concern your base class includes; leave
+`:pundit` and `:action_policy` out of `config.adapters`. Define the methods
+your rules need; the rest keep the allow-everything defaults.
 
 | Method | Where | Answers |
 |---|---|---|
@@ -1627,19 +1675,23 @@ model's transaction: `transaction: Entry.current_transaction`.
 
 ### PaperTrail
 
-With PaperTrail, every version an action writes is also noted as a change,
-and each version can record the agent and surface:
+With `:paper_trail` declared, every version an action writes is also noted
+as a change. To have each version record the person, the agent and the
+surface, wrap each run in a PaperTrail request:
 
 ```ruby
 # config/initializers/actions.rb
-Rails.application.config.after_initialize { Saltbox::Actions::PaperTrail.install! }
-
 Saltbox::Actions.configure do |config|
+  config.adapters = [:pundit, :paper_trail]
+
   config.around_perform do |invocation, run|
-    Saltbox::Actions::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.call }
+    Saltbox::Actions::Adapters::Audit::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.call }
   end
 end
 ```
+
+The wrapper stays yours to write: what each version records depends on the
+columns your `versions` table has, and `Caller.system`'s user has no id.
 
 Each keyword after `invocation` goes to PaperTrail's `controller_info`, so a
 richer agent stamp (the machine, the connection) goes there, with a column on
@@ -1647,10 +1699,11 @@ richer agent stamp (the machine, the connection) goes there, with a column on
 
 ## Testing with RSpec
 
-Load the helpers in `spec/rails_helper.rb`:
+Load the helpers in `spec/rails_helper.rb`, as `pundit/rspec` is loaded.
+They are not declared in `config.adapters`:
 
 ```ruby
-require "saltbox/actions/rspec"
+require "saltbox/actions/adapters/testing/rspec"
 ```
 
 Specs under `spec/actions/` get `type: :action`, and `described_class` is the
@@ -1674,7 +1727,7 @@ result.as_json  # => the same; with :envelope, {"data" => {"event" => {...}}, "m
 a factory for each surface:
 
 ```ruby
-Saltbox::Actions::RSpec.configure do |config|
+Saltbox::Actions::Adapters::Testing::RSpec.configure do |config|
   config.caller_for(:mcp) do |user, scopes:|
     token = ApiToken.create!(user:, scopes:)
     ApplicationAction::Caller.new(user:, surface: "mcp", agent_name: "Test agent", scopes: token.scopes)
@@ -1764,10 +1817,11 @@ to date.
 
 ## Testing with Minitest
 
-Load the helper in `test/test_helper.rb`:
+Load the helper in `test/test_helper.rb`. It is not declared in
+`config.adapters`:
 
 ```ruby
-require "saltbox/actions/test_helper"
+require "saltbox/actions/adapters/testing/minitest"
 ```
 
 Include it in each action test and name the action with `tests`, as
@@ -1776,7 +1830,7 @@ own fixtures or records for the person and event:
 
 ```ruby
 class Events::UpdateActionTest < ActiveSupport::TestCase
-  include Saltbox::Actions::TestHelper
+  include Saltbox::Actions::Adapters::Testing::Minitest
 
   tests Events::UpdateAction
 
@@ -1803,7 +1857,7 @@ end
 ```
 
 All seven caller helpers work as they do in RSpec. Set your own factories
-with `Saltbox::Actions::TestHelper.configure` and `config.caller_for`.
+with `Saltbox::Actions::Adapters::Testing::Minitest.configure` and `config.caller_for`.
 Factories run in the test, so they can use fixtures and test helpers.
 Pass `action:` to `run_action` to call a different class or action name.
 `run_action` leaves Minitest's own `run` alone.
@@ -1827,7 +1881,7 @@ Put the registry check in one test:
 
 ```ruby
 class ActionRegistryTest < ActiveSupport::TestCase
-  include Saltbox::Actions::TestHelper
+  include Saltbox::Actions::Adapters::Testing::Minitest
 
   test "all actions are checked" do
     assert_valid_action_registry
@@ -1841,6 +1895,7 @@ details. A missing refusal, wrong code or missing field fails the test.
 ### Generators
 
 ```sh
+bin/rails g actions:install                        # write config/initializers/actions.rb
 bin/rails g action Events::Update                  # a verb from the table
 bin/rails g action Events::Archive --kind change   # any other verb, on one record
 bin/rails g action Events::Import --kind change --no-member   # one that works on no one record
@@ -1855,7 +1910,7 @@ your app's fixtures or records. No factory gem or role names are required.
 A singular name, `Event::Update`, writes the same files.
 
 First it checks the action the way `rails actions:check` will: the model, the
-policy and its rule (when the base class has an adapter), and the fields. On
+policy and its rule (when an authorization adapter is declared), and the fields. On
 a problem it writes nothing, prints the fix and exits 1. If the catalog
 step fails after that, it puts back every file it wrote or changed.
 
@@ -1887,6 +1942,9 @@ you need:
 ```ruby
 # config/initializers/actions.rb
 Saltbox::Actions.configure do |config|
+  # The optional adapters to load (see What it needs).
+  config.adapters = [:pundit, :controller, :mcp]
+
   config.app_name = "Events"   # used in tool titles and default messages
   # Sent to MCP agents after the gem's sentence on record data.
   config.instructions = "Events keeps a team's events. Use find_action for anything not listed."

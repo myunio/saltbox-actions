@@ -1,6 +1,3 @@
-require "saltbox/actions/mcp"
-require "saltbox/actions/ruby_llm"
-
 # Every JSON value an action renders reaches each surface as that value,
 # marked as record data; only a response with no body (head) is "Done.".
 RSpec.describe "Response bodies on every surface" do
@@ -26,12 +23,12 @@ RSpec.describe "Response bodies on every surface" do
 
   def mcp_text(body)
     serving(body)
-    Saltbox::Actions::MCP.invoke("run_read_action", {"name" => "answer"}, as_mcp(manager)).to_h.dig(:content, 0, :text)
+    Saltbox::Actions::Adapters::FrontDoors::MCP.invoke("run_read_action", {"name" => "answer"}, as_mcp(manager)).to_h.dig(:content, 0, :text)
   end
 
   def assistant_answer(body)
     serving(body)
-    tool = Saltbox::Actions::RubyLLMTool.for(as_assistant(manager)).find { it.name == "run_read_action" }
+    tool = Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool.for(as_assistant(manager)).find { it.name == "run_read_action" }
     tool.call(name: "answer")
   end
 

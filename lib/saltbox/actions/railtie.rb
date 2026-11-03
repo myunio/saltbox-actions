@@ -44,6 +44,7 @@ module Saltbox
       end
 
       config.after_initialize do |app|
+        Adapters.install!
         # Rake tasks skip the boot check: rails actions:check runs every
         # check, and a broken action must not stop db:migrate.
         rake_task = defined?(Rake.application) && Rake.application.top_level_tasks.any?

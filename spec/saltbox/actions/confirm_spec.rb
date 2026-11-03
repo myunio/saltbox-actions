@@ -1,5 +1,3 @@
-require "saltbox/actions/mcp"
-
 # Configuration#enforce_confirm, the confirm hook and Caller#confirm!.
 RSpec.describe "Confirming a :confirm action" do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
@@ -178,7 +176,7 @@ RSpec.describe "Confirming a :confirm action" do
         :input => {jsonrpc: "2.0", id: 1, method: "tools/call",
                    params: {name: "run_change_action", arguments: {name: "cancel_event", arguments: {id: event.id.to_s}}}}.to_json)
       body = with_settings(enforce_confirm: true) do
-        _, _, rack_body = Saltbox::Actions::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
+        _, _, rack_body = Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
         JSON.parse(rack_body.each.to_a.join)
       end
       expect(body.dig("result", "isError")).to be(true)
