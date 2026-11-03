@@ -64,6 +64,16 @@ RSpec.describe Saltbox::Actions::Registry do
       .to include(a_string_starting_with("Saltbox::Actions::Rendering#result is a method every action has"))
   end
 
+  it "gives a User member action its user reader, beside current_user, the person running it" do
+    stub_const("User", Class.new(ActiveRecord::Base) { self.table_name = "events" })
+    show = action("Users::ShowAction")
+    expect(show.record_reader_conflict).to be_nil
+    expect(problems(show)).not_to include(a_string_matching(/method every action has/))
+    show.define_record_reader
+    expect(show.instance_method(:user).owner).to be_a(Saltbox::Actions::Base::RecordReader)
+    expect(show.instance_method(:current_user).owner).to eq(Saltbox::Actions::Base)
+  end
+
   it "takes the record's id as a cli argument of an action that declares attribute :id" do
     archive = action("Events::ArchiveAction") do
       kind :change
