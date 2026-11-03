@@ -315,7 +315,10 @@ module Saltbox
       # - filters(table): each filter's input name and JSON schema, as a Hash;
       # - search?(table): whether the table takes a search;
       # - query(table, user:, params:): the person's records, searched, sorted and filtered;
-      # - metadata(table, user:, params:): what the view sends about the table.
+      # - metadata(table, user:, params:): what the view sends about the table;
+      # - list_meta(pagination, metadata): what a list sends agents beside its
+      #   summaries; metadata is nil for a list with no table, or an agent
+      #   that did not ask for it.
       #
       # @param adapter [Object, String]
       attr_writer :list_adapter

@@ -31,7 +31,9 @@
 - `config.list_adapter` connects the gem to the app's paging and table
   libraries. `paginate(records)` pages a list and sets `@pagination`;
   `table` declares a list's paging, sort, search and filters from one of the
-  app's tables, and `table_index` runs it.
+  app's tables, and `table_index` runs it, sending an agent the table's
+  metadata only when it asks with `include_filters`. `list_meta` is what a
+  list sends agents beside its summaries.
 - `paginated` takes its defaults from `config.page_size` (25) and
   `config.max_page_size` (100).
 

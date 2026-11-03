@@ -1226,7 +1226,7 @@ Your screens may list records through a table library of your own: one
 definition of a list's search, sort, filters and columns. A list action can
 use the same table, so agents search and filter the way the screen does.
 `config.list_adapter` connects the gem to your table and paging libraries.
-It answers five methods:
+It answers six methods:
 
 ```ruby
 # app/actions/list_adapter.rb
@@ -1246,6 +1246,10 @@ module ListAdapter
 
   # What the view sends about the table, such as its columns.
   def self.metadata(table, user:, params:) = table.new(user:, params:).metadata
+
+  # What a list sends agents beside its summaries. metadata is nil for a
+  # list with no table, or an agent that did not ask for it.
+  def self.list_meta(pagination, metadata) = {pagination:, table: metadata}.compact
 end
 
 # config/initializers/saltbox_actions.rb
@@ -1253,8 +1257,11 @@ config.list_adapter = "ListAdapter"
 ```
 
 `table` declares the paging inputs, `sort`, `search` when the table takes
-one, and one input per filter, checked against the filter's schema.
-`table_index` runs the table, which does its own scoping, and pages it:
+one, `include_filters`, and one input per filter, checked against the
+filter's schema. `table_index` runs the table, which does its own scoping,
+and pages it. A table's metadata can run to kilobytes, so a screen always
+gets it and an agent only when it sends `include_filters` as true.
+`list_meta` is what the list sends agents beside its summaries:
 
 ```ruby
 class Events::ListAction < ApplicationAction
@@ -1262,7 +1269,7 @@ class Events::ListAction < ApplicationAction
 
   def perform
     @events, @table, @pagination = table_index
-    render :index
+    render :index, meta: list_meta
   end
 end
 ```

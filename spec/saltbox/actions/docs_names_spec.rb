@@ -128,11 +128,11 @@ RSpec.describe "Names in the README and CHANGELOG" do
   end
 
   # A name in backticks, quotes or a path; file names (update_action.rb),
-  # Active Record methods (update_all) and settings (list_adapter) are not
+  # Active Record methods (update_all) and settings and helpers (list_adapter, list_meta) are not
   # action names.
   it "has an example here for each action name the README and CHANGELOG give" do
     named = docs.values.join.scan(/[`"\/]((?:#{ApplicationAction.verbs.keys.join("|")})_[a-z_]+)\b/).flatten.uniq
-    named = named.grep_v(/_action(_spec|_test)?\z/) - %w[update_all delete_all insert_all update_column list_adapter]
+    named = named.grep_v(/_action(_spec|_test)?\z/) - %w[update_all delete_all insert_all update_column list_adapter list_meta]
     expect(named - examples.filter_map { it.dig(:gives, :action_name) }).to eq([])
   end
 

@@ -6,8 +6,12 @@ module Saltbox
     # (Configuration#list_adapter).
     # - `table` gives a list action the search, sort and filters of one of
     #   the app's tables, the same table its screen shows, and its paging;
-    # - `table_index` runs them;
-    # - `paginate` pages a list that has no table (declare `paginated`).
+    # - `table_index` runs them. The table's metadata, such as every filter
+    #   with its values, can run to kilobytes: a screen always gets it, an
+    #   agent only when it sends include_filters as true;
+    # - `paginate` pages a list that has no table (declare `paginated`);
+    # - `list_meta` is the paging and table metadata a list sends agents
+    #   beside its summaries.
     #
     # @example
     #   class Events::ListAction < ApplicationAction
@@ -15,7 +19,7 @@ module Saltbox
     #
     #     def perform
     #       @events, @table, @pagination = table_index
-    #       render :index
+    #       render :index, meta: list_meta
     #     end
     #   end
     module Lists
@@ -23,10 +27,13 @@ module Saltbox
 
       # The attribute type that holds each filter's JSON type.
       FILTER_TYPES = {"array" => :array, "string" => :string, "object" => :hash}.freeze
+      # The input an agent sends as true to get the table's metadata with the page.
+      METADATA_ARGUMENT = :include_filters
 
       class_methods do
         # Declares the paging inputs, sort, search when the table takes one,
-        # and one input per filter, each with the filter's JSON schema.
+        # METADATA_ARGUMENT, and one input per filter, each with the
+        # filter's JSON schema.
         #
         # @param table [Object] the app's table, as Configuration#list_adapter knows it
         # @return [void]
@@ -38,6 +45,7 @@ module Saltbox
           adapter = Actions.config.list_adapter!
           attribute :search, :string if adapter.search?(table)
           attribute :sort, :string
+          attribute METADATA_ARGUMENT, :boolean, description: "Send true to get the table's filters, with the values each takes, and its sorts"
           adapter.filters(table).each do |key, schema|
             attribute key, FILTER_TYPES.fetch(schema["type"]), description: schema["description"]
             validates key, inclusion: {in: schema["enum"]}, allow_nil: true if schema["enum"]
@@ -51,7 +59,8 @@ module Saltbox
       # One page of the table's records, with its metadata and the page, as
       # the app's screen gets them. The table does its own scoping.
       #
-      # @return [Array(Object, Hash, Object)] the records, the table's metadata and the pagination
+      # @return [Array(Object, Hash, Object)] the records, the table's metadata (nil for an agent
+      #   that did not send METADATA_ARGUMENT as true) and the pagination
       # @raise [ArgumentError] when the action declares no table
       # @api public
       def table_index
@@ -61,8 +70,16 @@ module Saltbox
         filters = adapter.filters(table).keys.to_h { [it.to_s, public_send(it)] }.compact
         params = {"search" => (search if respond_to?(:search)), "sort" => sort, "filter" => filters.presence}.compact
         records = paginate(adapter.query(table, user: current_user, params:))
-        [records, adapter.metadata(table, user: current_user, params:), @pagination]
+        @table_metadata = adapter.metadata(table, user: current_user, params:) if !current_caller.agent? || public_send(METADATA_ARGUMENT)
+        [records, @table_metadata, @pagination]
       end
+
+      # What a list sends agents beside its summaries, as the app's list
+      # adapter builds it from the page and the table's metadata.
+      #
+      # @return [Hash]
+      # @api public
+      def list_meta = Actions.config.list_adapter!.list_meta(@pagination, @table_metadata)
 
       # One page of the collection, from the page and page_size inputs
       # (`paginated`); sets @pagination for the view.

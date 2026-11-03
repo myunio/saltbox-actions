@@ -18,6 +18,8 @@ RSpec.describe Saltbox::Actions::Lists do
 
       def self.metadata(table, user:, params:) = {"table" => table.to_s, "params" => params}
 
+      def self.list_meta(pagination, metadata) = {"pagination" => pagination, "table" => metadata}.compact
+
       def self.paginate(collection, page:, page_size:) = [collection.offset((page - 1) * page_size).limit(page_size).to_a, {"page" => page, "page_size" => page_size}]
     end
   end
@@ -29,7 +31,7 @@ RSpec.describe Saltbox::Actions::Lists do
 
       def perform
         records, table, pagination = table_index
-        render json: {"titles" => records.map(&:title), "table" => table, "pagination" => pagination}, collection: records
+        render json: {"titles" => records.map(&:title), "table" => table, "pagination" => pagination, "meta" => list_meta}, collection: records, meta: list_meta
       end
     end
   end
@@ -46,7 +48,7 @@ RSpec.describe Saltbox::Actions::Lists do
 
   it "declares paging, sort, search and one input per filter, with the filter's schema" do
     schema = list.input_schema.fetch("properties")
-    expect(schema.keys).to contain_exactly("page", "page_size", "search", "sort", "status", "starts")
+    expect(schema.keys).to contain_exactly("page", "page_size", "search", "sort", "include_filters", "status", "starts")
     expect(schema.fetch("status")).to include("type" => "string", "enum" => %w[draft published cancelled])
     expect(schema.fetch("page_size")).to include("default" => 25)
   end
@@ -55,9 +57,16 @@ RSpec.describe Saltbox::Actions::Lists do
     %w[AGM Picnic Party].each { Event.create!(org_id: 1, title: it) }
     Event.create!(org_id: 1, title: "Gala", status: "published")
     body = run.call(search: "P", page_size: 1, page: 2)
-    expect(body).to eq("titles" => ["Party"], "table" => {"table" => "events", "params" => {"search" => "P"}},
-      "pagination" => {"page" => 2, "page_size" => 1})
+    table = {"table" => "events", "params" => {"search" => "P"}}
+    pagination = {"page" => 2, "page_size" => 1}
+    expect(body).to eq("titles" => ["Party"], "table" => table, "pagination" => pagination, "meta" => {"pagination" => pagination, "table" => table})
     expect(run.call(status: "published")["titles"]).to eq(["Gala"])
+  end
+
+  it "sends an agent the table's metadata only when it asks" do
+    agent = ->(arguments) { Saltbox::Actions::Invocation.call(action: list, caller: as_mcp(manager), arguments:) }
+    expect(agent.call({}).meta).not_to have_key("table")
+    expect(agent.call(include_filters: true).meta).to include("table" => {"table" => "events", "params" => {}})
   end
 
   it "refuses a filter value outside its enum or schema" do
