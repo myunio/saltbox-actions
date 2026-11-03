@@ -522,8 +522,9 @@ association's name (`parent`, not `parent_id`) and is looked up through the
 person's scope. The association is found by its foreign key, so
 `belongs_to :account, foreign_key: :organization_id` takes `account`. A
 foreign key that no one scope can check (polymorphic, part of a composite
-key, or shared by two associations) fails `rails actions:check`: take that
-record in an attribute instead. `perform` reads them with `permitted_attributes(record)`.
+key, or shared by two associations), or whose `primary_key:` is not the
+record's id, fails `rails actions:check`: take that record in an attribute
+instead. `perform` reads them with `permitted_attributes(record)`.
 With no authorization adapter, list them with `accepts` (see below).
 
 **Attributes.** Any other input is an Active Model attribute. `perform`
@@ -545,7 +546,11 @@ out, since agents often send it for a field they skip.
 A `default:` is a value, listed in the schema, or a callable giving one
 each call (`default: -> { Date.current }`). Either is filled in before the
 schema check, as if the caller had sent it, so a default the schema refuses
-fails the call instead of being cast.
+fails the call instead of being cast. It is sent as its type sends it: a
+`:time` as `"HH:MM"`, a `:date` as `"2026-11-03"`, and a `:datetime` in the
+app's time zone to the microsecond. A `validate_arguments` override calls
+`super`, which fills the defaults in; one that skips it and leaves a default
+out raises an `ArgumentError` when the action runs.
 
 Validations are the action's checks. They run on every call, after the
 schema check and before the action runs. A failure is refused as
