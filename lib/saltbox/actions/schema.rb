@@ -141,12 +141,15 @@ module Saltbox
         # @api private
         def declared_input = input_for(accepted_fields.any? ? permitted_keys(nil) : [])
 
-        # Checks a caller's input before the action runs. Override it in the
-        # app's base class to check input another way.
+        # Checks a caller's input before the action runs, and fills in each
+        # attribute's default. Override it in the app's base class to check
+        # input another way; an override that does not call super fills in
+        # the defaults itself, since the action takes its attributes only
+        # from what this returns.
         #
         # @param arguments [Hash, nil]
         # @param caller [Caller]
-        # @return [Hash] the input the action is built from
+        # @return [Hash] the input the action is built from, every default filled in
         # @raise [Error::ValidationFailed]
         # @raise [Error::Forbidden] naming each field of the model the caller may not set
         # @api public

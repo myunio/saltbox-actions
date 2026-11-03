@@ -95,6 +95,11 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
     expect(Saltbox::Actions::Registry.problems(show)).to eq([])
   end
 
+  it "refuses ActionPolicy's authorize macro, whose context the checks before perform would never see" do
+    expect { Class.new(PolicyAction) { authorize :tenant, through: :current_tenant } }
+      .to raise_error(ArgumentError, /authorize :tenant would reach only the checks inside perform: override authorization_context_for/)
+  end
+
   it "gives the policy the same context everywhere: the role check, the schema, authorize, scopes and references" do
     stub_const("TenantPolicies::EventPolicy", Class.new(ActionPolicy::Base) {
       authorize :user

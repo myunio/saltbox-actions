@@ -16,7 +16,9 @@
   `rails actions:check`.
 - A callable `default:` is filled in before the schema check and checked as if sent, as a
   literal one is: a callable returning `"lots"` for an integer is refused, no longer cast to 0.
-  `invocation.arguments`, which the `confirm` hook sees, holds every default.
+  `invocation.arguments`, which the `confirm` hook sees, holds every default. An app that
+  overrides `validate_arguments` without calling `super` fills in the defaults itself: the
+  action takes its attributes only from what it returns.
 - The boot refuses an action name over 64 characters, with characters other than letters,
   digits, `_` and `-`, or that is one of the gem's own tools (`find_action`, `run_read_action`,
   `run_change_action`, `run_destructive_action`).
@@ -29,6 +31,9 @@
 
 - ActionPolicy gets the context from `authorization_context_for` in every check, inside
   `perform` too, so a policy that declares `authorize :tenant` works once the action runs.
+  ActionPolicy's own `authorize :tenant, through:` macro on an action class is refused with an
+  `ArgumentError` naming `authorization_context_for`, since the checks before `perform` would
+  never see it. This is breaking for an app that used the macro.
 - With `result_format = :envelope`, a body of `null` is sent as `{"data": null}`, not `{}`.
 
 ### Names and defaults before 1.0

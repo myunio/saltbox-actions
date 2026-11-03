@@ -55,10 +55,22 @@ module Saltbox
           def authorization_context = @_authorization_context ||= self.class.authorization_context_for(current_user)
         end
 
+        # In place of ActionPolicy's `authorize :tenant, through:` class
+        # macro, whose context the role check and the input schema would
+        # never see. Extended after ActionPolicy's, so it wins.
+        module ContextMacro
+          # @raise [ArgumentError] always, naming authorization_context_for
+          def authorize(key, **)
+            raise ArgumentError, "#{name || "An action"}: authorize #{key.inspect} would reach only the checks inside perform: " \
+              "override authorization_context_for, which every check uses"
+          end
+        end
+
         included do
           include ::ActionPolicy::Behaviour
           include Namespace
           include Policies
+          extend ContextMacro
         end
 
         class_methods do

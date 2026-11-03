@@ -1371,6 +1371,9 @@ class ApplicationAction < Saltbox::Actions::Base
 end
 ```
 
+ActionPolicy's own `authorize :tenant, through:` macro is refused on an
+action class: the checks before `perform` would never see what it adds.
+
 An action in a module its model is not in asks that module's policy, as
 Pundit's `authorize [:admin, event]` does. `Admin::Events::UpdateAction`
 asks `Admin::EventPolicy#update?`: before any record loads, when it loads
