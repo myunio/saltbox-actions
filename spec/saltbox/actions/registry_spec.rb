@@ -147,6 +147,17 @@ RSpec.describe Saltbox::Actions::Registry do
       .to raise_error(ArgumentError, /Action names must be unique: list_events \(Events::ListAction, Events::ListUpcomingAction\)\. To fix: declare action_name/)
   end
 
+  it "refuses a name a tool cannot have: one of the gem's own tools, other characters, or more than 64 characters" do
+    named = ->(name) { action("Reports::PeekAction") { action_name name; kind :read } }
+    expect { described_class.validate!([named.call("find_action")]) }
+      .to raise_error(ArgumentError, "Reports::PeekAction: find_action is one of the gem's own tools (find_action, run_read_action, run_change_action, run_destructive_action): declare another action_name")
+    expect { described_class.validate!([named.call("run_change_action")]) }.to raise_error(ArgumentError, /run_change_action is one of the gem's own tools/)
+    expect { described_class.validate!([named.call("count.events")]) }
+      .to raise_error(ArgumentError, "Reports::PeekAction: count.events is not a tool name, which is 1 to 64 letters, digits, _ and -: declare another action_name")
+    expect { described_class.validate!([named.call("a" * 65)]) }.to raise_error(ArgumentError, /#{"a" * 65} is not a tool name/)
+    expect(described_class.validate!([named.call("a" * 64)])).to be_nil
+  end
+
   it "keeps a back-office action apart from the public one, by its outer namespace" do
     admin = action("Admin::Events::ListAction")
     expect(described_class.validate!([admin, Events::ListAction])).to be_nil

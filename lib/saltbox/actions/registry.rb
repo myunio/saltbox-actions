@@ -118,8 +118,8 @@ module Saltbox
         constant
       end
 
-      # The boot checks: what each action declares, and that names are
-      # unique. Nothing here touches the database.
+      # The boot checks: what each action declares, that each name can be a
+      # tool's, and that names are unique. Nothing here touches the database.
       #
       # @param entries [Array<Class>]
       # @return [void]
@@ -128,7 +128,7 @@ module Saltbox
       def self.validate!(entries)
         # Each action's own checks come first: a name the others need, such
         # as a model's, may be the problem.
-        problems = entries.flat_map { |action| problems(action, declared_only: true).map { "#{action.name}: #{it}" } }
+        problems = entries.flat_map { |action| [*name_problem(action), *problems(action, declared_only: true)].map { "#{action.name}: #{it}" } }
         raise ArgumentError, problems.join("\n") if problems.any?
         unique!(entries, "Action names", "declare action_name on one, or give one engine's action path a namespace") { [it.action_name] }
         unique!(entries, "CLI commands", "declare cli on one, or give one engine's action path a namespace") do |action|
@@ -195,6 +195,21 @@ module Saltbox
         return problems if declared_only
         problems.concat(model_problems(action)) unless unmodelled
         problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
+      end
+
+      # Every action's name is a tool's on MCP and in the assistants: the
+      # run tools take it, and a featured action is a tool of its own.
+      #
+      # @param action [Class]
+      # @return [String, nil] what stops its name being a tool's, and the fix
+      # @api private
+      def self.name_problem(action)
+        name = action.action_name
+        if FrontDoor::RESERVED.include?(name)
+          "#{name} is one of the gem's own tools (#{FrontDoor::RESERVED.join(", ")}): declare another action_name"
+        elsif !name.match?(FrontDoor::NAME)
+          "#{name} is not a tool name, which is 1 to #{FrontDoor::MAX_NAME_LENGTH} letters, digits, _ and -: declare another action_name"
+        end
       end
 
       # @param action [Class]

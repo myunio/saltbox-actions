@@ -1205,6 +1205,10 @@ module in its name, so a namespace would be added to it
 
 Names and CLI commands must be unique. Two engines with an `Invoice`
 model need a namespace each, or the boot stops and names both classes.
+Every name is also a tool name on MCP and in the assistants, so the boot
+stops for a name longer than 64 characters, one with characters other than
+letters, digits, `_` and `-`, or one of the gem's own tools (`find_action`
+and the `run_*_action` tools).
 
 An action's spec can live in the app's `spec/actions` or in the engine's
 own `spec/actions` folder (`test/actions` with Minitest).
