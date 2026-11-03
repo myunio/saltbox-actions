@@ -115,7 +115,7 @@ class McpEndpoint
 
     caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp",
       agent_name: token.client_name, scopes: token.scopes)
-    Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller:, name: "events", allowed_hosts: ["events.example.com"])
+    Saltbox::Actions::Adapters::EntryPoints::MCP.call(env, caller:, name: "events", allowed_hosts: ["events.example.com"])
   end
 end
 ```
@@ -334,7 +334,7 @@ class McpEndpoint
     return [401, {"www-authenticate" => "Bearer"}, []] unless token
 
     caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name)
-    Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller:, name: "tasks", allowed_hosts: ["tasks.example.com"])
+    Saltbox::Actions::Adapters::EntryPoints::MCP.call(env, caller:, name: "tasks", allowed_hosts: ["tasks.example.com"])
   end
 end
 ```
@@ -659,7 +659,6 @@ anything more, and whether agents may run it:
 |---|---|---|---|---|---|
 | `list` | read | no | yes | allowed | `index?` |
 | `show` | read | yes | yes | allowed | `show?` |
-| `export` | read | no | no | allowed | `export?` |
 | `create` | change | no | no | allowed | `create?` |
 | `update` | change | yes | yes | allowed | `update?` |
 | `delete` | destructive | yes | yes | confirm | `destroy?` |
@@ -720,8 +719,14 @@ class ApplicationAction < Saltbox::Actions::Base
   define_verb :cancel, :publish, kind: :change, on: :member
   define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
   define_verb :void, kind: :destructive, on: :member, agents: :never
+  define_verb :export, kind: :read, plural: true
 end
 ```
+
+`plural: true` gives a collection verb the model's plural, as `list` has:
+`Events::ExportAction` is then named `export_events` and titled "Export
+events"; without it, the name would use the singular. The `export` rows in
+the naming table above assume this line.
 
 `on: :member` is the routes' word for a verb that works on one record.
 `agents:` is the verb's own rule for agents; left out, it follows the
@@ -1267,15 +1272,15 @@ folder is added.
 
 Each adapter loads only when `config.adapters` lists it, so you add only the
 gems you need (see [What it needs](#what-it-needs)). They live under
-`lib/saltbox/actions/adapters/`, grouped by job: `front_doors/` (the JSON
+`lib/saltbox/actions/adapters/`, grouped by job: `entry_points/` (the JSON
 API, MCP, RubyLLM tools, the job that runs an action later),
 `authorization/` (Pundit, ActionPolicy), `audit/` (PaperTrail) and
 `testing/` (the RSpec and Minitest helpers). Each constant follows its path:
-`adapters/front_doors/mcp.rb` is `Saltbox::Actions::Adapters::FrontDoors::MCP`.
+`adapters/entry_points/mcp.rb` is `Saltbox::Actions::Adapters::EntryPoints::MCP`.
 
 ### JSON API
 
-Declare `:controller`, include `Saltbox::Actions::Adapters::FrontDoors::Controller`
+Declare `:controller`, include `Saltbox::Actions::Adapters::EntryPoints::Controller`
 and say who is calling:
 
 ```ruby
@@ -1290,7 +1295,7 @@ end
 
 # app/controllers/api/v1/actions_controller.rb
 class Api::V1::ActionsController < ActionController::API
-  include Saltbox::Actions::Adapters::FrontDoors::Controller
+  include Saltbox::Actions::Adapters::EntryPoints::Controller
 
   private
 
@@ -1319,7 +1324,7 @@ action does; the response's ETag is of this caller's list.
 
 ### MCP
 
-With `:mcp` declared, `Saltbox::Actions::Adapters::FrontDoors::MCP.call`
+With `:mcp` declared, `Saltbox::Actions::Adapters::EntryPoints::MCP.call`
 answers one MCP request over stateless HTTP, using the `mcp` gem. Your app keeps its own credential check, as in the
 example at the top.
 
@@ -1349,13 +1354,13 @@ those areas first.
 
 ### In-app assistant
 
-With `:ruby_llm_tool` declared, `Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool`
+With `:ruby_llm_tool` declared, `Saltbox::Actions::Adapters::EntryPoints::RubyLLMTool`
 turns the same tools into RubyLLM tools for a chat:
 
 ```ruby
 caller = ApplicationAction::Caller.assistant(current_user)
 chat.with_instructions(Saltbox::Actions::RecordData::NOTE)
-chat.with_tools(*Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool.for(caller))
+chat.with_tools(*Saltbox::Actions::Adapters::EntryPoints::RubyLLMTool.for(caller))
 ```
 
 Each tool returns its result as text marked as record data (see Text from

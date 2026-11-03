@@ -92,6 +92,9 @@ RSpec.describe "Names in the README and CHANGELOG" do
      action: "Admin::CountProjectsAction", declare: {action_name: "count_admin_projects", kind: :read}, asks: %w[Project Admin::ProjectPolicy]},
     {doc: "CHANGELOG.md", says: "`Events::TallyAction` with no model asks `Events::EventPolicy`",
      action: "Events::TallyAction", declare: {action_name: "tally_events", kind: :read}, asks: %w[Event Events::EventPolicy]},
+    {doc: "README.md", says: "`Events::ExportAction` is then named `export_events` and titled \"Export events\"",
+     action: "Events::ExportAction", model: "Event", gives: {action_name: "export_events", title: "Export events"}},
+    {doc: "CHANGELOG.md", says: "(`Events::ExportAction` is `export_events`)", action: "Events::ExportAction", model: "Event", gives: {action_name: "export_events"}},
     {doc: "CHANGELOG.md", says: "it is still `update_event`", action: "Events::UpdateAction", model: "Event", gives: {action_name: "update_event"}}
   ]
 

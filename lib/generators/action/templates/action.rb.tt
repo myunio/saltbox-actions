@@ -6,11 +6,11 @@ class <%= action_class_name %> < <%= base_class %>
 
 <% end -%>
   def perform
-<% case verb -%>
+<% case body -%>
 <% when "list" -%>
     <%= records %> = policy_scope(<%= model_name %>)
     render :index
-<% when "export" -%>
+<% when "plural" -%>
     authorize <%= model_name %>
     <%= records %> = policy_scope(<%= model_name %>)
     render :index

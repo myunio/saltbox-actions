@@ -29,7 +29,7 @@ require "saltbox/actions/change_tracking"
 require "saltbox/actions/registry"
 require "saltbox/actions/finder"
 require "saltbox/actions/record_data"
-require "saltbox/actions/front_door"
+require "saltbox/actions/agent_tools"
 require "saltbox/actions/base"
 require "saltbox/actions/railtie" if defined?(Rails::Railtie)
 

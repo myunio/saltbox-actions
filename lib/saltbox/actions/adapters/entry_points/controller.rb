@@ -1,7 +1,7 @@
 module Saltbox
   module Actions
     module Adapters
-      module FrontDoors
+      module EntryPoints
         # The catalog and the run endpoint for a JSON API: every action, on one
         # route. Include it in a controller and define #current_caller, which
         # decides who is calling from the request's credential and nothing else.
@@ -17,7 +17,7 @@ module Saltbox
         #
         # @example
         #   class Api::V1::ActionsController < ApplicationController
-        #     include Saltbox::Actions::Adapters::FrontDoors::Controller
+        #     include Saltbox::Actions::Adapters::EntryPoints::Controller
         #
         #     private
         #

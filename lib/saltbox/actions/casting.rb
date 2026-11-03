@@ -17,8 +17,9 @@ module Saltbox
     # passes but the type cannot hold.
     # @api private
     module Casting
-      INTEGER = /\A\s*[+-]?\d+\s*\z/
-      FLOAT = /\A\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*\z/
+      # Integer() and Float() also read 1_000, and Float() reads hex such as
+      # 0x1A; a form sends neither, so both stay as sent.
+      NOT_DECIMAL = /[_xX]/
       BOOLEANS = %w[1 0 t f T F true false TRUE FALSE on off ON OFF].freeze
       LOCAL_TIME = /\A(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\z/
 
@@ -46,13 +47,16 @@ module Saltbox
       def self.cast_string(value, type)
         return type.cast(value) if value.empty?
         case type.type
-        when :integer then value.match?(INTEGER) ? type.cast(value) : value
-        when :float then value.match?(FLOAT) ? type.cast(value) : value
+        when :integer then decimal(Integer(value, 10, exception: false), value)
+        when :float then decimal(Float(value, exception: false), value)
         when :boolean then BOOLEANS.include?(value) ? type.cast(value) : value
         when :datetime then local_time(value, type)
         else value
         end
       end
+
+      # @return [Numeric, String] the number read, or the value as sent
+      def self.decimal(number, value) = (number.nil? || value.match?(NOT_DECIMAL)) ? value : number
 
       # @return [String] an ISO 8601 time with its offset, as the schema takes,
       #   or the value as sent when it is not a real local date and time
@@ -104,7 +108,7 @@ module Saltbox
         end
       end
 
-      private_class_method :cast_list, :cast_string, :local_time, :temporal_json
+      private_class_method :cast_list, :cast_string, :decimal, :local_time, :temporal_json
     end
   end
 end

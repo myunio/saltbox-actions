@@ -3,8 +3,8 @@ require "mcp"
 module Saltbox
   module Actions
     module Adapters
-      module FrontDoors
-        # Serves the front door over the Model Context Protocol with the `mcp`
+      module EntryPoints
+        # Serves the agent tools over the Model Context Protocol with the `mcp`
         # gem: stateless streamable HTTP, JSON responses, one server per request
         # built for the caller its credential names. The app keeps the
         # credential check and mounts a Rack endpoint that calls MCP.call.
@@ -17,11 +17,11 @@ module Saltbox
         #     def call(env)
         #       caller = ApiToken.caller_for(env["HTTP_AUTHORIZATION"], surface: "mcp")
         #       return unauthorized unless caller
-        #       Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller:, name: "acme", allowed_hosts: [api_host])
+        #       Saltbox::Actions::Adapters::EntryPoints::MCP.call(env, caller:, name: "acme", allowed_hosts: [api_host])
         #     end
         #   end
         module MCP
-          # A server whose tool calls all go through the front door, so a name
+          # A server whose tool calls all go through the agent tools, so a name
           # cached from an earlier tools/list is checked again on every call.
           # @api private
           class Server < ::MCP::Server
@@ -37,7 +37,7 @@ module Saltbox
           # @return [Array<Class<::MCP::Tool>>] the tools this caller can discover
           # @api private
           def self.tools(caller)
-            FrontDoor.tools(caller).map do |tool|
+            AgentTools.tools(caller).map do |tool|
               ::MCP::Tool.define(name: tool.name, title: tool.title, description: tool.description,
                 input_schema: tool.input_schema, annotations: tool.annotations)
             end
@@ -49,14 +49,14 @@ module Saltbox
           # @return [::MCP::Tool::Response] the result, or the refusal as a tool error the model can read
           # @api private
           def self.invoke(name, arguments, caller)
-            # MCP requires an object even for explicit null. The front door takes
+            # MCP requires an object even for explicit null. AgentTools takes
             # nil as left out, so pass a value it refuses. Invocation still admits
             # the caller before it checks that value.
             arguments = false if arguments.nil?
-            result = FrontDoor.call(name, arguments, caller:)
+            result = AgentTools.call(name, arguments, caller:)
             # A tool result needs content, so a response with no body, such as a
             # delete's 204, becomes "Done.".
-            return ::MCP::Tool::Response.new([{type: "text", text: "Done."}]) if result.equal?(FrontDoor::EMPTY)
+            return ::MCP::Tool::Response.new([{type: "text", text: "Done."}]) if result.equal?(AgentTools::EMPTY)
             # Structured content is an object, unmarked; any other JSON value goes
             # as text alone. The text is marked as record data (see RecordData).
             ::MCP::Tool::Response.new([{type: "text", text: RecordData.wrap(result)}], structured_content: (result if result.is_a?(Hash)))

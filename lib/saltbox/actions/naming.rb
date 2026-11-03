@@ -24,9 +24,8 @@ module Saltbox
       # A token with only the read scope may run every read, so a verb's kind
       # decides what that token can do.
       VERBS = {
-        "list" => {kind: :read, member: false, idempotent: true},
+        "list" => {kind: :read, member: false, idempotent: true, plural: true},
         "show" => {kind: :read, member: true, idempotent: true},
-        "export" => {kind: :read, member: false, idempotent: false},
         "create" => {kind: :change, member: false, idempotent: false},
         "update" => {kind: :change, member: true, idempotent: true},
         "delete" => {kind: :destructive, member: true, idempotent: true}
@@ -34,8 +33,6 @@ module Saltbox
       # Rails verbs, and the verb actions use instead. An action named with the
       # Rails verb stops the boot: Events::DestroyAction must be Events::DeleteAction.
       RAILS_SPELLINGS = {"destroy" => "delete", "index" => "list", "edit" => "update", "new" => "create", "get" => "show"}.freeze
-      # Verbs whose tool name uses the model's plural: list_events, not list_event.
-      PLURAL_VERBS = %w[list export].freeze
       # The policy rule each verb asks. A verb not listed asks the rule of
       # its own name: archive asks archive?.
       VERB_RULES = {"list" => :index?, "show" => :show?, "create" => :create?, "update" => :update?, "delete" => :destroy?}.freeze
@@ -60,14 +57,17 @@ module Saltbox
         # @param idempotent [Boolean] whether running it again with the same input changes nothing more
         # @param agents [Symbol, nil] the verb's agents rule (see Declarations#agents);
         #   left out, its kind's
+        # @param plural [Boolean] whether its name and title use the model's plural,
+        #   as list does: export_events, not export_event
         # @return [void]
         # @raise [ArgumentError] for an unknown kind, on: or agents rule, or a Rails spelling
         #
         # @example In ApplicationAction
         #   define_verb :archive, kind: :change, on: :member, idempotent: true
         #   define_verb :void, kind: :destructive, on: :member, agents: :never
+        #   define_verb :export, kind: :read, plural: true
         # @api public
-        def define_verb(*names, kind:, on: :collection, idempotent: false, agents: nil)
+        def define_verb(*names, kind:, on: :collection, idempotent: false, agents: nil, plural: false)
           raise ArgumentError, "define_verb #{names.join(", ")}: kind is :read, :change or :destructive, not #{kind.inspect}" unless KINDS.include?(kind)
           raise ArgumentError, "define_verb #{names.join(", ")}: on is :member or :collection, not #{on.inspect}" unless ON.include?(on)
           if agents && !Declarations::AGENT_RULES.include?(agents)
@@ -76,7 +76,8 @@ module Saltbox
           names = names.map(&:to_s)
           spelled = names.select { RAILS_SPELLINGS.key?(it) }
           raise ArgumentError, "#{spelled.map { "#{it} is spelled #{RAILS_SPELLINGS[it]}" }.join(", ")} in actions" if spelled.any?
-          rule = {kind:, member: on == :member, idempotent:, agents:}.compact.freeze
+          raise ArgumentError, "define_verb #{names.join(", ")}: plural is for a verb on: :collection" if plural && on == :member
+          rule = {kind:, member: on == :member, idempotent:, agents:, plural: (true if plural)}.compact.freeze
           self.verbs = verbs.merge(names.to_h { [it, rule] }).freeze
         end
 
@@ -91,6 +92,10 @@ module Saltbox
         # @return [Boolean] whether the verb is in the verb table
         # @api private
         def table_verb? = verbs.key?(verb)
+
+        # @return [Boolean] whether the verb names the model's plural, as list does
+        # @api private
+        def plural_verb? = verbs.dig(verb, :plural) == true
 
         # @return [Boolean] whether the class name has words after the verb, as ShowHistoryAction does
         # @api private
@@ -112,7 +117,7 @@ module Saltbox
         end
 
         # The action's name in the API, MCP and the actions list: the verb, the
-        # model (plural for list and export), then any other action words.
+        # model (plural for list, and for a verb defined with plural: true), then any other action words.
         # An app whose names are already public declares one instead, and
         # the naming rules no longer apply: the action declares its kind,
         # and its model if it has one.
@@ -123,7 +128,7 @@ module Saltbox
         def action_name(value = nil)
           return @declared_name = value.to_s if value
           return declared_name if declared_name
-          [verb, name_noun(plural: PLURAL_VERBS.include?(verb)), *action_words.drop(1)].compact.join("_")
+          [verb, name_noun(plural: plural_verb?), *action_words.drop(1)].compact.join("_")
         end
 
         # @return [Array<String>] the CLI command's words: the declared ones (see Declarations#cli),
@@ -279,7 +284,7 @@ module Saltbox
           noun = model&.model_name&.human&.downcase
           noun = "#{action_namespace.humanize(capitalize: false)} #{noun}" if noun && action_namespace
           noun = [*name_namespace.map { it.humanize(capitalize: false) }, noun].join(" ") if noun
-          noun = noun&.pluralize if PLURAL_VERBS.include?(verb)
+          noun = noun&.pluralize if plural_verb?
           [verb.humanize, noun, *action_words.drop(1)].compact.join(" ")
         end
 

@@ -94,6 +94,12 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     expect(destination.join("app/actions/events/postpone_action.rb").read).not_to include("kind", "attribute :id", "policy_rule")
   end
 
+  it "writes an app's plural verb, such as export, to authorize the model and render its records" do
+    stub_const("EventPolicy", Class.new(EventPolicy) { def export? = index? })
+    generate("Events::Export")
+    expect(destination.join("app/actions/events/export_action.rb").read).to include("authorize Event", "@events = policy_scope(Event)", "render :index")
+  end
+
   it "points a list action at its model's summary only when the model has none" do
     expect(generate("Events::List")).not_to include("summary Event")
     allow(ApplicationAction).to receive(:model_summaries).and_return({})

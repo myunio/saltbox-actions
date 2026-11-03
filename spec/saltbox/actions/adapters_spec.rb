@@ -74,12 +74,12 @@ RSpec.describe Saltbox::Actions::Adapters do
       output, = ruby(<<~RUBY)
         require "saltbox/actions"
         begin
-          Saltbox::Actions::Adapters::FrontDoors::MCP
+          Saltbox::Actions::Adapters::EntryPoints::MCP
         rescue Saltbox::Actions::Adapters::NotDeclared => error
           puts error.message
         end
       RUBY
-      expect(output).to include("Saltbox::Actions::Adapters::FrontDoors::MCP is an optional adapter the app has not declared: " \
+      expect(output).to include("Saltbox::Actions::Adapters::EntryPoints::MCP is an optional adapter the app has not declared: " \
         "add :mcp to config.adapters in config/initializers/actions.rb")
     end
 
@@ -170,7 +170,7 @@ RSpec.describe Saltbox::Actions::Adapters do
       require "saltbox/actions"
       Saltbox::Actions.configure { it.adapters = [:invocation_job] }
       puts defined?(ActiveJob::Base).inspect
-      puts Saltbox::Actions::Adapters::FrontDoors::InvocationJob.superclass
+      puts Saltbox::Actions::Adapters::EntryPoints::InvocationJob.superclass
     RUBY
     expect(status).to be_success, output
     expect(output.lines.map(&:strip)).to eq(["nil", "ActiveJob::Base"])

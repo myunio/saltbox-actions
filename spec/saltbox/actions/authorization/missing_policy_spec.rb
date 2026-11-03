@@ -13,7 +13,7 @@ RSpec.describe "An action whose policy is missing" do
   def mcp(method, params = {})
     env = Rack::MockRequest.env_for("http://dummy.test/mcp", :method => "POST", "CONTENT_TYPE" => "application/json",
       "HTTP_ACCEPT" => "application/json, text/event-stream", :input => {jsonrpc: "2.0", id: 1, method:, params:}.to_json)
-    _, _, body = Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
+    _, _, body = Saltbox::Actions::Adapters::EntryPoints::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
     JSON.parse(body.each.to_a.join)
   end
 
@@ -25,7 +25,7 @@ RSpec.describe "An action whose policy is missing" do
       expect(mcp("tools/list").dig("result", "tools").pluck("name")).to include("show_event", "find_action", "run_read_action")
       found = mcp("tools/call", {name: "find_action"}).dig("result", "structuredContent", "actions").pluck("name")
       expect(found).to include("list_events").and exclude("export_reports_events")
-      tools = Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool.for(as_assistant(manager))
+      tools = Saltbox::Actions::Adapters::EntryPoints::RubyLLMTool.for(as_assistant(manager))
       listed = JSON.parse(tools.find { it.name == "find_action" }.execute.delete_prefix("<record-data>\n").delete_suffix("\n</record-data>"))
       expect(listed["actions"].pluck("name")).to include("list_events").and exclude("export_reports_events")
     end
@@ -71,7 +71,12 @@ RSpec.describe "An action whose policy is missing" do
       end
     end
 
-    let(:missing) { stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) { model Event }) }
+    let(:missing) do
+      stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) {
+        define_verb :export, kind: :read, plural: true
+        model Event
+      })
+    end
     let(:missing_policy) { ActionPolicy::NotFound }
 
     it_behaves_like "left out of every list"
