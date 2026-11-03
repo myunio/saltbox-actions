@@ -23,10 +23,12 @@ module Saltbox
       end
 
       # @return [void] forgets the loaded actions, so the next call loads them again
+      # @api private
       def self.reset! = @actions = @version = nil
 
       # @return [Array<Pathname>] the folders actions load from (see Configuration#action_paths),
       #   each once however it was spelled
+      # @api private
       def self.roots = Actions.config.action_paths.map(&:root).uniq
 
       # The files in the action folders, without the base class's own file
@@ -36,6 +38,7 @@ module Saltbox
       #
       # @return [Array<String>] action file paths
       # @raise [ArgumentError] for a file in an action folder that is not an action
+      # @api private
       def self.action_files
         support = "/#{Actions.config.base_class.underscore}/"
         files = roots.flat_map do |root|
@@ -55,6 +58,7 @@ module Saltbox
       # subclasses defined in those folders, once they are loaded.
       #
       # @return [Array<Class>]
+      # @api private
       def self.descendants
         roots.select(&:directory?).each { Rails.autoloaders.main.eager_load_dir(it.to_s) }
         paths = Actions.config.action_paths
@@ -91,6 +95,7 @@ module Saltbox
 
       # @param action [Class]
       # @return [String, nil] the file that defines it
+      # @api private
       def self.source(action) = Object.const_source_location(action.name)&.first
 
       # The action class a file defines, found by the constant Zeitwerk
@@ -101,6 +106,7 @@ module Saltbox
       # @param path [String]
       # @return [Class]
       # @raise [ArgumentError] when the file does not define the action class its path names
+      # @api private
       def self.action_at(path)
         name = Rails.autoloaders.main.cpath_expected_at(path)
         constant = name.safe_constantize
@@ -118,6 +124,7 @@ module Saltbox
       # @param entries [Array<Class>]
       # @return [void]
       # @raise [ArgumentError] naming every problem with each action
+      # @api private
       def self.validate!(entries)
         # Each action's own checks come first: a name the others need, such
         # as a model's, may be the problem.
@@ -160,6 +167,7 @@ module Saltbox
       # @param action [Class]
       # @param declared_only [Boolean] only the boot checks of what the class declares
       # @return [Array<String>] what is wrong with the action, and the fix
+      # @api private
       def self.problems(action, declared_only: false)
         return named_problems(action, declared_only:) if action.declared_name
         verb = action.verb
@@ -191,6 +199,7 @@ module Saltbox
 
       # @param action [Class]
       # @return [Array<String>] what is wrong with its agents declaration
+      # @api private
       def self.agents_problems(action)
         return ["a destructive action is never agents :allowed: use :confirm, or :never"] if action.kind == :destructive && action.agents == :allowed
         []
@@ -201,6 +210,7 @@ module Saltbox
       #
       # @param action [Class]
       # @return [String, nil] the fix, for an action inside a model's namespace
+      # @api private
       def self.singular_namespace(action)
         parent = action.name.deconstantize.presence&.safe_constantize
         return unless parent.is_a?(Class) && parent < ActiveRecord::Base
@@ -210,6 +220,7 @@ module Saltbox
 
       # @param action [Class]
       # @return [Array<String>] what is wrong with the action's attributes and the fields it accepts
+      # @api private
       def self.input_problems(action)
         problems = []
         reader = action.record_name
@@ -245,6 +256,7 @@ module Saltbox
       # @param action [Class]
       # @param declared_only [Boolean]
       # @return [Array<String>]
+      # @api private
       def self.named_problems(action, declared_only: false)
         problems = []
         problems << "declare kind :read, :change or :destructive" unless action.declared_kind
@@ -257,6 +269,7 @@ module Saltbox
 
       # @param action [Class]
       # @return [String, nil] for an action under a namespace that is not a model, and no model declared, the fix
+      # @api private
       def self.not_a_model(action)
         model = action.model
         return if (action.name.deconstantize.empty? && model.nil?) || (model.is_a?(Class) && model < ActiveRecord::Base)
@@ -266,6 +279,7 @@ module Saltbox
       # @param action [Class]
       # @return [Array<String>] what is wrong with the action's model, its
       #   authorization (see Authorization#authorization_problems) and fields, and the fix
+      # @api private
       def self.model_problems(action)
         return [] if action.name.deconstantize.empty? && action.model.nil?
         model = action.model
@@ -290,6 +304,7 @@ module Saltbox
       #
       # @param action [Class] an action with a model
       # @return [Array<String>] what stops its schema being built, and the fix
+      # @api private
       def self.schema_problems(action)
         action.input_schema
         []
@@ -304,6 +319,7 @@ module Saltbox
 
       # @param action [Class] an action with a model
       # @return [Array<String>] what is wrong with its summary, and the fix
+      # @api private
       def self.summary_problems(action)
         summary = action.summary
         return [] unless summary
@@ -327,6 +343,7 @@ module Saltbox
       # @param caller [Caller]
       # @return [Array<Hash>] visible definitions, each marked runnable or not
       #   for this caller, from one fresh check of the caller
+      # @api private
       def self.catalog(caller)
         Actions.within(caller) do |fresh|
           actions.select { |action| action.listed_for?(fresh) }
@@ -336,6 +353,7 @@ module Saltbox
 
       # @return [Array<Hash>] every action's definition, as written to the catalog file:
       #   a create or update lists the fields the policy permits Configuration#schema_user
+      # @api private
       def self.definitions = actions.map(&:definition)
 
       # The version of the actions' code, for the API's meta and the MCP
@@ -344,14 +362,17 @@ module Saltbox
       # ETag instead.
       #
       # @return [String]
+      # @api private
       def self.version
         @version ||= Digest::SHA256.hexdigest(JSON.generate(actions.map { it.definition(input: it.declared_input) }))[0, 16]
       end
 
       # @return [Pathname] the committed catalog, which a spec checks matches the code
+      # @api private
       def self.catalog_path = Rails.root.join(Actions.config.catalog_path)
 
       # @return [String] the catalog file's contents for the code as it stands
+      # @api private
       def self.catalog_json = "#{JSON.pretty_generate(definitions)}\n"
 
       def self.relative(path) = Pathname(path).relative_path_from(Rails.root).to_s

@@ -52,6 +52,7 @@ module Saltbox
 
       # The surface of the app itself, running an action with no request
       # behind it.
+      # @api private
       SYSTEM = "system"
 
       # The app itself, in a job, a rake task or the console. It is not an

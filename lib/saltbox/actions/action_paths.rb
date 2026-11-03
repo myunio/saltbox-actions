@@ -26,6 +26,7 @@ module Saltbox
 
       # One folder: its path (relative to Rails.root, or absolute) and the
       # namespace its actions' names take, if any.
+      # @api private
       Path = Data.define(:path, :namespace) do
         # @return [Pathname] the folder's full path, the same however it was spelled
         def root = Rails.root.join(path.to_s).cleanpath
@@ -67,14 +68,17 @@ module Saltbox
 
       # @param file [String]
       # @return [Path, nil] the folder holding the file, the deepest when folders nest
+      # @api private
       def for(file) = select { it.covers?(file) }.max_by { it.root.to_s.length }
 
       # @param file [String] a file inside one of the folders
       # @return [Pathname] its path inside its folder: events/update_action.rb
+      # @api private
       def relative(file) = Pathname(file).relative_path_from(self.for(file).root)
 
       # @param action [Class]
       # @return [String, nil] the namespace of the folder its file is in
+      # @api private
       def namespace_for(action)
         file = action.name && Object.const_source_location(action.name)&.first
         file && self.for(file)&.namespace

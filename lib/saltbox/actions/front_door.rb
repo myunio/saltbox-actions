@@ -3,10 +3,12 @@ module Saltbox
     # The tools agents see, free of any protocol, shared by the MCP adapter
     # and the assistant tools: the `featured` actions as tools of their own,
     # find_action to search the rest, and one run tool per kind.
+    # @api private
     module FrontDoor
       # A tool as MCP clients and assistants see it: its name, title,
       # description, input schema and behavior hints (read-only, destructive,
       # idempotent).
+      # @api private
       Tool = Data.define(:name, :title, :description, :input_schema, :annotations)
       FIND = "find_action".freeze
       # How many actions find_action lists on one page when there is no query, and the most it takes.
@@ -15,6 +17,7 @@ module Saltbox
       ENTRY = "MCP and the assistant".freeze
       MAX_PAGE_SIZE = 100
       RUN = {read: "run_read_action", change: "run_change_action", destructive: "run_destructive_action"}.freeze
+      # @api private
       RUN_TEXT = {
         read: ["Look something up in %{app}",
           "Use this when find_action has found a read action for the person's request. Runs it by name with its arguments and returns its result. Changes nothing."],
@@ -74,6 +77,7 @@ module Saltbox
 
       # What FrontDoor.call returns for a response with no body, which each
       # tool adapter reports as "Done.". A JSON null is a body.
+      # @api private
       EMPTY = Object.new.freeze
 
       # @param result [Result]

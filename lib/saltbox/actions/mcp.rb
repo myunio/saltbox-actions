@@ -21,6 +21,7 @@ module Saltbox
     module MCP
       # A server whose tool calls all go through the front door, so a name
       # cached from an earlier tools/list is checked again on every call.
+      # @api private
       class Server < ::MCP::Server
         private
 
@@ -32,6 +33,7 @@ module Saltbox
 
       # @param caller [Caller]
       # @return [Array<Class<::MCP::Tool>>] the tools this caller can discover
+      # @api private
       def self.tools(caller)
         FrontDoor.tools(caller).map do |tool|
           ::MCP::Tool.define(name: tool.name, title: tool.title, description: tool.description,
@@ -43,6 +45,7 @@ module Saltbox
       # @param arguments [Hash, nil] the tool's arguments
       # @param caller [Caller]
       # @return [::MCP::Tool::Response] the result, or the refusal as a tool error the model can read
+      # @api private
       def self.invoke(name, arguments, caller)
         # MCP requires an object even for explicit null. The front door takes
         # nil as left out, so pass a value it refuses. Invocation still admits
@@ -69,6 +72,7 @@ module Saltbox
       # @param name [String] the server's name
       # @param title [String] the server's title; the app's name by default
       # @return [Server]
+      # @api private
       def self.server(caller, name:, title: Actions.config.app_name)
         Server.new(name:, title:, version: Registry.version, instructions: instructions,
           tools: tools(caller), server_context: {caller:}, capabilities: {tools: {listChanged: false}})

@@ -9,6 +9,7 @@ module Saltbox
       module Matchers
         # Runs a block, or takes a value, and gives back the Error it raised or
         # was, or nil.
+        # @api private
         module Outcome
           private
 
@@ -23,6 +24,7 @@ module Saltbox
         end
 
         # @see Matchers#be_refused
+        # @api private
         class BeRefused
           include ::RSpec::Matchers::Composable
           include Outcome
@@ -31,6 +33,7 @@ module Saltbox
 
           # @param code [Symbol, String] the error code: forbidden, human_required, not_found…
           # @return [self]
+          # @api public
           def with(code)
             @code = code.to_s
             self
@@ -61,6 +64,7 @@ module Saltbox
         end
 
         # @see Matchers#have_field_errors
+        # @api private
         class HaveFieldErrors
           include ::RSpec::Matchers::Composable
           include Outcome
@@ -83,6 +87,7 @@ module Saltbox
         end
 
         # @see Matchers#be_invalid_against_schema
+        # @api private
         class BeInvalidAgainstSchema
           include ::RSpec::Matchers::Composable
 
@@ -108,6 +113,7 @@ module Saltbox
         end
 
         # @see Matchers#match_output_schema
+        # @api private
         class MatchOutputSchema
           include ::RSpec::Matchers::Composable
 
@@ -126,18 +132,22 @@ module Saltbox
         end
 
         # @see Matchers#change_audit_trail
+        # @api private
         class ChangeAuditTrail
           include ::RSpec::Matchers::Composable
 
           def initialize = @expected = {}
 
           # @param record [ActiveRecord::Base] the record the entry is for
+          # @api public
           def on(record) = tap { @record = record }
 
           # @param user [Object] the person named on the entry
+          # @api public
           def by(user) = tap { @whodunnit = user.respond_to?(:id) ? user.id : user }
 
           # @param attributes [Hash] other columns the entry must hold, such as agent: "Claude"
+          # @api public
           def with(**attributes) = tap { @expected = attributes }
 
           def supports_block_expectations? = true
@@ -160,6 +170,7 @@ module Saltbox
         end
 
         # @see Matchers#announce_changes
+        # @api private
         class AnnounceChanges
           include ::RSpec::Matchers::Composable
 
@@ -190,6 +201,7 @@ module Saltbox
         end
 
         # @see Matchers#be_runnable_for
+        # @api private
         class BeRunnableFor
           include ::RSpec::Matchers::Composable
 

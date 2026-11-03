@@ -4,6 +4,7 @@ module Saltbox
     # (production, CI), without touching the database; adds
     # `rails actions:check` for the rest and `rails actions:dump`; and
     # points `rails g action` at the gem's generator.
+    # @api private
     class Railtie < Rails::Railtie
       # What a task that reads the models needs, said when it cannot connect.
       NEEDS_DATABASE = "reads each action's model columns and asks its policy, so it needs the app's database " \

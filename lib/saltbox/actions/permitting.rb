@@ -14,12 +14,14 @@ module Saltbox
     #
     # The app's base class may override #resolve_reference to say more. A
     # refused field is answered by Configuration#on_forbidden_fields.
+    # @api private
     module Permitting
       # @param record [ActiveRecord::Base, Class] the record, or its model for a create
       # @return [ActiveSupport::HashWithIndifferentAccess] the fields sent, keyed as the policy names them
       # @raise [ArgumentError] in an action that takes no model fields
       # @raise [Error::Forbidden] naming each field the person may not change
       # @raise [Error::ValidationFailed] for a reference to a record the person cannot pick
+      # @api public
       def permitted_attributes(record)
         unless self.class.writes_fields?
           raise ArgumentError, "#{self.class.name} takes no model fields: a create or update takes the ones its policy permits, any other action names them with accepts"
@@ -44,6 +46,7 @@ module Saltbox
       # @param field [String] the name it was sent under
       # @return [Object] the record's id
       # @raise [Error::ValidationFailed] when the person cannot see such a record
+      # @api public
       def resolve_reference(model, value, field:)
         id = model.type_for_attribute(model.primary_key).cast(value)
         found = scoped_records(model).find_by(model.primary_key => id) if id

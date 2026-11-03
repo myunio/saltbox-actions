@@ -83,6 +83,7 @@ module Saltbox
       def within(caller, &block) = config.around_invocation.call(caller, block)
 
       # @return [void] forgets the configuration; for the gem's own specs
+      # @api private
       def reset_config! = @config = nil
     end
   end

@@ -84,6 +84,7 @@ module Saltbox
         # for Event, invoice for an isolated engine's Billing::Invoice.
         #
         # @return [String, nil] nil for an action that works on no one record, or a class with no name
+        # @api private
         def record_name
           model.model_name.param_key if name && takes_id? && model.is_a?(Class) && model < ActiveRecord::Base
         end
@@ -97,6 +98,7 @@ module Saltbox
         # the action (record_reader_conflict).
         #
         # @return [void]
+        # @api private
         def define_record_reader
           return if @record_reader_defined
           superclass.define_record_reader if superclass < Base
@@ -108,6 +110,7 @@ module Saltbox
 
         # @return [Module, nil] what already answers to the record reader's name, when the
         #   gem, an adapter or Ruby does (result for a Result, params for a Params)
+        # @api private
         def record_reader_conflict
           reader = record_name
           return if reader.nil?
@@ -120,6 +123,7 @@ module Saltbox
       end
 
       # The module that holds a member action's record reader.
+      # @api private
       class RecordReader < Module
         # @param name [String] the reader's name, such as event
         def initialize(name)

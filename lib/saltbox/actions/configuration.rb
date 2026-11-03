@@ -16,7 +16,9 @@ module Saltbox
     #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::ValidationFailed.new(error.message) }
     #   end
     class Configuration
+      # @api private
       SCOPES = {read: "api:read", write: "api:write"}.freeze
+      # @api private
       SURFACES = %w[screen webmcp api mcp assistant].freeze
 
       # @return [String] the app's name in tool titles, agent instructions and default error messages
@@ -100,9 +102,11 @@ module Saltbox
       end
 
       # @return [Class] the base action class
+      # @api private
       def base = base_class.constantize
 
       # @return [Class] the renderer's class
+      # @api private
       def renderer_class = renderer.is_a?(String) ? renderer.constantize : renderer
 
       # @return [Integer]
@@ -227,6 +231,7 @@ module Saltbox
       def map_error(error_class, &block) = @error_mappings << [error_class, block]
 
       # @return [Array<Array(Class, Proc)>]
+      # @api private
       attr_reader :error_mappings
 
       # Adds a check for each action, beside the gem's own, run by
@@ -239,6 +244,7 @@ module Saltbox
       def check_action(&block) = @action_checks << block
 
       # @return [Array<Proc>]
+      # @api private
       attr_reader :action_checks
 
       # Adds a check over every action at once, run by `rails actions:check`
@@ -249,6 +255,7 @@ module Saltbox
       def check_registry(&block) = @registry_checks << block
 
       # @return [Array<Proc>]
+      # @api private
       attr_reader :registry_checks
 
       # @return [String] the scope an action of this kind needs

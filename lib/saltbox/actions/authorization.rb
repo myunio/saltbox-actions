@@ -39,6 +39,7 @@ module Saltbox
         extend ActiveSupport::Concern
 
         # Guards each action's one warning that its policy is missing.
+        # @api private
         WARNING = Mutex.new
 
         class_methods do
@@ -95,6 +96,7 @@ module Saltbox
           # reference_scope_name(model).
           #
           # @return [Array<String>] each reference field whose namespaced scope does not exist, and the fix
+          # @api private
           def reference_problems
             return [] if policy_namespace.empty?
             writable_fields.filter_map do |name, field|
@@ -215,6 +217,7 @@ module Saltbox
           def policy_missing? = false
 
           # @return [Array<String>]
+          # @api private
           def reference_problems = []
 
           # @return [Boolean] false: without an adapter, an action names its model fields with `accepts`

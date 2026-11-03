@@ -15,6 +15,7 @@ module Saltbox
       end
 
       # Carries SystemUser, Caller.system's default user, to the job.
+      # @api private
       class SystemUserSerializer < ActiveJob::Serializers::ObjectSerializer
         # @return [Hash]
         def serialize(_user) = super({})
@@ -29,6 +30,7 @@ module Saltbox
 
       # @param caller [Caller]
       # @return [Hash] what the job needs to build the caller again
+      # @api private
       def self.serialize_caller(caller) = caller.to_h.compact.merge(class: caller.class.name).deep_stringify_keys
 
       # @param action [String] the action's public name, found in the registry

@@ -11,6 +11,7 @@ module Saltbox
       class_attribute :default_status, default: :bad_request, instance_writer: false
       class_attribute :default_message, default: "Something went wrong", instance_writer: false
       # Codes whose name differs in the :type error format (Configuration#error_format).
+      # @api private
       TYPES = {"validation_failed" => "validation_error"}.freeze
 
       # @return [Hash{String=>Array<String>}, nil] field errors by input name

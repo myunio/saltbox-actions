@@ -18,6 +18,7 @@ module Saltbox
       extend ActiveSupport::Concern
 
       # What a change assertion says when it heard of nothing and nothing notes changes.
+      # @api private
       NOT_IN_USE = "Nothing notes changes: include Saltbox::Actions::ChangeTracking in ApplicationRecord, " \
         "or call Saltbox::Actions::PaperTrail.install!"
 
@@ -33,12 +34,14 @@ module Saltbox
         attr_writer :in_use
 
         # @return [Boolean] whether a model includes it, or PaperTrail's versions are noted
+        # @api private
         def in_use? = @in_use || (!Actions.autoload?(:PaperTrail) && Actions::PaperTrail.installed?)
       end
 
       # @param record [ActiveRecord::Base]
       # @param event [String]
       # @return [void]
+      # @api private
       def self.note(record, event)
         Invocation.note(record.class.polymorphic_name, record.id, event, transaction: record.class.current_transaction)
       end

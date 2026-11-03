@@ -10,6 +10,7 @@ module Saltbox
     # - a field the schema does not list;
     # - a value of the wrong type, or a number its type cannot hold;
     # - a missing required field.
+    # @api private
     class Arguments
       # @param schema [Hash] a closed JSON Schema object
       # @param name [String, nil] the action's name, used in error messages

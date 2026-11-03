@@ -22,12 +22,15 @@ module Saltbox
     # inherited, as class_attribute is: a subclass runs under its parent's
     # rules until it declares its own. What names it (action_name, title,
     # description, cli, kind, summary, output_schema) belongs to its own class.
+    # @api private
     module Declarations
       extend ActiveSupport::Concern
 
+      # @api private
       AGENT_RULES = %i[allowed confirm never].freeze
 
       included do
+        # Where the declarations are kept (internal): read them through the declarations themselves.
         class_attribute :_agents, :_declared_rule, :_idempotent, :_featured, :_feature, :_permissions,
           instance_accessor: false, instance_predicate: false
       end
@@ -47,6 +50,7 @@ module Saltbox
         #
         # @param rule [Symbol, nil] :allowed, :confirm or :never
         # @return [Symbol, nil] nil only for an action whose kind is unknown
+        # @api public
         def agents(rule = nil)
           unless rule
             return _agents if _agents
@@ -58,12 +62,14 @@ module Saltbox
         end
 
         # @return [Symbol, nil] the rule declared with `agents`, in this class or a parent
+        # @api private
         def declared_agents = _agents
 
         # Declares the kind of an action whose verb is not in the verb table.
         #
         # @param value [Symbol] :read, :change or :destructive
         # @return [Symbol]
+        # @api public
         def kind(value = nil)
           return super() unless value
           raise ArgumentError, "kind is :read, :change or :destructive, not #{value.inspect}" unless Naming::KINDS.include?(value)
@@ -71,6 +77,7 @@ module Saltbox
         end
 
         # @return [Symbol, nil] the kind declared with `kind`
+        # @api private
         def declared_kind = @declared_kind
 
         # Declares the policy rule the action asks. An action named with more
@@ -83,6 +90,7 @@ module Saltbox
         #
         # @param rule [Symbol, nil]
         # @return [Symbol, nil]
+        # @api public
         def policy_rule(rule = nil)
           return self._declared_rule = rule if rule
           declared_rule || verb_policy_rule
@@ -98,9 +106,11 @@ module Saltbox
         #
         # @param value [Boolean]
         # @return [Boolean]
+        # @api public
         def idempotent(value = true) = self._idempotent = value
 
         # @return [Boolean] the declared value; otherwise the verb's, or true for any other read
+        # @api public
         def idempotent?
           return _idempotent unless _idempotent.nil?
           verb_rule ? verb_rule.fetch(:idempotent) : kind == :read
@@ -110,9 +120,11 @@ module Saltbox
         # through find_action. Keep these to about fifteen.
         #
         # @return [void]
+        # @api public
         def featured = self._featured = true
 
         # @return [Boolean] whether the action is an MCP tool of its own
+        # @api public
         def featured? = _featured || false
 
         # The feature flag the action needs. While the flag is off for the
@@ -121,6 +133,7 @@ module Saltbox
         #
         # @param key [String, nil]
         # @return [String, nil]
+        # @api public
         def feature(key = nil)
           return _feature unless key
           Actions.config.validate_feature.call(key)
@@ -143,6 +156,7 @@ module Saltbox
         #   summary Event, :id, :title, :starts_on, full: ->(event) { event.attendees_count >= event.capacity }
         # @example In one action
         #   summary :id, :title
+        # @api public
         def summary(*fields, **computed)
           return @summary || inherited_summary if fields.empty? && computed.empty?
           return @summary = Summary.build(fields, computed) unless fields.first.is_a?(Class)
@@ -154,9 +168,11 @@ module Saltbox
         # @return [Boolean] whether agents get summaries in place of the view: an action whose class
         #   name's verb is list (Events::ListAction, or a renamed Reports::ListUpcomingAction that
         #   declares its model), with a summary
+        # @api private
         def summarizes_list? = verb == "list" && !model.nil? && !summary.nil?
 
         # @return [Hash{String => Summary}] the summaries declared here for each model, by its name
+        # @api private
         def model_summaries = @model_summaries ||= {}
 
         # Declares the whole CLI command, for an app whose commands are
@@ -169,6 +185,7 @@ module Saltbox
         # @return [Hash]
         # @raise [ArgumentError] for an args entry that is not a declared attribute, or the id
         #   of an action that works on one record
+        # @api public
         def cli(command, aliases: [], args: [])
           unknown = args.map(&:to_s) - declared_attributes.keys - (takes_id? ? ["id"] : [])
           raise ArgumentError, "cli args #{unknown.join(", ")} are not attributes of #{action_name}" if unknown.any?
@@ -176,6 +193,7 @@ module Saltbox
         end
 
         # @return [Hash, nil] the command declared with `cli`
+        # @api private
         def declared_cli = @declared_cli
 
         # Declares who may see and run the action by the permission keys
@@ -191,6 +209,7 @@ module Saltbox
         #
         # @example
         #   permission "events.manage", any_of("comments.update", "comments.delete")
+        # @api public
         def permission(*requirements)
           raise ArgumentError, "permission needs a key or :everyone" if requirements.empty?
           return self._permissions = [] if requirements == [:everyone]
@@ -199,19 +218,23 @@ module Saltbox
 
         # @param keys [Array<String, Symbol>] two or more keys
         # @return [Array<String>] one requirement met by holding any of them
+        # @api public
         def any_of(*keys)
           raise ArgumentError, "any_of needs two keys or more" if keys.size < 2
           keys.map(&:to_s).freeze
         end
 
         # @return [Array<String, Array<String>>, nil] the declared requirements, [] for everyone, nil when undeclared
+        # @api public
         def permissions = _permissions
 
         # @return [Array<String>, nil] every key the declaration names
+        # @api private
         def permission_keys = permissions&.flatten&.uniq
 
         # @param held [Array<String>] the keys a person holds
         # @return [Boolean] whether they meet every declared requirement
+        # @api private
         def permissions_met?(held) = permissions.all? { Array(it).intersect?(held) }
 
         # Declares the JSON Schema of the body the action renders, so agents
@@ -223,6 +246,7 @@ module Saltbox
         #
         # @param schema [Hash, nil]
         # @return [Hash, nil]
+        # @api public
         def output_schema(schema = nil)
           return @output_schema unless schema
           @output_schema = schema.deep_stringify_keys.freeze

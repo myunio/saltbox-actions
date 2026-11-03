@@ -17,6 +17,7 @@ module Saltbox
     # Screens get the view, or the json: sent beside collection: (a
     # serializer's, such as Alba's). Such an action always hands over its
     # records, so nothing reaches an agent around the summary.
+    # @api private
     module Rendering
       # Instance variables the base class, Active Model and the adapters set
       # for themselves; views never see them. Any starting @_ are left out too.
@@ -37,6 +38,7 @@ module Saltbox
       # @raise [AbstractController::DoubleRenderError] on a second render or head
       # @raise [ArgumentError] when a list action with a summary renders json: without collection:,
       #   or hands over no records, or another action passes collection:
+      # @api public
       def render(template = nil, status: :ok, json: NO_JSON, meta: nil, collection: NO_COLLECTION, **locals)
         raise AbstractController::DoubleRenderError if performed?
         records = summarized_records(json, collection, meta)
@@ -54,15 +56,18 @@ module Saltbox
 
       # @param status [Symbol, Integer]
       # @return [Result] a response with no body
+      # @api public
       def head(status)
         raise AbstractController::DoubleRenderError if performed?
         @_result = Result.new(status: Rack::Utils.status_code(status), body: nil, empty: true)
       end
 
       # @return [Boolean] whether render or head has run
+      # @api public
       def performed? = !@_result.nil?
 
       # @return [Result] the response, or a 204 when nothing was rendered
+      # @api public
       def result = @_result || Result.no_content
 
       private

@@ -9,16 +9,19 @@ module Saltbox
     # - the token has the scope the action needs;
     # - the person holds the permissions it declares, or, declaring none, the policy allows their role.
     # Permission on the specific record is checked again when the action runs.
+    # @api private
     module Catalog
       extend ActiveSupport::Concern
 
       class_methods do
         # @param caller [Caller]
         # @return [Boolean] whether the action's feature is on for the caller, or the action needs none
+        # @api public
         def enabled_for?(caller) = feature.nil? || Actions.config.feature_enabled.call(feature, caller)
 
         # @param caller [Caller]
         # @return [Boolean] whether the actions list shows it to this caller: its policy exists, and all four checks above
+        # @api public
         def listed_for?(caller)
           !policy_missing? && enabled_for?(caller) && caller.reaches?(self) && caller.includes_scope?(required_scope) && permitted_for?(caller)
         end
@@ -29,6 +32,7 @@ module Saltbox
         #
         # @param caller [Caller]
         # @return [Boolean]
+        # @api public
         def permitted_for?(caller)
           return permitted?(caller.user) if permissions.nil?
           permissions_met?(Actions.config.permissions_held.call(caller))
@@ -40,14 +44,17 @@ module Saltbox
         #
         # @param caller [Caller]
         # @return [Boolean]
+        # @api public
         def runnable_for?(caller) = listed_for?(caller) && caller.agent_allowed?(self)
 
         # @return [String] the token scope it needs: the read scope for a read, the write scope for anything else
+        # @api public
         def required_scope = Actions.config.scope_for(kind)
 
         # @param caller [Caller, nil] whose entry in the actions list; nil for config/actions.json
         # @param input [Schema::Input] the input it lists
         # @return [Hash] the action's entry in the actions list and in config/actions.json
+        # @api private
         def definition(caller = nil, input: input(caller))
           {"name" => action_name, "title" => title, "description" => description, "area" => area,
            "kind" => kind.to_s, "idempotent" => idempotent?, "required_scope" => required_scope, "agents" => agents.to_s,
@@ -62,6 +69,7 @@ module Saltbox
         # its id for the rest."
         #
         # @return [String, nil] nil for an action that does not send summaries
+        # @api private
         def summary_note
           return unless summarizes_list?
           note = "Returns each #{model.model_name.human.downcase}'s #{summary.names.to_sentence}."
@@ -75,6 +83,7 @@ module Saltbox
         # describes.
         #
         # @return [Hash, nil] nil for an action that does not send summaries
+        # @api public
         def summary_output_schema
           return unless summarizes_list?
           item = {"type" => "object", "properties" => summary.names.to_h { [it, summary_field_schema(it)] },
@@ -87,6 +96,7 @@ module Saltbox
 
         # @return [Array<String>] the CLI command's positional arguments: the declared ones,
         #   otherwise id when the action works on one record
+        # @api private
         def cli_args = declared_cli&.fetch(:args) || (takes_id? ? ["id"] : [])
 
         private

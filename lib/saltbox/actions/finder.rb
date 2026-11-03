@@ -11,6 +11,7 @@ module Saltbox
     # the app does not do then finds nothing, rather than an action whose
     # description happens to share one word with it; a word no action uses,
     # such as a person's name, neither helps nor hurts.
+    # @api private
     class Finder
       # Words that carry no meaning for choosing an action.
       STOP_WORDS = %w[a an and any are as at be by can could do does for from get give have how i in is it me my of on or our please show some that the this to up was we what when where which who will with would you your].to_set.freeze

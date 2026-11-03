@@ -6,6 +6,7 @@ module Saltbox
       # A surface the app does not set uses the gem's Caller, with the
       # person as its user.
       class Configuration
+        # @api private
         AGENT = "Test agent".freeze
 
         def initialize
@@ -24,6 +25,7 @@ module Saltbox
         # @param example [Object] the running example, which the factory runs in
         # @param scopes [Array<String>, nil]
         # @return [Caller]
+        # @api private
         def build(surface, user, example:, scopes: nil)
           factory = @factories[surface]
           return example.instance_exec(user, **({scopes: scopes || Actions.config.scopes.values} if token?(surface)).to_h, &factory) if factory

@@ -34,6 +34,7 @@ module Saltbox
       # @return [Array(Object, Array<Array(String, String, String)>)] the
       #   block's value and each changed record's type, id and event, once
       # @raise [ArgumentError] when a collection is already running
+      # @api private
       def self.collect_changes
         raise ArgumentError, "Nested action collection is not supported" if Current.changes
         Current.set(changes: []) do
@@ -111,6 +112,7 @@ module Saltbox
       # @param action [Class]
       # @return [void]
       # @raise [Error::ConfirmationRequired, Error]
+      # @api private
       def confirm!(action)
         return unless Actions.config.enforce_confirm && @caller.agent? && action.agents == :confirm
         return if @confirmed.include?(action)
