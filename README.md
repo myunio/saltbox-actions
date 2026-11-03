@@ -1723,7 +1723,8 @@ bin/rails db:migrate
 
 It writes the migration and `app/models/action_approval.rb`. `--approver`
 names the association that holds the person; `--tenant` adds the tenant's
-column, so an approval stays in its tenant; `--connections` names the
+column, a foreign key and, when the app has acts_as_tenant, `acts_as_tenant`,
+so an approval stays in its tenant; `--connections` names the
 table the caller's `connection` lives in, for a foreign key that removes a
 connection's approvals with it. The key type follows your
 `config.generators` (`primary_key_type: :uuid`), or `--primary-key-type`.
@@ -1754,7 +1755,8 @@ The screen stays yours: list the person's requests with
 `ActionApproval.pending.where(user: current_user)`, show each one's `title`,
 `agent_name` and `arguments`, and approve one with `approve!` or decline it
 with `destroy!`. `approve!` raises `ActiveRecord::RecordNotFound` for a
-request that has expired or was already answered. With `--tenant`, scope the
+request that has expired or was already answered; it writes with `update_all`,
+so callbacks, locking and PaperTrail do not run. Without acts_as_tenant, scope the
 model to the tenant as your other models are (`acts_as_tenant :org`, say). `request_lifetime` and `approval_lifetime` are class attributes
 to change.
 

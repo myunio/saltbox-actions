@@ -24,7 +24,7 @@ module Saltbox
         class_option :connections, type: :string,
           desc: "The table the caller's connection lives in (oauth_connections), for a foreign key; none when left out"
         class_option :tenant, type: :string,
-          desc: "The tenant each approval belongs to (org), for a column and foreign key; none when left out"
+          desc: "The tenant each approval belongs to (org): a column, a foreign key and acts_as_tenant when the app has it"
         class_option :primary_key_type, type: :string,
           desc: "The primary key type (uuid); the app's generator setting when left out"
 
@@ -56,6 +56,10 @@ module Saltbox
 
         # @return [String, nil] the tenant association's name
         def tenant = options[:tenant]&.underscore
+
+        # @return [Boolean] whether the app has acts_as_tenant, which scopes
+        #   the model to the current tenant
+        def acts_as_tenant? = defined?(::ActsAsTenant) ? true : false
 
         # @return [String, nil] the key type, from the option or the app's
         #   `config.generators` (`g.orm :active_record, primary_key_type: :uuid`)

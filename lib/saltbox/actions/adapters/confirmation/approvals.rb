@@ -97,6 +97,10 @@ module Saltbox
 
           # Approves the request: the agent's same call runs once, within
           # approval_lifetime. Only a request still waiting can be approved.
+          # It writes with update_all, so the request is approved once even
+          # when two answers race: the model's callbacks, validations,
+          # optimistic locking (lock_version) and audit trail (PaperTrail) do
+          # not run. A model that needs them approves in its own method.
           #
           # @return [void]
           # @raise [ActiveRecord::RecordNotFound] when the request has expired, or was approved or used
