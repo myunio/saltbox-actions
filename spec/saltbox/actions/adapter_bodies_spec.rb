@@ -7,6 +7,7 @@ RSpec.describe "Response bodies on every surface" do
   def answering(body)
     Class.new(ApplicationAction) do
       define_singleton_method(:name) { "Reports::AnswerAction" }
+      permission :everyone
       action_name "answer"
       kind :read
       agents :allowed

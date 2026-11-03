@@ -121,6 +121,18 @@ module Saltbox
             true
           end
 
+          # @api private
+          # An action with no model has no policy to ask before #perform, so
+          # nothing would keep it out of a caller's actions list: it declares
+          # who may see it with `permission`, or `permission :everyone`. A
+          # boot check.
+          #
+          # @return [Array<String>] for such an action that declares none, the fix
+          def permission_problems
+            return [] if model || permissions
+            ["it has no model, so no policy says who may see it: declare permission with the keys it needs, or permission :everyone"]
+          end
+
           # @return [Array<String>] a missing policy or rule, and the fix
           def authorization_problems
             return [] unless model
@@ -211,6 +223,10 @@ module Saltbox
 
           # @return [Array<String>]
           def authorization_problems = []
+
+          # @api private
+          # @return [Array<String>] none: without an adapter every action is allowed
+          def permission_problems = []
 
           # @api private
           # @return [Boolean] false: without a policy, nothing is missing

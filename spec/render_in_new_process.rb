@@ -24,6 +24,7 @@ end
 
 link = Class.new(ApplicationAction) do
   define_singleton_method(:name) { "LinkAction" }
+  permission :everyone
   kind :read
 
   def perform

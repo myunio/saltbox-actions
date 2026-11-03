@@ -1,6 +1,7 @@
 class WhoamiAction < ApplicationAction
   kind :read
   featured
+  permission :everyone
 
   def perform
     skip_authorization

@@ -176,6 +176,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     unasked = Class.new(ApplicationAction) do
       def self.name = "ListEventsAction"
       agents :allowed
+      permission :everyone
       def perform = render(json: {titles: policy_scope(Event).pluck(:title)})
     end
     expect { described_class.call(action: unasked, caller: as_screen(stranger)) }.to raise_error(Pundit::AuthorizationNotPerformedError)

@@ -209,6 +209,7 @@ module Saltbox
         return problems << singular if singular
         unmodelled = not_a_model(action)
         problems << unmodelled if unmodelled
+        problems.concat(action.permission_problems) unless unmodelled
         problems.concat(input_problems(action)) unless unmodelled
         return problems if declared_only
         problems.concat(model_problems(action)) unless unmodelled
@@ -294,6 +295,7 @@ module Saltbox
         problems = []
         problems << "declare kind :read, :change or :destructive" unless action.declared_kind
         problems.concat(agents_problems(action))
+        problems.concat(action.permission_problems)
         problems.concat(input_problems(action))
         return problems if declared_only
         problems.concat(model_problems(action)) if action.model

@@ -130,4 +130,15 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
     invoke.call(update, {id: event.id, title: "Annual meeting"}, as_screen(manager))
     expect(event.reload.title).to eq("Annual meeting")
   end
+
+  it "lists an action with no model only when it declares its permissions" do
+    tally = Class.new(PolicyAction) do
+      def self.name = "TallyEventsAction"
+      kind :read
+    end
+    expect(tally).not_to be_listed_for(as_api(manager))
+    tally.permission "events.view"
+    expect(tally).to be_listed_for(as_api(manager))
+    expect(tally).not_to be_listed_for(as_api(stranger))
+  end
 end

@@ -103,6 +103,21 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     expect(listed).not_to include("cancel_event", "delete_event")
   end
 
+  it "shows an action with no model and no declared permission to no one, in its tools, find_action and the catalog" do
+    unguarded = Class.new(ApplicationAction) do
+      def self.name = "TallyEventsAction"
+      kind :read
+      featured
+      description "Use this when the person asks how many events there are."
+      def perform = render(json: {count: policy_scope(authorize(Event)).count})
+    end
+    allow(Saltbox::Actions::Registry).to receive(:actions).and_wrap_original { |original| [*original.call, unguarded] }
+    expect(unguarded).not_to be_listed_for(as_mcp(stranger))
+    expect(described_class.tools(as_mcp(stranger)).map(&:name)).not_to include("tally_events")
+    expect(described_class.call("find_action", {"query" => "how many events"}, caller: as_mcp(stranger))[:actions].pluck(:name)).not_to include("tally_events")
+    expect(Saltbox::Actions::Registry.catalog(as_mcp(stranger)).pluck("name")).not_to include("tally_events")
+  end
+
   it "runs direct and generic tools through Invocation, refusing the wrong kind" do
     expect(described_class.call("show_event", {"id" => event.id.to_s}, caller: as_mcp(manager)).dig("data", "event", "title")).to eq(event.title)
     expect(described_class.call("run_read_action", {"name" => "list_events"}, caller: as_mcp(manager)).dig("data", "events").size).to eq(1)

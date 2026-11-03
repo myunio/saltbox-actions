@@ -464,6 +464,11 @@ list action with no model has no policy to ask first, so it calls
 `authorize` too (`authorize Event, :index?`), or `skip_authorization` when
 anyone may run it.
 
+With an authorization adapter, an action with no model also declares who
+may see it, since no policy can keep it out of a caller's actions list:
+`permission "events.view"`, or `permission :everyone`. The boot refuses one
+that declares neither.
+
 ### The record
 
 An action whose verb works on one record (`show`, `update`, `delete`, and
@@ -1001,7 +1006,7 @@ give them.
 | `idempotent` | Running it twice with the same input changes nothing more, when the verb does not say so. `idempotent false` says it does. |
 | `featured` | Lists it as an MCP tool of its own (see MCP). The catalog marks it `"featured": true`. |
 | `feature "key"` | A feature flag. While it is off, callers get `not_found`. |
-| `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
+| `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. An action with no model declares one, under an authorization adapter. |
 | `output_schema(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
 | `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_reports_customers` and asks `Admin::Reports::CustomerPolicy`. |
@@ -1393,8 +1398,8 @@ whatever its `perform` names, so every module it is in counts.
 ask `Admin::ProjectPolicy`, and a top-level `CountProjectsAction`'s ask
 `ProjectPolicy`. Until `Admin::ProjectPolicy` exists, the action fails and
 the error names it. `rails actions:check` cannot name it: only `perform`
-says which model the action authorizes, and the action stays in every
-actions list until it runs. An action with a declared name that works on
+says which model the action authorizes, so the actions list shows it to
+whoever holds its declared `permission`. An action with a declared name that works on
 one model declares `model`, so the model's own modules are left out:
 without it, `Billing::Invoices::CountAction` asks
 `Billing::Invoices::Billing::InvoicePolicy`.

@@ -7,7 +7,9 @@ module Saltbox
     # - the action's feature is on for the caller;
     # - the connection's access reaches it (Caller#access);
     # - the token has the scope the action needs;
-    # - the person holds the permissions it declares, or, declaring none, the policy allows their role.
+    # - the person holds the permissions it declares, or, declaring none, the policy allows their role;
+    #   an action with no model has no policy, so under an adapter it must declare them
+    #   (Authorization::Policies#permission_problems).
     # Permission on the specific record is checked again when the action runs.
     # @api private
     module Catalog

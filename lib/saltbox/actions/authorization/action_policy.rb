@@ -87,12 +87,14 @@ module Saltbox
           def authorization_context_for(user) = {user:}
 
           # Whether the person's role allows the action at all, asked of the
-          # model's policy before any record is loaded.
+          # model's policy before any record is loaded. An action with no
+          # model has no policy to ask: it is allowed only when it declares
+          # its permissions (Policies#permission_problems).
           #
           # @param user [Object]
           # @return [Boolean]
           def permitted?(user)
-            return true unless model
+            return !permissions.nil? unless model
             policy = policy_class || raise(namespaced_policy_not_found(model))
             policy.new(model, **authorization_context_for(user)).apply(policy_rule!)
           end

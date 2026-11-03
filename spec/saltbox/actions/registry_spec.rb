@@ -152,6 +152,15 @@ RSpec.describe Saltbox::Actions::Registry do
     end
   end
 
+  it "refuses an action with no model that declares no permission, which no policy would keep out of the actions list" do
+    tally = action("TallyEventsAction") { kind :read }
+    expect(described_class.problems(tally, declared_only: true))
+      .to eq(["it has no model, so no policy says who may see it: declare permission with the keys it needs, or permission :everyone"])
+    expect { described_class.validate!([tally]) }.to raise_error(ArgumentError, /TallyEventsAction: it has no model/)
+    tally.permission :everyone
+    expect(described_class.problems(tally, declared_only: true)).to be_empty
+  end
+
   it "names both classes when two actions share a name" do
     upcoming = action("Events::ListUpcomingAction") {
       action_name "list_events"
@@ -168,6 +177,7 @@ RSpec.describe Saltbox::Actions::Registry do
       action("Reports::PeekAction") {
         action_name name
         kind :read
+        permission :everyone
       }
     }
     expect { described_class.validate!([named.call("find_action")]) }
