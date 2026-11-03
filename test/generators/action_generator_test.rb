@@ -50,7 +50,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
     EventPolicy.remove_method(:archive?)
   end
 
-  test "writes a factory-free no-id test and a nested custom verb test" do
+  test "writes a factory-free no-member test and a nested custom verb test" do
     Dir.mktmpdir("action-generator") do |destination|
       capture_io { TestUnit::Generators::ActionGenerator.start(["Events::List"], destination_root: destination) }
       source = Pathname(destination).join("test/actions/events/list_action_test.rb").read

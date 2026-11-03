@@ -1865,8 +1865,10 @@ end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
-`action_paths` (the folders actions load from), `catalog_path`, `enforce_confirm`
-with `confirm` (see Agents), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
+`action_paths` (the folders actions load from), `strict_action_paths`,
+`catalog_path`, `enforce_confirm` (on by default) with `confirm` (see Agents),
+`around_perform`, `schema_user`, `error_format` and `result_format`. See
+`lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits
 
