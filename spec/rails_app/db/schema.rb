@@ -27,7 +27,7 @@ ActiveRecord::Schema.define(version: 1) do
     t.string :agent_name
     t.string :action_name, null: false
     t.string :confirms, null: false
-    t.json :arguments, null: false, default: {}
+    t.json :arguments, null: false
     t.string :arguments_digest, null: false
     t.datetime :approved_at
     t.datetime :used_at

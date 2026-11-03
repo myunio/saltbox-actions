@@ -50,6 +50,30 @@ RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
     expect { cancel.call }.to be_refused.with(:confirmation_required)
   end
 
+  it "approves only a request still waiting" do
+    expect { cancel.call }.to be_refused
+    request = ActionApproval.sole
+    travel(ActionApproval.request_lifetime + 1.minute) do
+      expect { request.approve! }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+    expect(request.reload.approved_at).to be_nil
+    request.approve!
+    expect(request.reload.approved_at).to be_present
+    expect { request.approve! }.to raise_error(ActiveRecord::RecordNotFound)
+  end
+
+  it "keeps the request a ConfirmationRequired subclass sets before calling super" do
+    subclass = Class.new(Saltbox::Actions::Error::ConfirmationRequired) do
+      def initialize(request)
+        @request = request
+        super("Approve it first")
+      end
+    end
+    request = ActionApproval.new
+    expect(subclass.new(request).request).to equal(request)
+    expect(Saltbox::Actions::Error::ConfirmationRequired.new.request).to be_nil
+  end
+
   it "matches the arguments whatever their order" do
     expect(ActionApproval.digest({"a" => 1, "b" => {"d" => 2, "c" => [3]}})).to eq(ActionApproval.digest({"b" => {"c" => [3], "d" => 2}, "a" => 1}))
   end

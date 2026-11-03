@@ -19,6 +19,14 @@ module Saltbox
           template "saltbox_actions.rb.tt", "config/initializers/saltbox_actions.rb"
         end
 
+        # An initializer from before 1.1 also configures the gem, and
+        # whichever loads last decides a setting both make.
+        def warn_about_old_initializer
+          return unless File.exist?(File.join(destination_root, "config/initializers/actions.rb"))
+          say_status :warning, "config/initializers/actions.rb may also configure saltbox-actions: " \
+            "move its settings into config/initializers/saltbox_actions.rb and remove it", :yellow
+        end
+
         private
 
         # @return [String] the app's module name, titleized: "Events" for Events::Application

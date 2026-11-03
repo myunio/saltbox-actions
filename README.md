@@ -1717,12 +1717,13 @@ waits fifteen minutes for the agent to call again.
 
 ```sh
 bin/rails g actions:approvals                     # people are users
-bin/rails g actions:approvals --approver=account --connections=oauth_connections
+bin/rails g actions:approvals --approver=account --tenant=org --connections=oauth_connections
 bin/rails db:migrate
 ```
 
 It writes the migration and `app/models/action_approval.rb`. `--approver`
-names the association that holds the person; `--connections` names the
+names the association that holds the person; `--tenant` adds the tenant's
+column, so an approval stays in its tenant; `--connections` names the
 table the caller's `connection` lives in, for a foreign key that removes a
 connection's approvals with it. The key type follows your
 `config.generators` (`primary_key_type: :uuid`), or `--primary-key-type`.
@@ -1752,8 +1753,9 @@ after the change rolls back, so the person still has it to approve.
 The screen stays yours: list the person's requests with
 `ActionApproval.pending.where(user: current_user)`, show each one's `title`,
 `agent_name` and `arguments`, and approve one with `approve!` or decline it
-with `destroy!`. Add your tenancy to the model (`acts_as_tenant`, say) as for
-any other. `request_lifetime` and `approval_lifetime` are class attributes
+with `destroy!`. `approve!` raises `ActiveRecord::RecordNotFound` for a
+request that has expired or was already answered. With `--tenant`, scope the
+model to the tenant as your other models are (`acts_as_tenant :org`, say). `request_lifetime` and `approval_lifetime` are class attributes
 to change.
 
 ## Testing with RSpec

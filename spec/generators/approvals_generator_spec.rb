@@ -28,7 +28,8 @@ RSpec.describe Saltbox::Actions::Generators::ApprovalsGenerator do
     expect(migration).to include("create_table :action_approvals do |t|")
     expect(migration).to include("t.references :user, null: false, foreign_key: true\n")
     expect(migration).to include("t.references :connection\n")
-    expect(migration).to include("t.json :arguments, null: false, default: {}")
+    expect(migration).to include("t.json :arguments, null: false\n")
+    expect(migration).not_to include("t.references :org")
     expect(migration).to include("%i[user_id action_name confirms arguments_digest]")
     expect(model).to include("include Saltbox::Actions::Adapters::Confirmation::Approvals")
     expect(model).to include("belongs_to :user")
@@ -42,9 +43,11 @@ RSpec.describe Saltbox::Actions::Generators::ApprovalsGenerator do
     expect(columns + %w[id created_at updated_at]).to match_array(ActionApproval.column_names)
   end
 
-  it "names the approver, the connections table and the key type it is given" do
-    generate("--approver=account", "--connections=oauth_connections", "--primary-key-type=uuid")
+  it "names the approver, the tenant, the connections table and the key type it is given" do
+    generate("--approver=account", "--tenant=org", "--connections=oauth_connections", "--primary-key-type=uuid")
     expect(migration).to include("create_table :action_approvals, id: :uuid do |t|")
+    expect(migration).to include("t.references :org, null: false, foreign_key: true, type: :uuid\n")
+    expect(model).to include("acts_as_tenant :org")
     expect(migration).to include("t.references :account, null: false, foreign_key: true, type: :uuid\n")
     expect(migration).to include("t.references :connection, type: :uuid, foreign_key: {to_table: :oauth_connections, on_delete: :cascade}\n")
     expect(migration).to include("%i[account_id action_name confirms arguments_digest]")

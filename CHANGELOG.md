@@ -8,7 +8,8 @@
 named after the gem as Rails names initializers, and the README and the
 gem's messages name that file. Rails loads an initializer by any name, so an
 app that has `config/initializers/actions.rb` keeps working; rename it to
-match.
+match. `rails g actions:install` warns when `config/initializers/actions.rb`
+exists, since whichever configure block loads last decides a setting both make.
 
 ### Approvals for :confirm actions
 
@@ -16,14 +17,17 @@ match.
   request in the app's `action_approvals` table, until the person approves it.
   `Saltbox::Actions::Adapters::Confirmation::Approvals` is the model concern:
   `redeem!` is the `confirm` hook, `approve!` approves a request, and
-  `pending` lists the ones waiting. An approval covers one call: the same
+  `pending` lists the ones waiting; `approve!` refuses a request that has
+  expired or was already answered. An approval covers one call: the same
   person, connection, surface, action and arguments, once, within fifteen
   minutes.
 - `rails g actions:approvals` writes the migration and the `ActionApproval`
   model. `--approver` names the person's association (`user` by default),
-  `--connections` the connections table for a foreign key, and
+  `--tenant` adds the tenant's column, `--connections` the connections table
+  for a foreign key, and
   `--primary-key-type` the key type when the app's generator setting does not.
-- `Error::ConfirmationRequired` takes `request:`, the request the person is
+- `Error::ConfirmationRequired` takes `request:` (a subclass may set
+  `@request` itself before calling `super`), the request the person is
   asked to approve. Invocation saves a new one once the call's writes have
   rolled back, inside `around_invocation`, so a refusal from inside a change
   (`Caller#confirm!`) still leaves the request. An app that saved its

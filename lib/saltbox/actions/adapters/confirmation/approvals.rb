@@ -95,10 +95,19 @@ module Saltbox
             end
           end
 
-          # Approves the request: the agent's same call runs once, within approval_lifetime.
+          # Approves the request: the agent's same call runs once, within
+          # approval_lifetime. Only a request still waiting can be approved.
           #
           # @return [void]
-          def approve! = update!(approved_at: Time.current, expires_at: approval_lifetime.from_now)
+          # @raise [ActiveRecord::RecordNotFound] when the request has expired, or was approved or used
+          def approve!
+            approved_at = Time.current
+            expires_at = approval_lifetime.from_now
+            answered = self.class.pending.where(self.class.primary_key => id).update_all(approved_at:, expires_at:, updated_at: approved_at)
+            raise ActiveRecord::RecordNotFound.new("This request has expired or was already answered", self.class.name) unless answered == 1
+            assign_attributes(approved_at:, expires_at:, updated_at: approved_at)
+            clear_changes_information
+          end
 
           # @return [String] the title of the action the person is asked to approve
           def title = Registry.fetch(confirms).title

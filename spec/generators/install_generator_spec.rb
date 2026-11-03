@@ -13,8 +13,24 @@ RSpec.describe Saltbox::Actions::Generators::InstallGenerator do
     $stdout = STDOUT
   end
 
+  def generate_output
+    capture = StringIO.new
+    $stdout = capture
+    described_class.start(["--force"], destination_root: destination.to_s)
+    capture.string
+  ensure
+    $stdout = STDOUT
+  end
+
   it "is what `rails g actions:install` finds" do
     expect(Rails::Generators.find_by_namespace("actions:install")).to eq(described_class)
+  end
+
+  it "warns when an initializer from before 1.1 may also configure the gem" do
+    expect(generate_output).not_to include("warning")
+    destination.join("config/initializers").mkpath
+    destination.join("config/initializers/actions.rb").write("Saltbox::Actions.configure { }\n")
+    expect(generate_output).to include("config/initializers/actions.rb may also configure saltbox-actions")
   end
 
   it "lists every adapter, commented out, with what it does and the gem it needs" do

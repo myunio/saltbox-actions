@@ -4,6 +4,9 @@
 # with the same arguments from the same connection, runs once.
 class ActionApproval < ApplicationRecord
   include Saltbox::Actions::Adapters::Confirmation::Approvals
+<% if tenant -%>
+  # Scope it to the <%= tenant %> as your other models are, such as acts_as_tenant :<%= tenant %>.
+<% end -%>
 <% unless approver == "user" -%>
   self.approver = :<%= approver %>
 <% end -%>

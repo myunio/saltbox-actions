@@ -23,6 +23,8 @@ module Saltbox
           desc: "The association that holds the person who approves: the caller's user (account in an app of accounts)"
         class_option :connections, type: :string,
           desc: "The table the caller's connection lives in (oauth_connections), for a foreign key; none when left out"
+        class_option :tenant, type: :string,
+          desc: "The tenant each approval belongs to (org), for a column and foreign key; none when left out"
         class_option :primary_key_type, type: :string,
           desc: "The primary key type (uuid); the app's generator setting when left out"
 
@@ -51,6 +53,9 @@ module Saltbox
 
         # @return [String] the approver association's name
         def approver = options[:approver].underscore
+
+        # @return [String, nil] the tenant association's name
+        def tenant = options[:tenant]&.underscore
 
         # @return [String, nil] the key type, from the option or the app's
         #   `config.generators` (`g.orm :active_record, primary_key_type: :uuid`)
