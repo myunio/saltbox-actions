@@ -127,7 +127,7 @@ RSpec.describe "Names in the README and CHANGELOG" do
   # A name in backticks, quotes or a path; file names (update_action.rb) and
   # Active Record methods (update_all) are not action names.
   it "has an example here for each action name the README and CHANGELOG give" do
-    named = docs.values.join.scan(/[`"\/]((?:#{Saltbox::Actions::Naming::VERBS.keys.join("|")})_[a-z_]+)\b/).flatten.uniq
+    named = docs.values.join.scan(/[`"\/]((?:#{ApplicationAction.verbs.keys.join("|")})_[a-z_]+)\b/).flatten.uniq
     named = named.grep_v(/_action(_spec|_test)?\z/) - %w[update_all delete_all insert_all update_column]
     expect(named - examples.filter_map { it.dig(:gives, :action_name) }).to eq([])
   end

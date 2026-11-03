@@ -111,7 +111,7 @@ module Saltbox
       # @return [Tool] the plain-words discovery contract
       def self.find_tool
         Tool.new(name: FIND, title: "Find something to do in #{app}",
-          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, their arguments and which run tool to use. Leave query out to list everything you can run, a page at a time, without arguments. #{RecordData::NOTE}",
+          description: "Use this when none of the listed tools covers the person's request. Describe it in plain words, or name an action. Returns matching actions, each with the input_schema of the arguments it takes and which run tool to use. Leave query out to list everything you can run, a page at a time, without schemas. #{RecordData::NOTE}",
           input_schema: {"type" => "object", "properties" => {
             "query" => {"type" => "string", "minLength" => 1, "maxLength" => 200, "description" => "The request in plain words, or an action's name"},
             "page" => {"type" => "integer", "minimum" => 1, "description" => "With no query: the page of the list, from 1"},
