@@ -86,6 +86,17 @@ RSpec.describe Saltbox::Actions::Casting do
     expect { checker.validate!("ratio" => Float::INFINITY) }.to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["ratio"]) }
   end
 
+  it "reads a form's number in base 10, keeping hex, octal, binary and underscored numbers as sent" do
+    schema = {"type" => "object", "properties" => {"count" => {"type" => "integer"}, "ratio" => {"type" => "number"}}, "required" => [], "additionalProperties" => false}
+    checker = Saltbox::Actions::Arguments.new(schema, types: {"count" => ActiveModel::Type::Integer.new, "ratio" => ActiveModel::Type::Float.new})
+    expect(checker.validate!("count" => " 012 ", "ratio" => "1.")).to eq("count" => 12, "ratio" => 1.0)
+    expect(checker.validate!("count" => "-3", "ratio" => ".5e1")).to eq("count" => -3, "ratio" => 5.0)
+    %w[0x1A 0b11 0o7 1_000].each do |value|
+      expect { checker.validate!("count" => value, "ratio" => value) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to contain_exactly("count", "ratio") }
+    end
+  end
+
   it "casts attributes from a form, including the items of a list, and drops a form's blank list item" do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::ImportAction"
