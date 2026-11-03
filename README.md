@@ -1355,7 +1355,17 @@ fields from the policy's `permitted_attributes`.
 `Saltbox::Actions::Authorization::ActionPolicy` does the same with
 ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
-the model's fields.
+the model's fields. The policy's authorization context is `{user:}`. A
+policy that declares more, such as `authorize :tenant`, gets it from one
+class method, used for every check before and during `perform`:
+
+```ruby
+class ApplicationAction < Saltbox::Actions::Base
+  include Saltbox::Actions::Authorization::ActionPolicy
+
+  def self.authorization_context_for(user) = {user:, tenant: user.organization}
+end
+```
 
 An action in a module its model is not in asks that module's policy, as
 Pundit's `authorize [:admin, event]` does. `Admin::Events::UpdateAction`
