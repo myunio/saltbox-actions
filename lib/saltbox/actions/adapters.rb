@@ -10,7 +10,9 @@ module Saltbox
     #
     # A declaration is checked as it is made, at boot: an unknown name, two
     # authorization adapters, or an adapter whose gem is not in the bundle
-    # is refused, naming the fix. Naming an adapter the app did not declare
+    # is refused, naming the fix. A declared authorization adapter is
+    # included in Base, so every action inherits it, and an action not
+    # authorized by it is refused when it is run. Naming an adapter the app did not declare
     # raises NotDeclared, naming the line to add.
     #
     # The test helpers are not declared: a spec or test helper requires
@@ -98,26 +100,45 @@ module Saltbox
         # @return [Boolean] whether the app declared it
         def declared?(name) = Actions.config.adapters.include?(name)
 
-        # @return [Module, nil] the declared authorization adapter, which the
-        #   app's base class includes as it is defined (Base.inherited)
+        # @return [Module, nil] the declared authorization adapter, which
+        #   Base includes (see .authorize_base!)
         def authorization
           adapter = Actions.config.adapters.map { LIST.fetch(it) }.find { it.group == :authorization }
           adapter && constant(adapter)
         end
 
-        # The base class includes the declared authorization adapter as it
-        # is defined; one defined before config.adapters was set never did,
-        # and would allow every action. A boot check, with the registry's.
+        # Includes the declared authorization adapter in the gem's own Base,
+        # so every action inherits it: the app's base class and any other,
+        # defined before the declaration or after, and again on each reload.
+        # Called when the app's configuration declares its adapters.
         #
+        # @return [void]
+        # @raise [ArgumentError] when Base already includes another authorization adapter
+        # @api private
+        def authorize_base!
+          adapter = authorization or return
+          installed = authorization_modules.find { Base.include?(it) }
+          if installed && installed != adapter
+            raise ArgumentError, "config.adapters declares #{adapter.name}, but Base already authorizes with #{installed.name}: " \
+              "an app declares its authorization adapter once, in config/initializers/actions.rb; restart to change it"
+          end
+          Base.include(adapter)
+        end
+
+        # Refuses to run an action whose authorization is not the declared
+        # adapter's, so a declared adapter is never silently skipped. Run by
+        # Invocation before anything else.
+        #
+        # @param action [Class]
         # @return [void]
         # @raise [ArgumentError] naming the fix
         # @api private
-        def check_base!
-          adapter = authorization
-          base = Actions.config.base
-          return if adapter.nil? || base.include?(adapter)
-          raise ArgumentError, "#{base.name} does not include #{adapter.name}, which config.adapters declares: " \
-            "it was defined before config.adapters was set. Set it in config/initializers/actions.rb"
+        def check_authorization!(action)
+          adapter = authorization or return
+          in_effect = action.ancestors.find { it == Actions::Authorization::None || authorization_modules.include?(it) }
+          return if in_effect == adapter
+          raise ArgumentError, "#{action.name || action} is not authorized by #{adapter.name}, which config.adapters declares, " \
+            "but by #{in_effect&.name || "nothing"}: refused. Remove the include from the action or its base class"
         end
 
         # What a declared adapter does once the app has loaded: PaperTrail
@@ -147,6 +168,12 @@ module Saltbox
         end
 
         private
+
+        # The authorization adapters loaded so far.
+        def authorization_modules
+          LIST.each_value.select { it.group == :authorization && Authorization.const_defined?(it.constant, false) }
+            .map { Authorization.const_get(it.constant, false) }
+        end
 
         def load(adapter)
           require_gem(adapter) if adapter.gem

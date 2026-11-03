@@ -18,9 +18,12 @@
   an unknown name, two authorization adapters, and a declared adapter whose gem is not in the
   bundle, naming the gem to add. Code that uses an undeclared adapter raises
   `Saltbox::Actions::Adapters::NotDeclared`, naming the line to add. The `autoload`s are gone.
-- The declaration is the one switch. The app's base class (`config.base_class`) includes the
-  declared authorization adapter as it is defined, so remove `include
-  Saltbox::Actions::Authorization::Pundit` from it. Declaring `:paper_trail` installs its
+- The declaration is the one switch. Declaring an authorization adapter includes it in
+  `Saltbox::Actions::Base`, so every action has it, whenever its class was defined and after
+  each reload; remove `include Saltbox::Actions::Authorization::Pundit` from the base class.
+  An action authorized by anything else (a class that includes the other adapter itself) is
+  refused when it is run, before it performs, and declaring a second authorization adapter
+  later in the same process is refused. Declaring `:paper_trail` installs its
   version hook, so remove the `after_initialize { ...PaperTrail.install! }` line.
   `perform_later` needs `:invocation_job`.
 - The test helpers are required, not declared: `require "saltbox/actions/adapters/testing/rspec"`

@@ -51,21 +51,27 @@ RSpec.describe "An action whose policy is missing" do
     end
   end
 
-  context "with Pundit" do
+  context "with Pundit", authorization: :pundit do
     let(:missing) { stub_const("Reports::ExportAction", Class.new(ApplicationAction) { model Event }) }
     let(:missing_policy) { Pundit::NotDefinedError }
 
     it_behaves_like "left out of every list"
   end
 
-  context "with ActionPolicy" do
-    let(:missing) do
-      stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) {
-        include Saltbox::Actions::Adapters::Authorization::ActionPolicy
-
-        model Event
-      })
+  context "with ActionPolicy", authorization: :action_policy do
+    # The dummy app's own actions are Pundit's; these are the others listed.
+    let(:dummy_actions) do
+      %w[Events::ListAction Events::ShowAction].map do |name|
+        Class.new(Saltbox::Actions::Base) do
+          define_singleton_method(:name) { name }
+          policy_namespace ActionPolicies
+          model Event
+          featured
+        end
+      end
     end
+
+    let(:missing) { stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) { model Event }) }
     let(:missing_policy) { ActionPolicy::NotFound }
 
     it_behaves_like "left out of every list"

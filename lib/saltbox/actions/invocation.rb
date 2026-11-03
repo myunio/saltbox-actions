@@ -78,6 +78,7 @@ module Saltbox
       # @return [Result]
       # @raise [Error]
       def call(arguments, expected_kind: nil)
+        Adapters.check_authorization!(@action)
         raise ArgumentError, "Nested action invocations are not supported; compose domain methods" if Current.invocation_id
         Actions.within(@caller) do |fresh|
           @caller = fresh

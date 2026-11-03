@@ -104,12 +104,14 @@ module Saltbox
       end
 
       # Declares the optional adapters, the one switch for each: only these
-      # load. Checked now, at boot; see Adapters.
+      # load. Checked now, at boot; see Adapters. A declared authorization
+      # adapter is included in Base, so every action has it.
       #
       # @param names [Array<Symbol>] such as [:pundit, :mcp, :paper_trail]
       # @raise [ArgumentError, Adapters::MissingGem] naming the fix
       def adapters=(names)
         @adapters = Adapters.declare(names)
+        Adapters.authorize_base! if equal?(Actions.config)
       end
 
       # @param paths [Enumerable<String, Pathname>] the folders actions load from, replacing the list

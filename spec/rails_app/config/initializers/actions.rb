@@ -4,8 +4,12 @@ module Dummy
   ANNOUNCED = []
 end
 
+# The suite runs once for each way an app authorizes (see the Rakefile):
+# with Pundit, ActionPolicy, or no adapter at all.
+authorization = ENV.fetch("SALTBOX_ACTIONS_AUTHORIZATION", "pundit")
 Saltbox::Actions.configure do |config|
-  config.adapters = [:pundit, :controller, :mcp, :ruby_llm_tool, :invocation_job, :paper_trail]
+  config.adapters = [*((authorization == "none") ? [] : [authorization.to_sym]),
+    :controller, :mcp, :ruby_llm_tool, :invocation_job, :paper_trail]
   config.app_name = "Dummy"
   config.instructions = "Dummy keeps events. Call find_action for anything not listed."
   config.max_array_items = 50

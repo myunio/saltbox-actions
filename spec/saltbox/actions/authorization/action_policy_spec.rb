@@ -1,10 +1,8 @@
 # Actions on the same Event model, authorized with ActionPolicy through
 # ActionPolicies::EventPolicy (aliases and a default rule) instead of Pundit.
-RSpec.describe Saltbox::Actions::Adapters::Authorization::ActionPolicy do
+RSpec.describe "The ActionPolicy adapter", authorization: :action_policy do
   before do
     stub_const("PolicyAction", Class.new(Saltbox::Actions::Base) {
-      include Saltbox::Actions::Adapters::Authorization::ActionPolicy
-
       policy_namespace ActionPolicies
     })
   end

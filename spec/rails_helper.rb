@@ -17,10 +17,6 @@ Combustion.initialize! :active_record, :action_controller, :action_view, :active
   config.eager_load = false
 end
 
-# The suite tests both authorization adapters. An app declares one, and the
-# dummy app declares :pundit, so the ActionPolicy specs use this one directly.
-require "saltbox/actions/adapters/authorization/action_policy"
-
 require "rspec/rails"
 require "saltbox/actions/adapters/testing/rspec"
 
@@ -31,4 +27,15 @@ RSpec.configure do |config|
   config.infer_spec_type_from_file_location!
   config.filter_rails_from_backtrace!
   config.before { Dummy::ANNOUNCED.clear }
+
+  # An app declares one authorization adapter, which every action then has,
+  # so the suite runs once for each (SALTBOX_ACTIONS_AUTHORIZATION, see the
+  # Rakefile). Examples tagged authorization: run in that pass alone; the
+  # rest run in the Pundit pass.
+  authorization = ENV.fetch("SALTBOX_ACTIONS_AUTHORIZATION", "pundit").to_sym
+  if authorization == :pundit
+    config.filter_run_excluding authorization: ->(value) { value && value != :pundit }
+  else
+    config.filter_run_including authorization:
+  end
 end

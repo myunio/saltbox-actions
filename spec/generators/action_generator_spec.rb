@@ -129,7 +129,7 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     $stdout = STDOUT
   end
 
-  it "asks for no policy when the base class has no authorization adapter, and lists an update's fields with accepts" do
+  it "asks for no policy when the app declares no authorization adapter, and lists an update's fields with accepts", authorization: :none do
     stub_const("OpenAction", Class.new(Saltbox::Actions::Base))
     with_settings(base_class: "OpenAction") do
       generate("Events::Archive", "--kind", "change")

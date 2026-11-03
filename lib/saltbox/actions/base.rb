@@ -21,7 +21,8 @@ module Saltbox
     # - Rendering: render and head;
     # - Permitting: permitted_attributes;
     # - Authorization::None, until the app declares an authorization adapter
-    #   (config.adapters), which the app's base class includes as it is defined.
+    #   (config.adapters), which the declaration includes here, so every
+    #   action has it.
     #
     # The gem's classes are reachable through the app's base class too
     # (ApplicationAction::Error::NotFound, ApplicationAction::Invocation),
@@ -35,17 +36,6 @@ module Saltbox
       include Rendering
       include Permitting
       include Authorization::None
-
-      # The app's base class (Configuration#base_class) includes the declared
-      # authorization adapter before its body runs, so its body may use the
-      # adapter's macros, such as policy_namespace. Again on each reload.
-      #
-      # @api private
-      def self.inherited(subclass)
-        super
-        adapter = Adapters.authorization if subclass.name == Actions.config.base_class.to_s
-        subclass.include(adapter) if adapter
-      end
 
       Caller = Actions::Caller
       Error = Actions::Error

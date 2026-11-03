@@ -177,8 +177,9 @@ class ApplicationAction < Saltbox::Actions::Base
 end
 ```
 
-It includes the authorization adapter you declared, `:pundit` or
-`:action_policy`, as it is defined. With neither, every action is allowed and
+It needs no `include`: declaring `:pundit` or `:action_policy` includes the
+adapter in `Saltbox::Actions::Base`, so every action has it, an engine's own
+base class too, whenever it was defined and after each reload. With neither, every action is allowed and
 `rails actions:check` asks for no policy. To use your own rules, see
 [Authorization](#authorization).
 
@@ -1403,8 +1404,10 @@ What it does not do:
 
 ### Authorization
 
-Declare one authorization adapter; your base class includes it as it is
-defined. Declaring both is refused at boot.
+Declare one authorization adapter; `Saltbox::Actions::Base` includes it, so
+every action has it. Declaring both is refused at boot. An action authorized
+by anything else, such as a class that includes the other adapter itself, is
+refused when it is run, before it performs.
 
 `:pundit` (`Saltbox::Actions::Adapters::Authorization::Pundit`) asks your
 Pundit policies.

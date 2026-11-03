@@ -33,14 +33,27 @@ RSpec.describe Saltbox::Actions::Adapters do
     expect(config.adapters).to eq(%i[mcp controller])
   end
 
-  it "includes the declared authorization adapter in the app's base class, which never includes it itself" do
-    expect(ApplicationAction.include?(described_class::Authorization::Pundit)).to be(true)
+  it "includes the declared authorization adapter in Base, so every action has it, and the app's base class includes nothing itself" do
+    expect(Saltbox::Actions::Base.include?(described_class::Authorization::Pundit)).to be(true)
+    expect(Class.new(Saltbox::Actions::Base).include?(described_class::Authorization::Pundit)).to be(true)
     source = File.read(File.expand_path("../../rails_app/app/actions/application_action.rb", __dir__))
     expect(source).not_to match(/^\s*include /)
   end
 
-  it "leaves every other class on Base without one" do
-    expect(Class.new(Saltbox::Actions::Base).include?(described_class::Authorization::Pundit)).to be(false)
+  it "refuses to run an action authorized by anything but the declared adapter, before it performs" do
+    require "saltbox/actions/adapters/authorization/action_policy"
+    performed = []
+    other = Class.new(Saltbox::Actions::Base) do
+      include Saltbox::Actions::Adapters::Authorization::ActionPolicy
+
+      define_singleton_method(:name) { "Reports::ExportAction" }
+      permission :everyone
+      define_method(:perform) { performed << :performed }
+    end
+    expect { other.perform_now(caller: as_screen(manager)) }.to raise_error(ArgumentError,
+      "Reports::ExportAction is not authorized by Saltbox::Actions::Adapters::Authorization::Pundit, which config.adapters declares, " \
+      "but by Saltbox::Actions::Adapters::Authorization::ActionPolicy: refused. Remove the include from the action or its base class")
+    expect(performed).to eq([])
   end
 
   it "installs PaperTrail's change notes once :paper_trail is declared" do
@@ -106,19 +119,41 @@ RSpec.describe Saltbox::Actions::Adapters do
     expect(output.strip).to eq("true")
   end
 
-  it "refuses to boot when the base class was defined before the declaration" do
-    output, = ruby(<<~RUBY)
+  it "authorizes a base class defined before the declaration" do
+    output, status = ruby(<<~RUBY)
       require "saltbox/actions"
       class ApplicationAction < Saltbox::Actions::Base; end
       Saltbox::Actions.configure { it.adapters = [:pundit] }
+      puts ApplicationAction.include?(Saltbox::Actions::Adapters::Authorization::Pundit)
+    RUBY
+    expect(status).to be_success, output
+    expect(output.strip).to eq("true")
+  end
+
+  it "refuses another authorization adapter once one is declared, and takes the same one again" do
+    output, = ruby(<<~RUBY)
+      require "saltbox/actions"
+      Saltbox::Actions.configure { it.adapters = [:pundit] }
+      Saltbox::Actions.configure { it.adapters = [:pundit, :controller] }
       begin
-        Saltbox::Actions::Registry.actions
+        Saltbox::Actions.configure { it.adapters = [:action_policy] }
       rescue ArgumentError => error
         puts error.message
       end
     RUBY
-    expect(output).to include("ApplicationAction does not include Saltbox::Actions::Adapters::Authorization::Pundit, " \
-      "which config.adapters declares: it was defined before config.adapters was set")
+    expect(output).to include("config.adapters declares Saltbox::Actions::Adapters::Authorization::ActionPolicy, " \
+      "but Base already authorizes with Saltbox::Actions::Adapters::Authorization::Pundit: " \
+      "an app declares its authorization adapter once, in config/initializers/actions.rb; restart to change it")
+  end
+
+  it "includes nothing in Base for a configuration that is not the app's" do
+    output, status = ruby(<<~RUBY)
+      require "saltbox/actions"
+      Saltbox::Actions::Configuration.new.adapters = [:pundit]
+      puts Saltbox::Actions::Base.include?(Saltbox::Actions::Adapters::Authorization::Pundit)
+    RUBY
+    expect(status).to be_success, output
+    expect(output.strip).to eq("false")
   end
 
   it "is what `rails g actions:install` finds, with nothing required first" do

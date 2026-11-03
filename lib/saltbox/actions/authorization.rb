@@ -1,8 +1,7 @@
 module Saltbox
   module Actions
     # What an action asks of its authorization library. The app declares one
-    # adapter, and the app's base class (Configuration#base_class) includes
-    # it as it is defined:
+    # adapter, and the declaration includes it in Base, so every action has it:
     #
     #   Saltbox::Actions.configure do |config|
     #     config.adapters = [:pundit]  # or [:action_policy]

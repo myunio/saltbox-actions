@@ -1,7 +1,7 @@
 # An app with no authorization library: a base class with no adapter allows
 # every action and asks for no policy at boot, and the README's plain-model
 # adapter plugs the app's own rules in.
-RSpec.describe Saltbox::Actions::Authorization::None do
+RSpec.describe Saltbox::Actions::Authorization::None, authorization: :none do
   # A model with no policy of any library.
   before do
     stub_const("Gathering", Class.new(ApplicationRecord) {
