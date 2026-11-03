@@ -8,7 +8,7 @@
 
 - Everything optional moved under `lib/saltbox/actions/adapters/`, grouped by job, and each
   constant follows its path: `front_doors/` (`Controller`, `MCP`, `RubyLLMTool`,
-  `InvocationJob`), `authorization/` (`Pundit`, `ActionPolicy`, and the `Policies` they
+  `InvocationJob`), `authorization/` (Pundit, ActionPolicy, and the `Policies` they
   share), `audit/` (`PaperTrail`) and `testing/` (`RSpec`, `Minitest`, formerly `TestHelper`).
   `Saltbox::Actions::MCP` is now `Saltbox::Actions::Adapters::FrontDoors::MCP`, and so on.
   Everything outside `adapters/` is core and always loads.
