@@ -46,12 +46,16 @@ RSpec.describe "Declared names" do
 
   it "holds a named action to its own boot checks: a declared kind, and its model's policy if it names one" do
     problems = ->(action) { Saltbox::Actions::Registry.problems(action) }
-    bare = named("Reports::BareAction") { action_name "bare" }
+    bare = named("Reports::BareAction") {
+      action_name "bare"
+      permission :everyone
+    }
     expect(problems.call(bare)).to eq(["declare kind :read, :change or :destructive"])
 
     read = named("Reports::ReadAction") do
       action_name "read_it"
       kind :read
+      permission :everyone
     end
     expect(problems.call(read)).to be_empty
     expect(read.agents).to eq(:allowed)

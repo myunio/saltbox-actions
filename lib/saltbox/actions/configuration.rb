@@ -53,8 +53,9 @@ module Saltbox
       #   the API, MCP and a browser page run :confirm actions with nothing checked
       attr_accessor :enforce_confirm
       # @return [Boolean] whether every Ruby file under action_paths must define an action, in a
-      #   file ending _action.rb (true by default); when false, the actions are the base class's
-      #   subclasses there, beside other files. It checks what the folders hold, nothing more.
+      #   file ending _action.rb (true by default); when false, the folders may hold other files
+      #   too. Either way the actions are the base class's subclasses there (Registry.descendants):
+      #   it checks what the folders hold, nothing more.
       attr_accessor :strict_action_paths
       # @return [Symbol] the error body: :code ({error: {code, message, errors, details}})
       #   or :type ({error: {type, message, details}}), see Error#as_json

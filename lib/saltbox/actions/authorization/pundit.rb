@@ -22,12 +22,13 @@ module Saltbox
         class_methods do
           # Whether the person's role allows the action at all, asked of the
           # model's policy before any record is loaded. An action with no
-          # model is always allowed.
+          # model has no policy to ask: it is allowed only when it declares
+          # its permissions (Policies#permission_problems).
           #
           # @param user [Object]
           # @return [Boolean]
           def permitted?(user)
-            return true unless model
+            return !permissions.nil? unless model
             ::Pundit.policy!(user, policy_target(model)).public_send(policy_rule!)
           end
 

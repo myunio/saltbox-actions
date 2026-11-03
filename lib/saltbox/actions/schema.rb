@@ -15,7 +15,9 @@ module Saltbox
 
       # Verbs whose actions take the fields the authorization adapter permits.
       WRITING_VERBS = %w[create update].freeze
-      TIME = {"type" => "string", "pattern" => "^\\d{2}:\\d{2}$"}.freeze
+      # A time of day, "HH:MM" from 00:00 to 23:59: Active Record turns 24:00
+      # into the next day and 99:99 into nil, so neither is taken.
+      TIME = {"type" => "string", "pattern" => "^([01]\\d|2[0-3]):[0-5]\\d$"}.freeze
       COLUMN_TYPES = {
         string: {"type" => "string"}, text: {"type" => "string"}, uuid: {"type" => "string", "format" => "uuid"},
         integer: {"type" => "integer"}, decimal: {"type" => %w[number string], "pattern" => "^[+-]?(\\d+\\.?\\d*|\\.\\d+)$"},
@@ -95,8 +97,10 @@ module Saltbox
       # @!attribute types [Hash{String => ActiveModel::Type::Value, Array, Hash}] what casts each
       #   input before the schema checks it (Casting.cast)
       # @!attribute fields [Hash{String => Field}] the model fields among them, keyed by the name callers send
+      # @!attribute defaults [Hash{String => Object}] each attribute's default, a value or a callable
+      #   giving it, which Arguments fills in for an input left out
       # @api private
-      Input = Data.define(:schema, :types, :fields)
+      Input = Data.define(:schema, :types, :fields, :defaults)
 
       class_methods do
         # The input schema for one caller. A create or update lists the
@@ -137,12 +141,15 @@ module Saltbox
         # @api private
         def declared_input = input_for(accepted_fields.any? ? permitted_keys(nil) : [])
 
-        # Checks a caller's input before the action runs. Override it in the
-        # app's base class to check input another way.
+        # Checks a caller's input before the action runs, and fills in each
+        # attribute's default. Override it in the app's base class to check
+        # input another way, and call super: the action takes its attributes
+        # only from what this returns, so an override that skips super and
+        # leaves a default out is refused with an ArgumentError when it runs.
         #
         # @param arguments [Hash, nil]
         # @param caller [Caller]
-        # @return [Hash] the input the action is built from
+        # @return [Hash] the input the action is built from, every default filled in
         # @raise [Error::ValidationFailed]
         # @raise [Error::Forbidden] naming each field of the model the caller may not set
         # @api public
@@ -225,7 +232,8 @@ module Saltbox
           properties = properties.to_h { |name, schema| [name, schema.merge("description" => field_description(name)).compact] }
           schema = {"type" => "object", "properties" => properties, "required" => required.uniq, "additionalProperties" => false}.freeze
           types = fields.transform_values(&:type).merge(declared_attributes.transform_values { it[:cast_type] }).freeze
-          Input.new(schema:, types:, fields: fields.freeze)
+          defaults = declared_attributes.filter_map { |name, attribute| [name, attribute[:default]] if attribute.key?(:default) }.to_h.freeze
+          Input.new(schema:, types:, fields: fields.freeze, defaults:)
         end
 
         def fields_source
@@ -239,9 +247,9 @@ module Saltbox
           validators_on(name).reject { |validator| validator.options.key?(:if) || validator.options.key?(:unless) || validator.options.key?(:on) }
         end
 
-        # A callable default fills a left-out value only once the action is
-        # built, after the schema check, so such an attribute is not required:
-        # its presence validation still runs on the default.
+        # A callable default's value is not in the schema, so an agent cannot
+        # tell it may leave the attribute out: such an attribute is not
+        # required. Its presence validation still runs on the default.
         def required_attribute?(name)
           return false if declared_attributes.dig(name, :default).respond_to?(:call)
           schema_validators(name).any? { it.kind == :presence && !it.options[:allow_nil] && !it.options[:allow_blank] }
@@ -265,17 +273,17 @@ module Saltbox
             end
           end
           default = attribute[:default]
-          schema["default"] = default.as_json if attribute.key?(:default) && !default.respond_to?(:call)
+          schema["default"] = Casting.json_value(default, attribute[:cast_type]) if attribute.key?(:default) && !default.respond_to?(:call)
           schema.compact
         end
 
         def column_field(key)
-          association = model.reflect_on_association(key.delete_suffix("_id")) if key.end_with?("_id")
           column = model.columns_hash[key]
           return unless column
+          association = belongs_to_for(key)
           required = !column.null && column.default.nil? && column.default_function.nil?
           type = model.type_for_attribute(key)
-          if association&.belongs_to?
+          if association
             return [association.name.to_s, Field.new(key:, schema: column.null ? Schema.nullable(ID) : ID, required:, reference: association.klass, type:)]
           end
           schema = if (values = model.defined_enums[key])
@@ -285,6 +293,34 @@ module Saltbox
           end
           schema["maxLength"] = column.limit if column.type == :string && column.limit
           [key, Field.new(key:, schema: column.null ? Schema.nullable(schema) : schema, required:, reference: nil, type:)]
+        end
+
+        # The belongs_to whose foreign key the column is, as Active Record
+        # reflects it: account for organization_id, under
+        # `belongs_to :account, foreign_key: :organization_id`. A foreign key
+        # whose record no one scope can check, or that holds another column
+        # than the record's id (`primary_key:`), is refused, so it never
+        # passes as a plain value.
+        #
+        # @return [ActiveRecord::Reflection::BelongsToReflection, nil]
+        # @raise [ArgumentError] for a key two associations share, a polymorphic one, part of a composite one,
+        #   or one that points at another column than the record's primary key
+        def belongs_to_for(key)
+          matches = model.reflect_on_all_associations(:belongs_to).select { Array(it.foreign_key).map(&:to_s).include?(key) }
+          return if matches.empty?
+          fix = "a reference field cannot check the record sent, so leave #{key} out of #{fields_source} and take the record in an attribute"
+          raise ArgumentError, "#{model.name}##{key} is the foreign key of #{matches.map(&:name).to_sentence}: #{fix}" if matches.size > 1
+          association = matches.first
+          raise ArgumentError, "#{model.name}##{key} is the foreign key of #{association.name}, which is polymorphic: #{fix}" if association.polymorphic?
+          raise ArgumentError, "#{model.name}##{key} is part of #{association.name}'s composite foreign key: #{fix}" if association.foreign_key.is_a?(Array)
+          # The field takes the record's id and writes it to the key, so a
+          # key that holds another column would name another record.
+          target = association.klass
+          if association.association_primary_key.to_s != target.primary_key.to_s
+            raise ArgumentError, "#{model.name}##{key} is the foreign key of #{association.name}, which points at " \
+              "#{target.name}##{association.association_primary_key}, not its primary key: #{fix}"
+          end
+          association
         end
       end
     end

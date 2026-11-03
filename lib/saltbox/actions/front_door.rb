@@ -17,6 +17,12 @@ module Saltbox
       ENTRY = "MCP and the assistant".freeze
       MAX_PAGE_SIZE = 100
       RUN = {read: "run_read_action", change: "run_change_action", destructive: "run_destructive_action"}.freeze
+      # The tools of the gem's own, which no action may be named.
+      RESERVED = [FIND, *RUN.values].freeze
+      # The longest name an action may have: the most the assistant tool APIs take.
+      MAX_NAME_LENGTH = 64
+      # What an action's name is made of: what both MCP and the assistant tool APIs take.
+      NAME = /\A[A-Za-z0-9_-]{1,#{MAX_NAME_LENGTH}}\z/
       # @api private
       RUN_TEXT = {
         read: ["Look something up in %{app}",
@@ -96,7 +102,7 @@ module Saltbox
         wrapper = wrapper.stringify_keys
         errors = (wrapper.keys - %w[name arguments]).index_with { ["is not an argument of a run tool"] }
         name = wrapper["name"]
-        errors["name"] = ["must be an action's name from find_action"] unless name.is_a?(String) && name.length.between?(1, 64)
+        errors["name"] = ["must be an action's name from find_action"] unless name.is_a?(String) && name.length.between?(1, MAX_NAME_LENGTH)
         raise Error::ValidationFailed.new(errors.map { |key, messages| "#{key} #{messages.first}" }.join("; "), errors: errors) if errors.any?
         [name, wrapper["arguments"]]
       end
@@ -126,7 +132,7 @@ module Saltbox
         title, description = RUN_TEXT.fetch(kind)
         Tool.new(name: RUN.fetch(kind), title: format(title, app:), description: "#{description} #{RecordData::NOTE}",
           input_schema: {"type" => "object", "properties" => {
-            "name" => {"type" => "string", "minLength" => 1, "maxLength" => 64, "description" => "The action's name from find_action"},
+            "name" => {"type" => "string", "minLength" => 1, "maxLength" => MAX_NAME_LENGTH, "description" => "The action's name from find_action"},
             "arguments" => {"type" => %w[object null], "description" => "The action's arguments"}
           }, "required" => ["name"], "additionalProperties" => false}, annotations: annotations(kind, idempotent: kind == :read))
       end

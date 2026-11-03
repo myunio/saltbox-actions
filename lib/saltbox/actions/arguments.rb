@@ -15,13 +15,16 @@ module Saltbox
       # @param schema [Hash] a closed JSON Schema object
       # @param name [String, nil] the action's name, used in error messages
       # @param types [Hash{String => Object}] what casts each input (Casting.cast)
+      # @param defaults [Hash{String => Object}, nil] each input's default, a value or a callable
+      #   giving it; nil for the schema's own defaults
       # @param forbidden [#call, nil] whether a name the schema does not list is a field
       #   the caller may not set, refused as forbidden rather than unknown
       # @param refuse [#call] takes those fields and returns the Error::Forbidden to raise
-      def initialize(schema, name: nil, types: {}, forbidden: nil, refuse: Error::Forbidden.method(:for_fields))
+      def initialize(schema, name: nil, types: {}, defaults: nil, forbidden: nil, refuse: Error::Forbidden.method(:for_fields))
         @schema = schema
         @name = name
         @types = types
+        @defaults = defaults || schema.fetch("properties").filter_map { |field, property| [field, property["default"]] if property.key?("default") }.to_h
         @forbidden = forbidden
         @refuse = refuse
       end
@@ -33,7 +36,7 @@ module Saltbox
       def self.for(action, caller = nil)
         input = action.input(caller)
         refuse = caller ? ->(fields) { Actions.config.on_forbidden_fields.call(caller, action, fields) } : Error::Forbidden.method(:for_fields)
-        new(input.schema, name: action.action_name, types: input.types, forbidden: action.method(:model_field?), refuse:)
+        new(input.schema, name: action.action_name, types: input.types, defaults: input.defaults, forbidden: action.method(:model_field?), refuse:)
       end
 
       # Checks input against the action's schema for a caller, inside the
@@ -65,13 +68,14 @@ module Saltbox
         arguments = arguments.reject { |name, value| value.nil? && properties.key?(name) && !Schema.nullable?(properties[name]) }
         # Defaults are checked as if sent, so a bad default fails here and a
         # default satisfies a required argument.
-        arguments = defaults(properties).merge(arguments)
+        arguments = defaults(properties, arguments.keys).merge(arguments)
         failures = schemer.validate(arguments).to_a
         errors = field_errors(failures)
         out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
         out_of_range.each { (errors[it] ||= []) << "is out of range" }
         messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it}` is out of range" }
         raise Error::ValidationFailed.new(messages.join("; "), errors:) if errors.any?
+        Current.arguments_checked = true
         arguments
       end
 
@@ -85,9 +89,19 @@ module Saltbox
         raise @refuse.call(forbidden) if forbidden.any?
       end
 
-      # A copy for this call: the schema is shared by every caller, and an
-      # action may change a value it was given.
-      def defaults(properties) = properties.filter_map { |name, schema| [name, schema["default"].deep_dup] if schema.key?("default") }.to_h
+      # The default of each input left out, for this call: a callable's
+      # value, or a copy of a literal one, since an action may change a value
+      # it was given. Each is turned into JSON by its type, as a caller would
+      # send it (Casting.json_value), so the schema checks it and the action
+      # casts it like any other input;
+      # the input checked is then the input the action runs with, which a
+      # confirmation sees whole. A null for a field that cannot be null
+      # counts as left out, as a sent one does.
+      def defaults(properties, sent)
+        @defaults.except(*sent)
+          .to_h { |name, default| [name, Casting.json_value(default.respond_to?(:call) ? default.call : default, @types[name]).deep_dup] }
+          .reject { |name, value| value.nil? && !Schema.nullable?(properties.fetch(name, {})) }
+      end
 
       def field_errors(failures)
         failures.each_with_object({}) do |error, result|

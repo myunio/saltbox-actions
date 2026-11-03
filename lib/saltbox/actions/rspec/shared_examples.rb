@@ -92,8 +92,7 @@ RSpec.shared_examples "a valid action registry" do
   it "has a spec file for every action" do
     paths = Saltbox::Actions.config.action_paths
     spec_root = Saltbox::Actions::RSpec.config.spec_root
-    # Where the action folders hold other files too, each action's own file.
-    files = Saltbox::Actions.config.strict_action_paths ? registry.action_files : registry.actions.map { registry.source(it) }
+    files = registry.actions.map { registry.source(it) }.uniq
     # An engine's action spec may live in the app's spec folder or in the
     # engine's own: engines/billing/spec/actions beside engines/billing/app/actions.
     missing = files.map { |file| [file, paths.relative(file).sub_ext("_spec.rb")] }

@@ -91,7 +91,9 @@ module Saltbox
         # @param of [Symbol, Hash, nil] for an :array, what it holds: a type, or each item's fields and their types
         # @param nullable [Boolean] whether null clears the value; otherwise null counts as left out
         # @param description [String, nil] what agents read, unless the locale file describes it
-        # @param default [Object, nil] the value when the caller leaves it out; also listed in the schema
+        # @param default [Object, #call, nil] the value when the caller leaves it out, listed in the
+        #   schema; or a callable giving it, called once per call. Either is checked against the
+        #   schema as if the caller had sent it (Arguments#validate!).
         # @return [void]
         # @raise [ArgumentError] for a type not in TYPES, or a name the action already uses,
         #   such as params, render or errors
@@ -111,7 +113,9 @@ module Saltbox
           unknown = options.keys - [:default]
           raise ArgumentError, "#{name} takes no #{unknown.join(", ")}: validations shape an attribute's schema" if unknown.any?
           cast_type = Inputs.cast_type(type, of:)
-          super(name, cast_type, **options)
+          # The default is filled in with the input, before the schema check,
+          # never by Active Model once the action is built.
+          super(name, cast_type)
           declared_attributes[name] = {type:, of:, nullable:, description: description&.squish, cast_type:, **options.slice(:default)}
         end
 
