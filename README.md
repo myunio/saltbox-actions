@@ -1790,8 +1790,9 @@ details. A missing refusal, wrong code or missing field fails the test.
 
 ```sh
 bin/rails g action Events::Update                  # a verb from the table
-bin/rails g action Events::Archive --kind change   # any other verb
-bin/rails actions:dump                        # rewrite config/actions.json
+bin/rails g action Events::Archive --kind change   # any other verb, on one record
+bin/rails g action Events::Import --kind change --no-member   # one that works on no one record
+bin/rails actions:dump                             # rewrite config/actions.json
 bin/rails actions:check                            # check every action (in CI)
 ```
 
@@ -1808,7 +1809,9 @@ step fails after that, it puts back every file it wrote or changed.
 
 A verb from the table needs no declarations: the verb gives its kind, its
 record and its rule for agents. Any other verb gets `kind`, `attribute :id`
-when it works on one record, and its `policy_rule`. With no adapter that
+when it works on one record (`--member`, the default; `--no-member` for a
+verb that works on none), and its `policy_rule`. `--member` never changes a
+verb from the table. With no adapter that
 supplies fields, a create or update lists the model's columns with
 `accepts`; remove the ones people may not set. A `belongs_to`, such as a
 note's `user`, is left commented out: a caller could point it at any record

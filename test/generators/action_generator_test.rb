@@ -38,7 +38,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
       Dir.mktmpdir("action-generator") do |destination|
         capture_io do
           Saltbox::Actions::Generators::ActionGenerator.start(
-            ["Events::Archive", "--kind=change", "--no-catalog", (takes_id ? "--id" : "--no-id")],
+            ["Events::Archive", "--kind=change", "--no-catalog", (takes_id ? "--member" : "--no-member")],
             destination_root: destination
           )
         end
@@ -61,7 +61,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
       assert_includes source, "class Event::Types::ArchiveActionTest"
       assert_includes source, "id: visible_record.id.to_s"
       refute_includes source, "FactoryBot"
-      capture_io { TestUnit::Generators::ActionGenerator.start(["Events::Archive", "--no-id"], destination_root: destination) }
+      capture_io { TestUnit::Generators::ActionGenerator.start(["Events::Archive", "--no-member"], destination_root: destination) }
       source = Pathname(destination).join("test/actions/events/archive_action_test.rb").read
       refute_includes source, "visible_record"
     end

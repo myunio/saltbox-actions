@@ -14,7 +14,7 @@ module Rspec
       namespace "rspec:action"
       source_root File.expand_path("templates", __dir__)
 
-      class_option :id, type: :boolean, desc: "Whether the action works on one record named by an id"
+      class_option :member, type: :boolean, desc: "Whether the action works on one record named by an id"
 
       # @return [void]
       def write_spec
@@ -48,7 +48,7 @@ module Rspec
 
       # What `rails g action` says, then the action's class, then the verb table.
       def takes_id?
-        return options[:id] unless options[:id].nil?
+        return options[:member] unless options[:member].nil?
         action_class_name.constantize.takes_id?
       rescue NameError
         Saltbox::Actions.config.base.verbs.dig(verb, :member) == true

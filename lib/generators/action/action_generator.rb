@@ -27,8 +27,8 @@ module Saltbox
 
         class_option :kind, type: :string, enum: %w[read change destructive],
           desc: "The kind of a verb outside the verb table (read, change or destructive)"
-        class_option :id, type: :boolean, default: true,
-          desc: "Whether a verb outside the verb table works on one record named by an id"
+        class_option :member, type: :boolean, default: true,
+          desc: "Whether a verb outside the verb table works on one record named by an id (on: :member)"
         class_option :catalog, type: :boolean, default: true,
           desc: "Rewrite the committed catalog (config/actions.json) with the new action"
 
@@ -61,7 +61,7 @@ module Saltbox
         end
 
         hook_for :test_framework do |generator|
-          invoke generator, ["#{resource_name}::#{words.map(&:camelize).join}"], id: takes_id?
+          invoke generator, ["#{resource_name}::#{words.map(&:camelize).join}"], member: takes_id?
         end
 
         # Rewrites the catalog with the new action. If that fails, every
@@ -149,7 +149,7 @@ module Saltbox
 
         def kind = verb_rule ? verb_rule[:kind].to_s : options[:kind]
 
-        def takes_id? = verb_rule ? verb_rule[:member] : options[:id]
+        def takes_id? = verb_rule ? verb_rule[:member] : options[:member]
 
         def action_words(spelling) = [spelling, *words.drop(1)].map(&:camelize).join
 
