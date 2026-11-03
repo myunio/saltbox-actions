@@ -71,7 +71,12 @@ RSpec.describe "An action whose policy is missing" do
       end
     end
 
-    let(:missing) { stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) { model Event }) }
+    let(:missing) do
+      stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) {
+        define_verb :export, kind: :read, plural: true
+        model Event
+      })
+    end
     let(:missing_policy) { ActionPolicy::NotFound }
 
     it_behaves_like "left out of every list"

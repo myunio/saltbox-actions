@@ -659,7 +659,6 @@ anything more, and whether agents may run it:
 |---|---|---|---|---|---|
 | `list` | read | no | yes | allowed | `index?` |
 | `show` | read | yes | yes | allowed | `show?` |
-| `export` | read | no | no | allowed | `export?` |
 | `create` | change | no | no | allowed | `create?` |
 | `update` | change | yes | yes | allowed | `update?` |
 | `delete` | destructive | yes | yes | confirm | `destroy?` |
@@ -720,8 +719,14 @@ class ApplicationAction < Saltbox::Actions::Base
   define_verb :cancel, :publish, kind: :change, on: :member
   define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
   define_verb :void, kind: :destructive, on: :member, agents: :never
+  define_verb :export, kind: :read, plural: true
 end
 ```
+
+`plural: true` gives a collection verb the model's plural, as `list` has:
+`Events::ExportAction` is then named `export_events` and titled "Export
+events"; without it, the name would use the singular. The `export` rows in
+the naming table above assume this line.
 
 `on: :member` is the routes' word for a verb that works on one record.
 `agents:` is the verb's own rule for agents; left out, it follows the

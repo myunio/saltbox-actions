@@ -85,8 +85,8 @@ RSpec.describe Saltbox::Actions::Naming do
     expect(plain.field_description("title")).to eq("The new name")
   end
 
-  it "starts every app with the six verbs every app has, and no domain verbs" do
-    expect(Saltbox::Actions::Base.verbs.keys).to eq(%w[list show export create update delete])
+  it "starts every app with the five verbs every app has, and no domain verbs" do
+    expect(Saltbox::Actions::Base.verbs.keys).to eq(%w[list show create update delete])
     expect(Class.new(Saltbox::Actions::Base) { def self.name = "Events::PublishAction" }.kind).to be_nil
   end
 
@@ -104,5 +104,16 @@ RSpec.describe Saltbox::Actions::Naming do
     expect { base.define_verb :destroy, kind: :destructive }.to raise_error(ArgumentError, /destroy is spelled delete/)
     expect { base.define_verb :tidy, kind: :sweep }.to raise_error(ArgumentError, /kind is :read, :change or :destructive/)
     expect { base.define_verb :tidy, kind: :change, on: :item }.to raise_error(ArgumentError, /on is :member or :collection/)
+  end
+
+  it "names an app's collection verb with the model's plural when it is defined plural, and with the singular otherwise" do
+    base = Class.new(Saltbox::Actions::Base) do
+      define_verb :export, kind: :read, plural: true
+      define_verb :import, kind: :change
+    end
+    expect(action("Events::ExportAction", base:)).to have_attributes(action_name: "export_events", title: "Export events", kind: :read)
+    expect(action("Events::ImportAction", base:)).to have_attributes(action_name: "import_event", title: "Import event")
+    expect(action("Events::ExportAction", base: Class.new(Saltbox::Actions::Base)).kind).to be_nil
+    expect { base.define_verb :archive, kind: :change, on: :member, plural: true }.to raise_error(ArgumentError, /plural is for a verb on: :collection/)
   end
 end

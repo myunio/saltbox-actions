@@ -147,6 +147,11 @@ module Saltbox
 
         def rails_spelling = Naming::RAILS_SPELLINGS[verb]
 
+        # The template's body: the verb's own for a default verb, and "plural"
+        # for an app's verb defined with plural: true, such as export, which
+        # authorizes the model and renders its records as list does.
+        def body = (verb != "list" && verb_rule&.dig(:plural)) ? "plural" : verb
+
         def kind = verb_rule ? verb_rule[:kind].to_s : options[:kind]
 
         def takes_id? = verb_rule ? verb_rule[:member] : options[:member]

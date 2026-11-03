@@ -2,6 +2,25 @@
 
 ## 0.1.0 (unreleased)
 
+### Read notes: casting, AgentTools, export
+
+**Breaking.**
+
+- `export` is no longer a default verb. The default verbs are `list`, `show`, `create`,
+  `update` and `delete`. An app that has `export` actions declares it in its base class,
+  which keeps their names and titles as they were (`Events::ExportAction` is `export_events`):
+  `define_verb :export, kind: :read, plural: true`.
+- `define_verb` takes `plural: true`: a collection verb whose name and title use the
+  model's plural, as `list` does.
+- `Saltbox::Actions::FrontDoor` is now `Saltbox::Actions::AgentTools`
+  (`lib/saltbox/actions/agent_tools.rb`), and the `front_doors` adapter group is now
+  `entry_points`: `Saltbox::Actions::Adapters::EntryPoints::MCP`, `::Controller`,
+  `::RubyLLMTool` and `::InvocationJob`, in `lib/saltbox/actions/adapters/entry_points/`.
+  The old names are gone.
+- A form's integer is read in base 10 with `Integer()`, and a float with `Float()`. As
+  before, "12" becomes 12 and "lots" stays as sent for the schema to refuse; hex (`0x1A`),
+  binary, octal prefixes and underscores (`1_000`) stay as sent too, and "012" is 12.
+
 ### Optional adapters, declared in one list
 
 **Breaking.** What is optional is now in one folder and switched on in one place:
@@ -91,7 +110,7 @@ chat assistant still never runs a `:confirm` action, and a person on a screen an
 - To let agents run `:confirm` actions with nothing checked, on purpose:
   `config.enforce_confirm = false`. Agents are then only told to ask first.
 
-**The default verbs are `list`, `show`, `export`, `create`, `update` and `delete`.** `cancel`,
+**The default verbs are `list`, `show`, `create`, `update` and `delete`.** `cancel`,
 `reinstate` and `publish` are no longer built in. An app that uses them declares them once in its
 base class, which keeps them exactly as they were (on one record, not safe to repeat, agents
 allowed, asking `cancel?`, `reinstate?` and `publish?`):
