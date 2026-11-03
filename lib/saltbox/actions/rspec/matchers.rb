@@ -217,7 +217,7 @@ module Saltbox
         # Passes when the action refuses; `.with(code)` names the refusal.
         #
         # @example
-        #   expect { run(arguments, as: as_mcp(manager)) }.to be_refused.with(:human_required)
+        #   expect { run_action(arguments, as: as_mcp(manager)) }.to be_refused.with(:human_required)
         def be_refused = BeRefused.new
 
         # @return [BeRefused] refused as not_found
@@ -226,7 +226,7 @@ module Saltbox
         # Passes when the action refuses its input naming each field.
         #
         # @example
-        #   expect { run({title: ""}, as: as_screen(manager)) }.to have_field_errors(:title)
+        #   expect { run_action({title: ""}, as: as_screen(manager)) }.to have_field_errors(:title)
         def have_field_errors(*fields) = HaveFieldErrors.new(fields)
 
         # Passes when the action's input schema refuses the arguments, before
@@ -243,19 +243,19 @@ module Saltbox
         # For an agent's result from a list with a summary, pass described_class.summary_output_schema.
         #
         # @example
-        #   expect(run({id: event.id}, as: as_api(manager))).to match_output_schema
+        #   expect(run_action({id: event.id}, as: as_api(manager))).to match_output_schema
         def match_output_schema(schema = described_class.output_schema) = MatchOutputSchema.new(schema)
 
         # Passes when the block writes a PaperTrail entry; narrow it with on, by and with.
         #
         # @example
-        #   expect { run(arguments, as: as_mcp(manager)) }.to change_audit_trail.on(event).by(manager).with(agent: "RSpec agent")
+        #   expect { run_action(arguments, as: as_mcp(manager)) }.to change_audit_trail.on(event).by(manager).with(agent: "RSpec agent")
         def change_audit_trail = ChangeAuditTrail.new
 
         # Passes when the change announces each record or model with its event.
         #
         # @example
-        #   expect { run(arguments, as: as_screen(manager)) }.to announce_changes(event => :update)
+        #   expect { run_action(arguments, as: as_screen(manager)) }.to announce_changes(event => :update)
         def announce_changes(expected = {}) = AnnounceChanges.new(expected)
 
         # Passes when the caller may run the action: listed for them, and not barred by `agents`.

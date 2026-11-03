@@ -9,6 +9,6 @@ RSpec.describe Billing::Invoices::ListAction do
   it "lists the organization's invoices" do
     mine = Billing::Invoice.create!(org_id: 1, number: "INV-1")
     Billing::Invoice.create!(org_id: 2, number: "INV-2")
-    expect(run({}, as: as_api(permitted_user)).body["invoices"].pluck("id")).to eq([mine.id])
+    expect(run_action({}, as: as_api(permitted_user)).body["invoices"].pluck("id")).to eq([mine.id])
   end
 end

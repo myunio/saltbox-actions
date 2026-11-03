@@ -16,7 +16,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
       assert test_file.exist?, "rails g action must invoke test_unit by default"
       assert Pathname(destination).join("app/actions/events/update_action.rb").exist?
       source = test_file.read
-      assert_includes source, "self.action_class = Events::UpdateAction"
+      assert_includes source, "tests Events::UpdateAction"
       assert_includes source, "id: visible_record.id.to_s"
       # Supply this app's records where the template asks for them, then run
       # the generated test through Minitest itself in a separate process.

@@ -7,6 +7,6 @@ RSpec.describe Events::ShowNotesAction do
   it_behaves_like "refuses callers the action does not allow"
 
   it "shows the notes to the person on a screen" do
-    expect(run(arguments, as: as_screen(permitted_user)).body.dig("data", "event", "notes")).to eq("Quorum is 12")
+    expect(run_action(arguments, as: as_screen(permitted_user)).body.dig("data", "event", "notes")).to eq("Quorum is 12")
   end
 end

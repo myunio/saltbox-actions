@@ -11,7 +11,7 @@ RSpec.describe Events::PostponeAction do
   end
 
   it "moves the event to the new day and keeps the reason" do
-    run(arguments, as: as_mcp(manager))
+    run_action(arguments, as: as_mcp(manager))
     expect(event.reload).to have_attributes(starts_on: Date.new(2026, 12, 1), notes: "Snow")
   end
 
@@ -22,7 +22,7 @@ RSpec.describe Events::PostponeAction do
   it "needs the new day, as its schema says, and refuses a reason its validation does not allow, by field" do
     expect(described_class.input_schema["required"]).to eq(%w[id starts_on])
     expect(id: event.id.to_s).to be_invalid_against_schema
-    expect { run(arguments.merge(reason: "x" * 201), as: as_screen(manager)) }.to have_field_errors(:reason)
+    expect { run_action(arguments.merge(reason: "x" * 201), as: as_screen(manager)) }.to have_field_errors(:reason)
     expect(event.reload.starts_on).to eq(Date.new(2026, 11, 2))
   end
 end

@@ -4,7 +4,7 @@ require "tmpdir"
 class ActionsTest < ActiveSupport::TestCase
   include Saltbox::Actions::TestHelper
 
-  self.action_class = Events::UpdateAction
+  tests Events::UpdateAction
 
   setup do
     @manager = User.new(id: 1, permissions: %w[events.view events.manage events.delete])
@@ -31,8 +31,8 @@ class ActionsTest < ActiveSupport::TestCase
     assert as_system.system?
     assert_equal Saltbox::Actions::SystemUser.instance, as_system.user
     assert_equal @manager, as_system(@manager).user
-    assert_equal "Renamed", run({id: @event.id.to_s, title: "Renamed"}, as: as_system).body.dig("data", "event", "title")
-    assert_refused(:forbidden) { run({id: @event.id.to_s}, as: as_system, action: Events::DeleteAction) }
+    assert_equal "Renamed", run_action({id: @event.id.to_s, title: "Renamed"}, as: as_system).body.dig("data", "event", "title")
+    assert_refused(:forbidden) { run_action({id: @event.id.to_s}, as: as_system, action: Events::DeleteAction) }
   end
 
   test "custom caller factories run in the test context with default and explicit scopes" do
@@ -52,24 +52,24 @@ class ActionsTest < ActiveSupport::TestCase
   end
 
   test "runs the configured action and an explicit class or name" do
-    result = run({id: @event.id.to_s, title: "Annual meeting"}, as: as_screen(@manager))
+    result = run_action({id: @event.id.to_s, title: "Annual meeting"}, as: as_screen(@manager))
     assert_equal "Annual meeting", result.body.dig("data", "event", "title")
     assert_equal "Annual meeting", @event.reload.title
     [WhoamiAction, "whoami"].each do |action|
-      assert_equal 1, run(as: as_api(@manager), action:).body.dig("data", "user_id")
+      assert_equal 1, run_action(as: as_api(@manager), action:).body.dig("data", "user_id")
     end
     self.class.action_class = nil
-    assert_raises(ArgumentError) { run(as: as_screen(@manager)) }
+    assert_raises(ArgumentError) { run_action(as: as_screen(@manager)) }
   ensure
     self.class.action_class = Events::UpdateAction
   end
 
   test "checks refusal codes without hiding unexpected errors" do
     arguments = {id: @event.id.to_s}
-    error = assert_refused(:forbidden) { run(arguments, as: as_screen(@reader)) }
+    error = assert_refused(:forbidden) { run_action(arguments, as: as_screen(@reader)) }
     assert_equal "forbidden", error.code
-    assert_refused(:insufficient_scope) { run(arguments, as: as_read_only(@manager)) }
-    assert_refused(:human_required) { run(arguments, as: as_mcp(@manager), action: Events::ShowNotesAction) }
+    assert_refused(:insufficient_scope) { run_action(arguments, as: as_read_only(@manager)) }
+    assert_refused(:human_required) { run_action(arguments, as: as_mcp(@manager), action: Events::ShowNotesAction) }
     assert_raises(Minitest::Assertion) { assert_refused(:not_found) { raise Saltbox::Actions::Error::Forbidden } }
     assert_raises(Minitest::Assertion) { assert_refused { :success } }
     failure = assert_raises(Minitest::Assertion) { assert_refused { raise "bug" } }
@@ -78,26 +78,26 @@ class ActionsTest < ActiveSupport::TestCase
 
   test "runs each allowed surface and refuses each agent on a human-only action" do
     %i[as_screen as_api as_mcp as_assistant as_webmcp].each do |helper|
-      result = run({id: @event.id.to_s}, as: public_send(helper, @manager))
+      result = run_action({id: @event.id.to_s}, as: public_send(helper, @manager))
       assert_equal 200, result.status
       next if helper == :as_screen
       assert_refused(:human_required) do
-        run({id: @event.id.to_s}, as: public_send(helper, @manager), action: Events::ShowNotesAction)
+        run_action({id: @event.id.to_s}, as: public_send(helper, @manager), action: Events::ShowNotesAction)
       end
     end
-    assert_equal 200, run({id: @event.id.to_s}, as: as_read_only(@manager), action: Events::ShowAction).status
+    assert_equal 200, run_action({id: @event.id.to_s}, as: as_read_only(@manager), action: Events::ShowAction).status
     assert_refused(:human_required) do
-      run({id: @event.id.to_s}, as: as_webmcp(@manager), action: Events::DeleteAction)
+      run_action({id: @event.id.to_s}, as: as_webmcp(@manager), action: Events::DeleteAction)
     end
   end
 
   test "hides records from another organization" do
     hidden = Event.create!(org_id: 2, title: "Other team")
-    assert_refused(:not_found) { run({id: hidden.id.to_s}, as: as_screen(@manager)) }
+    assert_refused(:not_found) { run_action({id: hidden.id.to_s}, as: as_screen(@manager)) }
   end
 
   test "checks field errors and raw input schemas" do
-    assert_field_errors(:notes) { run({id: @event.id.to_s, notes: "secret"}, as: as_screen(@manager)) }
+    assert_field_errors(:notes) { run_action({id: @event.id.to_s, notes: "secret"}, as: as_screen(@manager)) }
     assert_invalid_against_schema({id: @event.id.to_s, capacity: "lots"})
     assert_raises(Minitest::Assertion) { assert_invalid_against_schema({id: @event.id.to_s}) }
     assert_raises(Minitest::Assertion) { assert_field_errors(:title) { raise Saltbox::Actions::Error::Forbidden } }
@@ -107,7 +107,7 @@ class ActionsTest < ActiveSupport::TestCase
   test "checks output schemas and rejects missing schemas" do
     schema = {type: "object", required: ["title"], properties: {title: {type: "string"}}}
     assert_matches_output_schema({title: "AGM"}, schema:)
-    result = run({id: @event.id.to_s}, as: as_screen(@manager))
+    result = run_action({id: @event.id.to_s}, as: as_screen(@manager))
     assert_matches_output_schema(result, schema: {type: "object", required: ["data"]})
     assert_raises(Minitest::Assertion) { assert_matches_output_schema({title: 7}, schema:) }
     assert_raises(ArgumentError) { assert_matches_output_schema({}, schema: nil) }
@@ -125,7 +125,7 @@ class ActionsTest < ActiveSupport::TestCase
   test "checks audit attribution and change announcements" do
     assert_changes_audit_trail(on: @event, by: @manager, agent: "Test agent", surface: "mcp") do
       assert_announces_changes(@event => :update, Event => :update) do
-        run({id: @event.id.to_s, title: "New title"}, as: as_mcp(@manager))
+        run_action({id: @event.id.to_s, title: "New title"}, as: as_mcp(@manager))
       end
     end
     assert_raises(Minitest::Assertion) { assert_changes_audit_trail(on: @event) {} }

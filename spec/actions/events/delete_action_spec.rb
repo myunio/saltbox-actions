@@ -13,7 +13,7 @@ RSpec.describe Events::DeleteAction do
   end
 
   it "removes the event, answering with no body, and announces it" do
-    expect { expect(run(arguments, as: as_mcp(manager)).body).to be_nil }.to announce_changes(event => :destroy)
+    expect { expect(run_action(arguments, as: as_mcp(manager)).body).to be_nil }.to announce_changes(event => :destroy)
     expect(Event.exists?(event.id)).to be(false)
   end
 

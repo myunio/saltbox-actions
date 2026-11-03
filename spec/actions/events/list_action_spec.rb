@@ -9,6 +9,6 @@ RSpec.describe Events::ListAction do
     mine = Event.create!(org_id: 1, title: "AGM", status: "published")
     Event.create!(org_id: 1, title: "Draft")
     Event.create!(org_id: 2, title: "Elsewhere", status: "published")
-    expect(run({status: "published"}, as: as_api(reader)).body.dig("data", "events").pluck("id")).to eq([mine.id])
+    expect(run_action({status: "published"}, as: as_api(reader)).body.dig("data", "events").pluck("id")).to eq([mine.id])
   end
 end

@@ -4,17 +4,17 @@ module Saltbox
   module Actions
     module RSpec
       # Included in every `type: :action` spec. Each caller helper builds the
-      # caller through the app's factory (RSpec.configure); #run sends the
+      # caller through the app's factory (RSpec.configure); #run_action sends the
       # input through Invocation, the path every surface takes.
       #
       # @example
       #   it "renames the event" do
-      #     result = run({id: event.id, title: "AGM"}, as: as_mcp(manager))
+      #     result = run_action({id: event.id, title: "AGM"}, as: as_mcp(manager))
       #     expect(result.body.dig("data", "event", "title")).to eq("AGM")
       #   end
       #
       #   it "is for a person alone" do
-      #     expect { run({id: event.id}, as: as_mcp(manager)) }.to be_refused.with(:human_required)
+      #     expect { run_action({id: event.id}, as: as_mcp(manager)) }.to be_refused.with(:human_required)
       #   end
       module Helpers
         include Testing::Callers
@@ -28,8 +28,8 @@ module Saltbox
         # @param action [Class, String] the action, or its name; the described class by default
         # @return [Result]
         # @raise [Error] when the action refuses
-        def run(arguments = {}, as:, action: described_class)
-          Invocation.call(action: action, caller: as, arguments:)
+        def run_action(arguments = {}, as:, action: described_class)
+          Invocation.call(action:, caller: as, arguments:)
         end
       end
     end

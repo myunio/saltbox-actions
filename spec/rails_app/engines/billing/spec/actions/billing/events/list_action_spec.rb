@@ -9,6 +9,6 @@ RSpec.describe Billing::Events::ListAction do
   it "lists the organization's events through Billing::EventPolicy" do
     mine = Event.create!(org_id: 1, title: "AGM")
     Event.create!(org_id: 2, title: "Elsewhere")
-    expect(run({}, as: as_api(permitted_user)).body.dig("data", "events").pluck("id")).to eq([mine.id])
+    expect(run_action({}, as: as_api(permitted_user)).body.dig("data", "events").pluck("id")).to eq([mine.id])
   end
 end

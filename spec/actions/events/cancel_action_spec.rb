@@ -13,7 +13,7 @@ RSpec.describe Events::CancelAction do
   end
 
   it "cancels the event and keeps the reason" do
-    run(arguments, as: as_mcp(manager))
+    run_action(arguments, as: as_mcp(manager))
     expect(event.reload).to have_attributes(status: "cancelled", notes: "Snow")
   end
 end

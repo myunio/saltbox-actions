@@ -94,7 +94,7 @@ RSpec.describe Events::UpdateAction do
     manager = User.create!(email: "ann@example.com", role: "manager")
     event = Event.create!(title: "AGM")
 
-    result = run({id: event.id, title: "Annual meeting"}, as: as_mcp(manager))
+    result = run_action({id: event.id, title: "Annual meeting"}, as: as_mcp(manager))
     expect(result.body.dig("event", "title")).to eq("Annual meeting")
   end
 end
@@ -369,20 +369,20 @@ RSpec.describe Tasks::UpdateAction do
   let(:task) { ada.tasks.create!(title: "Write the agenda") }
 
   it "renames the person's own task" do
-    result = run({id: task.id, title: "Send the agenda"}, as: as_mcp(ada))
+    result = run_action({id: task.id, title: "Send the agenda"}, as: as_mcp(ada))
     expect(result.body["title"]).to eq("Send the agenda")
   end
 
   it "hides another person's task" do
-    expect { run({id: task.id, title: "Mine now"}, as: as_mcp(bob)) }.to be_not_found
+    expect { run_action({id: task.id, title: "Mine now"}, as: as_mcp(bob)) }.to be_not_found
   end
 
   it "refuses a read-only token" do
-    expect { run({id: task.id, done: true}, as: as_read_only(ada)) }.to be_refused.with(:insufficient_scope)
+    expect { run_action({id: task.id, done: true}, as: as_read_only(ada)) }.to be_refused.with(:insufficient_scope)
   end
 
   it "refuses a field the policy does not permit" do
-    expect { run({id: task.id, user_id: bob.id}, as: as_screen(ada)) }.to be_refused.with(:forbidden)
+    expect { run_action({id: task.id, user_id: bob.id}, as: as_screen(ada)) }.to be_refused.with(:forbidden)
   end
 end
 ```
@@ -398,7 +398,7 @@ RSpec.describe Tasks::ListAction do
     ada.tasks.create!(title: "Write the agenda")
     bob.tasks.create!(title: "Book the room")
 
-    expect(run({}, as: as_mcp(ada)).body.pluck("title")).to eq(["Write the agenda"])
+    expect(run_action({}, as: as_mcp(ada)).body.pluck("title")).to eq(["Write the agenda"])
   end
 end
 ```
@@ -1601,14 +1601,14 @@ require "saltbox/actions/rspec"
 ```
 
 Specs under `spec/actions/` get `type: :action`, and `described_class` is the
-action. `run(arguments, as: caller)` runs it the way every surface does.
+action. `run_action(arguments, as: caller)` runs it the way every surface does.
 
-`run` returns the action's `Result`. Its `body` is what the view rendered.
+`run_action` returns the action's `Result`. Its `body` is what the view rendered.
 Its `as_json` is what the API and MCP send: the same body, unless you set
 `config.result_format = :envelope`, which wraps it with the action's meta:
 
 ```ruby
-result = run({id: event.id}, as: as_mcp(manager))
+result = run_action({id: event.id}, as: as_mcp(manager))
 result.body     # => {"event" => {"id" => 7, "title" => "AGM"}}
 result.as_json  # => the same; with :envelope, {"data" => {"event" => {...}}, "meta" => {"page" => 2}}
 ```
@@ -1636,7 +1636,7 @@ block:
 - `change_audit_trail.on(event).by(user).with(agent: "Test agent")` (needs PaperTrail).
 
 ```ruby
-expect { run({id: event.id, capacity: "lots"}, as: as_screen(manager)) }.to have_field_errors(:capacity)
+expect { run_action({id: event.id, capacity: "lots"}, as: as_screen(manager)) }.to have_field_errors(:capacity)
 ```
 
 Some check a value and run nothing:
@@ -1648,7 +1648,7 @@ Some check a value and run nothing:
 
 ```ruby
 expect({id: event.id, capacity: "lots"}).to be_invalid_against_schema
-expect(run({id: event.id}, as: as_mcp(manager))).to match_output_schema
+expect(run_action({id: event.id}, as: as_mcp(manager))).to match_output_schema
 ```
 
 And two take the action and ask about a caller:
@@ -1678,7 +1678,7 @@ RSpec.describe Events::UpdateAction do
   end
 
   it "refuses a bad capacity" do
-    expect { run({id: event.id, capacity: "lots"}, as: as_screen(permitted_user)) }
+    expect { run_action({id: event.id, capacity: "lots"}, as: as_screen(permitted_user)) }
       .to have_field_errors(:capacity)
   end
 end
@@ -1715,31 +1715,32 @@ Load the helper in `test/test_helper.rb`:
 require "saltbox/actions/test_helper"
 ```
 
-Include it in each action test and set `self.action_class`. Use your app's
+Include it in each action test and name the action with `tests`, as
+`ActionMailer::TestCase` names its mailer. Use your app's
 own fixtures or records for the person and event:
 
 ```ruby
 class Events::UpdateActionTest < ActiveSupport::TestCase
   include Saltbox::Actions::TestHelper
 
-  self.action_class = Events::UpdateAction
+  tests Events::UpdateAction
 
   test "renames the event" do
     event = events(:agm)
-    result = run({id: event.id.to_s, title: "Annual meeting"},
+    result = run_action({id: event.id.to_s, title: "Annual meeting"},
       as: as_screen(users(:manager)))
     assert_equal "Annual meeting", result.body.dig("event", "title")
   end
 
   test "refuses a read-only token" do
     assert_refused :insufficient_scope do
-      run({id: events(:agm).id.to_s}, as: as_read_only(users(:manager)))
+      run_action({id: events(:agm).id.to_s}, as: as_read_only(users(:manager)))
     end
   end
 
   test "names a field the person may not change" do
     assert_field_errors :notes do
-      run({id: events(:agm).id.to_s, notes: "private"},
+      run_action({id: events(:agm).id.to_s, notes: "private"},
         as: as_screen(users(:manager)))
     end
   end
@@ -1749,18 +1750,18 @@ end
 All seven caller helpers work as they do in RSpec. Set your own factories
 with `Saltbox::Actions::TestHelper.configure` and `config.caller_for`.
 Factories run in the test, so they can use fixtures and test helpers.
-Pass `action:` to `run` to call a different class or action name.
-A call to `run` with no caller still runs the Minitest test itself.
+Pass `action:` to `run_action` to call a different class or action name.
+`run_action` leaves Minitest's own `run` alone.
 
 The helper also has these checks:
 
 - `assert_invalid_against_schema(arguments)` checks raw input.
 - `assert_matches_output_schema(result)` checks the schema from `output_schema`.
 - `assert_runnable_for(caller)` and `assert_listed_for(caller)` check access.
-- `assert_announces_changes(event => :update) { run(...) }` checks change events.
+- `assert_announces_changes(event => :update) { run_action(...) }` checks change events.
   It needs change tracking (`include Saltbox::Actions::ChangeTracking` in
   `ApplicationRecord`) or PaperTrail.
-- `assert_changes_audit_trail(on: event, by: user) { run(...) }` needs PaperTrail.
+- `assert_changes_audit_trail(on: event, by: user) { run_action(...) }` needs PaperTrail.
 - `assert_matches_catalog` checks the committed catalog.
 - `assert_valid_action_registry` runs every check `rails actions:check` runs,
   and checks that every action has a test under `test/actions/` and a valid

@@ -12,7 +12,7 @@ module Saltbox
     #   require "saltbox/actions/rspec"
     #
     # Specs under spec/actions/ get `type: :action`, which includes the
-    # helpers (callers for each surface and #run) and the matchers.
+    # helpers (callers for each surface and #run_action) and the matchers.
     # described_class is the action. The app says how to build a caller for
     # a person on each surface, since people and tokens are its own models:
     #

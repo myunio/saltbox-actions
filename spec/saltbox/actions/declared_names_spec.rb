@@ -76,7 +76,7 @@ RSpec.describe "Declared names" do
   it "decides only the actions list when permissions are not enforced" do
     with_settings(enforce_permissions: false) do
       expect(action).not_to be_listed_for(as_api(reader))
-      expect(run({}, as: as_api(reader), action:).body).to eq("count" => 0)
+      expect(run_action({}, as: as_api(reader), action:).body).to eq("count" => 0)
     end
   end
 

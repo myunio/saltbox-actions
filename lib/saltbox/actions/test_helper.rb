@@ -5,8 +5,9 @@ require "json_schemer"
 
 module Saltbox
   module Actions
-    # Include in ActiveSupport::TestCase and pass action: to #run, or set
-    # self.action_class once on the test class. No RSpec dependency is loaded.
+    # Include in ActiveSupport::TestCase and name the action under test once
+    # with `tests Events::UpdateAction`, or pass action: to #run_action. No
+    # RSpec dependency is loaded.
     module TestHelper
       include Testing::Callers
 
@@ -17,14 +18,30 @@ module Saltbox
 
         def included(base)
           base.class_attribute :action_class, instance_writer: false
+          base.extend(ClassMethods)
         end
       end
 
-      # Minitest calls #run without a caller to execute the test itself.
-      def run(arguments = {}, as: nil, action: action_class)
-        return super() unless as
-        raise ArgumentError, "pass action: or set self.action_class" unless action
-        Invocation.call(action: action, caller: as, arguments:)
+      module ClassMethods
+        # Names the action the test class tests, as ActionMailer::TestCase's
+        # `tests` names its mailer. action_class reads it.
+        #
+        # @param action [Class, String] the action, or its name
+        # @return [Class, String]
+        def tests(action) = self.action_class = action
+      end
+
+      # Runs the action as the caller, through Invocation, the path every
+      # surface takes.
+      #
+      # @param arguments [Hash] the input, as a client would send it
+      # @param as [Caller]
+      # @param action [Class, String] the action, or its name; the one the class `tests` by default
+      # @return [Result]
+      # @raise [Error] when the action refuses
+      def run_action(arguments = {}, as:, action: action_class)
+        raise ArgumentError, "pass action:, or name the action with `tests Events::UpdateAction`" unless action
+        Invocation.call(action:, caller: as, arguments:)
       end
 
       # Returns the refusal so its message and details can also be checked.

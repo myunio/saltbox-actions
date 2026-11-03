@@ -33,7 +33,7 @@ RSpec.describe "Caller.system" do
   it "is refused what the policy does not allow the app, never let through" do
     expect { Events::DeleteAction.perform_now(caller: system, id: event.id) }.to be_refused.with(:forbidden)
     expect(Event.exists?(event.id)).to be(true)
-    expect { run({}, as: system, action: Reports::CountEventsAction) }.to be_refused.with(:forbidden)
+    expect { run_action({}, as: system, action: Reports::CountEventsAction) }.to be_refused.with(:forbidden)
   end
 
   it "sees every tenant's records when the policy's scope says so" do

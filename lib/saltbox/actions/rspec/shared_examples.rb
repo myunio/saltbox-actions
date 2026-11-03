@@ -22,12 +22,12 @@ require "json_schemer"
 RSpec.shared_examples "refuses callers the action does not allow" do
   if method_defined?(:unpermitted_user)
     it "refuses a person without its rights" do
-      expect { run(arguments, as: as_screen(unpermitted_user)) }.to be_refused.with(:forbidden)
+      expect { run_action(arguments, as: as_screen(unpermitted_user)) }.to be_refused.with(:forbidden)
     end
   end
 
   it "lets the person run it on a screen" do
-    expect { run(arguments, as: as_screen(permitted_user)) }.not_to be_refused
+    expect { run_action(arguments, as: as_screen(permitted_user)) }.not_to be_refused
   end
 
   {mcp: :as_mcp, api: :as_api, assistant: :as_assistant, webmcp: :as_webmcp}.each do |surface, helper|
@@ -40,10 +40,10 @@ RSpec.shared_examples "refuses callers the action does not allow" do
       caller = public_send(helper, permitted_user)
       if allowed && described_class.agents == :confirm && Saltbox::Actions.config.enforce_confirm
         allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { false })
-        expect { run(arguments, as: caller) }.to be_refused.with(:confirmation_required)
+        expect { run_action(arguments, as: caller) }.to be_refused.with(:confirmation_required)
         allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
       end
-      outcome = expect { run(arguments, as: caller) }
+      outcome = expect { run_action(arguments, as: caller) }
       allowed ? outcome.not_to(be_refused) : outcome.to(be_refused.with(:human_required))
     end
   end
@@ -51,7 +51,7 @@ RSpec.shared_examples "refuses callers the action does not allow" do
   # A read runs on a read-only token, and agents never run a :never action.
   if described_class.kind != :read && described_class.agents != :never
     it "needs a token that may change" do
-      expect { run(arguments, as: as_read_only(permitted_user)) }.to be_refused.with(:insufficient_scope)
+      expect { run_action(arguments, as: as_read_only(permitted_user)) }.to be_refused.with(:insufficient_scope)
     end
   end
 end
@@ -61,7 +61,7 @@ end
 # person may not see, such as another tenant's.
 RSpec.shared_examples "hides records the caller cannot see" do
   it "answers a record the person cannot see as not found" do
-    expect { run(hidden_arguments, as: as_screen(permitted_user)) }.to be_not_found
+    expect { run_action(hidden_arguments, as: as_screen(permitted_user)) }.to be_not_found
   end
 end
 
@@ -69,7 +69,7 @@ end
 # `permitted_user` and `arguments`.
 RSpec.shared_examples "renders its declared output schema" do
   it "renders a body that matches its output schema" do
-    expect(run(arguments, as: as_screen(permitted_user))).to match_output_schema
+    expect(run_action(arguments, as: as_screen(permitted_user))).to match_output_schema
   end
 end
 
