@@ -80,7 +80,7 @@ RSpec.describe Saltbox::Actions::Adapters do
         end
       RUBY
       expect(output).to include("Saltbox::Actions::Adapters::EntryPoints::MCP is an optional adapter the app has not declared: " \
-        "add :mcp to config.adapters in config/initializers/actions.rb")
+        "add :mcp to config.adapters in config/initializers/saltbox_actions.rb")
     end
 
     it "names the line to add when an action runs later" do
@@ -143,7 +143,7 @@ RSpec.describe Saltbox::Actions::Adapters do
     RUBY
     expect(output).to include("config.adapters declares Saltbox::Actions::Adapters::Authorization::ActionPolicy, " \
       "but Base already authorizes with Saltbox::Actions::Adapters::Authorization::Pundit: " \
-      "an app declares its authorization adapter once, in config/initializers/actions.rb; restart to change it")
+      "an app declares its authorization adapter once, in config/initializers/saltbox_actions.rb; restart to change it")
   end
 
   it "includes nothing in Base for a configuration that is not the app's" do

@@ -82,9 +82,24 @@ module Saltbox
 
       # An agent asked for a :confirm action, Configuration#enforce_confirm is
       # on, and the app's Configuration#confirm hook did not approve it.
+      #
+      # It may carry the request the person is asked to approve, unsaved,
+      # such as an Adapters::Confirmation::Approvals record: Invocation saves
+      # it once the call's writes have rolled back.
       class ConfirmationRequired < Error
         self.default_status = :forbidden
         self.default_message = "The person must approve this in %{app} before it runs."
+
+        # @return [#save!, nil] the request to approve, saved by Invocation if it is new
+        attr_reader :request
+
+        # @param message [String, nil]
+        # @param request [#save!, #new_record?, nil] the request to approve
+        # @param options [Hash] as Error#initialize
+        def initialize(message = nil, request: nil, **options)
+          @request = request
+          super(message, **options)
+        end
       end
 
       # A read-only connection asked for a change, or a connection's access

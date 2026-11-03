@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.0 (unreleased)
+
+### The initializer is config/initializers/saltbox_actions.rb
+
+`rails g actions:install` now writes `config/initializers/saltbox_actions.rb`,
+named after the gem as Rails names initializers, and the README and the
+gem's messages name that file. Rails loads an initializer by any name, so an
+app that has `config/initializers/actions.rb` keeps working; rename it to
+match.
+
+### Approvals for :confirm actions
+
+- The `:approvals` adapter keeps each agent's call to a `:confirm` action as a
+  request in the app's `action_approvals` table, until the person approves it.
+  `Saltbox::Actions::Adapters::Confirmation::Approvals` is the model concern:
+  `redeem!` is the `confirm` hook, `approve!` approves a request, and
+  `pending` lists the ones waiting. An approval covers one call: the same
+  person, connection, surface, action and arguments, once, within fifteen
+  minutes.
+- `rails g actions:approvals` writes the migration and the `ActionApproval`
+  model. `--approver` names the person's association (`user` by default),
+  `--connections` the connections table for a foreign key, and
+  `--primary-key-type` the key type when the app's generator setting does not.
+- `Error::ConfirmationRequired` takes `request:`, the request the person is
+  asked to approve. Invocation saves a new one once the call's writes have
+  rolled back, inside `around_invocation`, so a refusal from inside a change
+  (`Caller#confirm!`) still leaves the request. An app that saved its
+  requests in its own `around_invocation` wrapper can drop the wrapper.
+
 ## 1.0.0 (2026-11-03)
 
 ### Read notes: casting, AgentTools, export

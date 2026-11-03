@@ -1,0 +1,12 @@
+# One agent call to an action that asks first (agents :confirm), waiting for
+# the person to approve it, or approved. The agent's first call is refused
+# and saved here as a request; once the person approves it, the same call,
+# with the same arguments from the same connection, runs once.
+class ActionApproval < ApplicationRecord
+  include Saltbox::Actions::Adapters::Confirmation::Approvals
+<% unless approver == "user" -%>
+  self.approver = :<%= approver %>
+<% end -%>
+
+  belongs_to :<%= approver %>
+end

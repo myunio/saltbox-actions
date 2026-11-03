@@ -1,0 +1,21 @@
+# A person's approvals of their agents' calls to actions that ask first
+# (agents :confirm). See Saltbox::Actions::Adapters::Confirmation::Approvals.
+class CreateActionApprovals < ActiveRecord::Migration<%= migration_version %>
+  def change
+    create_table :action_approvals<%= primary_key_type %> do |t|
+      t.references :<%= approver %>, null: false, foreign_key: true<%= foreign_key_type %>
+      t.references :connection<%= foreign_key_type %><%= connection_foreign_key %>
+      t.string :surface, null: false
+      t.string :agent_name
+      t.string :action_name, null: false
+      t.string :confirms, null: false
+      t.<%= json_type %> :arguments, null: false, default: {}
+      t.string :arguments_digest, null: false
+      t.datetime :approved_at
+      t.datetime :used_at
+      t.datetime :expires_at, null: false
+      t.timestamps
+    end
+    add_index :action_approvals, %i[<%= approver %>_id action_name confirms arguments_digest], name: "index_action_approvals_on_call"
+  end
+end

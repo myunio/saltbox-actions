@@ -7,7 +7,7 @@ class InstallGeneratorTest < ActiveSupport::TestCase
     assert_equal Saltbox::Actions::Generators::InstallGenerator, Rails::Generators.find_by_namespace("actions:install")
     Dir.mktmpdir("install-generator") do |destination|
       capture_io { Saltbox::Actions::Generators::InstallGenerator.start([], destination_root: destination) }
-      source = File.read(File.join(destination, "config/initializers/actions.rb"))
+      source = File.read(File.join(destination, "config/initializers/saltbox_actions.rb"))
       Saltbox::Actions::Adapters::LIST.each_key { assert_includes source, "# #{it.inspect}," }
     end
   end

@@ -4,7 +4,7 @@ require "saltbox/actions"
 module Saltbox
   module Actions
     module Generators
-      # `rails g actions:install` writes config/initializers/actions.rb: the
+      # `rails g actions:install` writes config/initializers/saltbox_actions.rb: the
       # configure block with every optional adapter listed and commented
       # out, each with what it does and the gem it needs, as Devise's
       # generated initializer lists its settings. The list comes from
@@ -13,10 +13,10 @@ module Saltbox
         namespace "actions:install"
         source_root File.expand_path("templates", __dir__)
 
-        desc "Write config/initializers/actions.rb, listing every optional adapter"
+        desc "Write config/initializers/saltbox_actions.rb, listing every optional adapter"
 
         def write_initializer
-          template "actions.rb.tt", "config/initializers/actions.rb"
+          template "saltbox_actions.rb.tt", "config/initializers/saltbox_actions.rb"
         end
 
         private

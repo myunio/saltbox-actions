@@ -1,6 +1,6 @@
 module Saltbox
   module Actions
-    # What the app decides, set once in config/initializers/actions.rb. Every
+    # What the app decides, set once in config/initializers/saltbox_actions.rb. Every
     # setting has a default that works for a plain Rails app, so an app sets
     # only what differs.
     #

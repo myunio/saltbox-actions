@@ -44,7 +44,7 @@ module Saltbox
   # each switched on by name in the one configure block; the base class then
   # includes the declared authorization adapter itself:
   #
-  # @example config/initializers/actions.rb
+  # @example config/initializers/saltbox_actions.rb
   #   Saltbox::Actions.configure do |config|
   #     config.adapters = [:pundit, :controller, :mcp]
   #   end

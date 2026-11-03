@@ -24,10 +24,10 @@ files = {
     end
   RUBY
   "config/initializers/00_early.rb" => <<~RUBY,
-    # Defined before config/initializers/actions.rb declares the adapters.
+    # Defined before config/initializers/saltbox_actions.rb declares the adapters.
     class ApplicationAction < Saltbox::Actions::Base; end
   RUBY
-  "config/initializers/actions.rb" => <<~RUBY,
+  "config/initializers/saltbox_actions.rb" => <<~RUBY,
     Saltbox::Actions.configure { |config| config.adapters = [:#{adapter}] }
   RUBY
   "app/actions/list_widgets_action.rb" => <<~RUBY

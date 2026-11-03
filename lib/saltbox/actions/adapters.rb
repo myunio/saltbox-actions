@@ -51,7 +51,9 @@ module Saltbox
         Adapter.new(:invocation_job, :entry_points, "InvocationJob", nil,
           "runs an action later as an Active Job, for perform_later", :active_job),
         Adapter.new(:paper_trail, :audit, "PaperTrail", "paper_trail",
-          "hears of every record a change versions with PaperTrail, for on_changes", nil)
+          "hears of every record a change versions with PaperTrail, for on_changes", nil),
+        Adapter.new(:approvals, :confirmation, "Approvals", nil,
+          "keeps each agent's :confirm call for the person to approve, in a table of the app's (rails g actions:approvals)", nil)
       ].index_by(&:name).freeze
 
       # For each load hook an adapter may wait for, the framework's file and
@@ -120,7 +122,7 @@ module Saltbox
           installed = authorization_modules.find { Base.include?(it) }
           if installed && installed != adapter
             raise ArgumentError, "config.adapters declares #{adapter.name}, but Base already authorizes with #{installed.name}: " \
-              "an app declares its authorization adapter once, in config/initializers/actions.rb; restart to change it"
+              "an app declares its authorization adapter once, in config/initializers/saltbox_actions.rb; restart to change it"
           end
           Base.include(adapter)
         end
@@ -164,7 +166,7 @@ module Saltbox
           return unless adapter
           return constant(adapter) if declared?(adapter.name)
           raise NotDeclared.new("#{adapter.constant_name} is an optional adapter the app has not declared: " \
-            "add :#{adapter.name} to config.adapters in config/initializers/actions.rb", name)
+            "add :#{adapter.name} to config.adapters in config/initializers/saltbox_actions.rb", name)
         end
 
         private
@@ -217,6 +219,11 @@ module Saltbox
 
       # Audit trails that tell on_changes what a change wrote.
       module Audit
+        def self.const_missing(name) = Adapters.missing(self, name) || super
+      end
+
+      # Ways a person approves what their agents ask to do.
+      module Confirmation
         def self.const_missing(name) = Adapters.missing(self, name) || super
       end
 

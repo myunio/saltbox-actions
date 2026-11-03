@@ -20,10 +20,11 @@ loads only when your app switches it on:
 | Tools for an in-app RubyLLM chat | `ruby_llm` | `:ruby_llm_tool` in `config.adapters` |
 | Running an action later (`perform_later`) | none (Active Job) | `:invocation_job` in `config.adapters` |
 | PaperTrail versions as changes | `paper_trail` | `:paper_trail` in `config.adapters` |
+| Approvals of agents' `:confirm` calls, in a table | none (Active Record) | `:approvals` in `config.adapters`, then `bin/rails g actions:approvals` |
 | RSpec helpers and matchers | `rspec-rails` | `require "saltbox/actions/adapters/testing/rspec"` in `spec/rails_helper.rb` |
 | Minitest helpers | none | `require "saltbox/actions/adapters/testing/minitest"` in `test/test_helper.rb` |
 
-`config.adapters` is one list in `config/initializers/actions.rb`:
+`config.adapters` is one list in `config/initializers/saltbox_actions.rb`:
 
 ```ruby
 Saltbox::Actions.configure do |config|
@@ -165,7 +166,7 @@ then write the initializer:
 bin/rails g actions:install
 ```
 
-It writes `config/initializers/actions.rb` with every adapter listed and
+It writes `config/initializers/saltbox_actions.rb` with every adapter listed and
 commented out, each with what it does and the gem it needs. Uncomment the
 ones you use.
 
@@ -224,7 +225,7 @@ Run `bundle install`, then `bin/rails g pundit:install` and
 **2. Switch on the adapters and make the base class.**
 
 ```ruby
-# config/initializers/actions.rb
+# config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
   config.adapters = [:pundit, :mcp]
 end
@@ -843,7 +844,7 @@ class Current < ActiveSupport::CurrentAttributes
   attribute :user
 end
 
-# config/initializers/actions.rb
+# config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
   config.around_invocation do |caller, run|
     organization = caller.connection&.organization || ActsAsTenant.current_tenant
@@ -937,6 +938,9 @@ also raise an error of its own, such as
 `Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
 A person on a screen and the app itself (`Caller.system`) are never asked.
 
+To keep each request in a table until the person approves it, use the
+`:approvals` adapter (see [Approvals](#approvals)).
+
 To let agents run `:confirm` actions with nothing checked, on purpose, set
 `config.enforce_confirm = false`. Then the agent is only told to ask first;
 nothing on the server checks that it did.
@@ -1029,7 +1033,7 @@ set `on_access_refused` to say what happened in your words. It is also the
 place to note the refusal:
 
 ```ruby
-# config/initializers/actions.rb
+# config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
   config.on_access_refused do |caller, action|
     Saltbox::Actions::Error::InsufficientScope.new("This connection may not use #{action.title}. Allow it in Settings.")
@@ -1427,7 +1431,7 @@ policy that declares more, such as `authorize :tenant`, gets it from one
 class method, used for every check before and during `perform`:
 
 ```ruby
-# config/initializers/actions.rb: config.adapters = [:action_policy]
+# config/initializers/saltbox_actions.rb: config.adapters = [:action_policy]
 class ApplicationAction < Saltbox::Actions::Base
   def self.authorization_context_for(user) = {user:, tenant: user.organization}
 end
@@ -1685,7 +1689,7 @@ as a change. To have each version record the person, the agent and the
 surface, wrap each run in a PaperTrail request:
 
 ```ruby
-# config/initializers/actions.rb
+# config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
   config.adapters = [:pundit, :paper_trail]
 
@@ -1701,6 +1705,56 @@ columns your `versions` table has, and `Caller.system`'s user has no id.
 Each keyword after `invocation` goes to PaperTrail's `controller_info`, so a
 richer agent stamp (the machine, the connection) goes there, with a column on
 `versions` for each.
+
+### Approvals
+
+The `:approvals` adapter keeps each agent's call to a `:confirm` action as a
+request in the app's own `action_approvals` table. The first call is refused
+with `confirmation_required` and saved as a request. The person approves it
+on one of your screens. The same call, with the same arguments, from the same
+connection and surface, then runs once. A request waits an hour; an approval
+waits fifteen minutes for the agent to call again.
+
+```sh
+bin/rails g actions:approvals                     # people are users
+bin/rails g actions:approvals --approver=account --connections=oauth_connections
+bin/rails db:migrate
+```
+
+It writes the migration and `app/models/action_approval.rb`. `--approver`
+names the association that holds the person; `--connections` names the
+table the caller's `connection` lives in, for a foreign key that removes a
+connection's approvals with it. The key type follows your
+`config.generators` (`primary_key_type: :uuid`), or `--primary-key-type`.
+
+```ruby
+# config/initializers/saltbox_actions.rb
+Saltbox::Actions.configure do |config|
+  config.adapters = [:pundit, :approvals]
+  config.confirm { |invocation, action| ActionApproval.redeem!(invocation, action) }
+end
+```
+
+```ruby
+# app/models/action_approval.rb
+class ActionApproval < ApplicationRecord
+  include Saltbox::Actions::Adapters::Confirmation::Approvals
+  belongs_to :user
+
+  # What the agent is told until the person approves.
+  def refusal_message = "#{user.name} must approve this under Settings, Connections first. Then call it again with the same arguments."
+end
+```
+
+A request refused inside a change, by `current_caller.confirm!`, is saved
+after the change rolls back, so the person still has it to approve.
+
+The screen stays yours: list the person's requests with
+`ActionApproval.pending.where(user: current_user)`, show each one's `title`,
+`agent_name` and `arguments`, and approve one with `approve!` or decline it
+with `destroy!`. Add your tenancy to the model (`acts_as_tenant`, say) as for
+any other. `request_lifetime` and `approval_lifetime` are class attributes
+to change.
 
 ## Testing with RSpec
 
@@ -1900,7 +1954,8 @@ details. A missing refusal, wrong code or missing field fails the test.
 ### Generators
 
 ```sh
-bin/rails g actions:install                        # write config/initializers/actions.rb
+bin/rails g actions:install                        # write config/initializers/saltbox_actions.rb
+bin/rails g actions:approvals                      # the approvals table and model (Approvals)
 bin/rails g action Events::Update                  # a verb from the table
 bin/rails g action Events::Archive --kind change   # any other verb, on one record
 bin/rails g action Events::Import --kind change --no-member   # one that works on no one record
@@ -1945,7 +2000,7 @@ Every setting has a default that works for a plain Rails app. Set only what
 you need:
 
 ```ruby
-# config/initializers/actions.rb
+# config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
   # The optional adapters to load (see What it needs).
   config.adapters = [:pundit, :controller, :mcp]
