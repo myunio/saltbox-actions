@@ -36,14 +36,15 @@ module Saltbox
       RAILS_SPELLINGS = {"destroy" => "delete", "index" => "list", "edit" => "update", "new" => "create", "get" => "show"}.freeze
       # Verbs whose tool name uses the model's plural: list_events, not list_event.
       PLURAL_VERBS = %w[list export].freeze
-      # The policy query each verb asks. A verb not listed asks the query of
+      # The policy rule each verb asks. A verb not listed asks the rule of
       # its own name: archive asks archive?.
       VERB_RULES = {"list" => :index?, "show" => :show?, "create" => :create?, "update" => :update?, "delete" => :destroy?}.freeze
       KINDS = %i[read change destructive].freeze
       ON = %i[member collection].freeze
 
       included do
-        # The verb table. Add to it with define_verb; changing it directly is internal.
+        # The verb table: `verbs` reads it (@api public). Add to it with
+        # define_verb; writing it directly is internal.
         class_attribute :verbs, instance_accessor: false, default: VERBS
       end
 

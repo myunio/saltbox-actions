@@ -317,9 +317,9 @@ AccessToken.issue(User.find_by!(email: "ada@example.com"), name: "Claude Code")
 This token can do anything Ada can, changes included: a caller built
 without `scopes:` holds every scope. For a read-only connection, store
 scopes on the token and pass them: `scopes: ["api:read"]`. A delete action
-is `:confirm`, which only tells the agent to ask first (see Agents).
-Until your app has a way for people to approve, keep deletes on screens
-with `agents :never`.
+is `:confirm`: the server refuses it to agents with `confirmation_required`
+until your app's `confirm` hook approves (see Agents). Until it has one,
+deletes run only on screens.
 
 **8. Check it.** With `bin/rails server` running, list the person's tasks
 as an agent would:

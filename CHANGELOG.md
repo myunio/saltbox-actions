@@ -30,7 +30,8 @@ define_verb :cancel, :reinstate, :publish, kind: :change, on: :member
 
 **New:** `Error::InUse`, the class for the `in_use` code (a delete that other records still
 depend on, from Active Record's `DeleteRestrictionError`); `Caller.webmcp(user)`; the Minitest
-`tests` macro. Names that are not part of the public API are marked `@api private`.
+`tests Events::UpdateAction` macro, beside `self.action_class =`, which still works. Names
+that are not part of the public API are marked `@api private`.
 
 **Renamed** (old → new):
 
@@ -79,8 +80,6 @@ depend on, from Active Record's `DeleteRestrictionError`); `Caller.webmcp(user)`
   - `GET /api/v1/actions` meta `count` → `total`, `version` → `catalog_version`
 - Testing:
   - `run(arguments, as:, action:)` → `run_action(arguments, as:, action:)`, in RSpec and Minitest
-  - Minitest `self.action_class = Events::UpdateAction` → `tests Events::UpdateAction`
-    (`action_class` still reads it)
   - `be_runnable_by` → `be_runnable_for`; `assert_runnable_by` → `assert_runnable_for`
   - `assert_matches_catalogue` → `assert_matches_catalog`
   - shared-example lets `permitted_account`, `unpermitted_account` → `permitted_user`,
@@ -90,6 +89,13 @@ depend on, from Active Record's `DeleteRestrictionError`); `Caller.webmcp(user)`
   - `rails g action ... --catalogue / --no-catalogue` → `--catalog / --no-catalog`
   - `rails g action ... --id / --no-id` → `--member / --no-member`
 - "catalogue" is spelled "catalog" everywhere, including the `Catalog` module.
+- Internal, now `@api private`, for a port whose own checks or tasks called them:
+  `policy_query!` → `policy_rule!`, `declared_connections` → `declared_agents`,
+  `declared_query` → `declared_rule`, `Registry.connection_problems` →
+  `Registry.agents_problems`, `InvocationJob::SystemAccountSerializer` →
+  `InvocationJob::SystemUserSerializer`. A `perform_later` job queued with `Caller.system`
+  before the upgrade carries the old serializer's name and cannot be run after it: let the
+  queue drain first.
 
 ### Earlier in 0.1.0
 
@@ -257,8 +263,7 @@ depend on, from Active Record's `DeleteRestrictionError`); `Caller.webmcp(user)`
 - A list action needs only `policy_scope`, as Pundit's `verify_policy_scoped` on `index`.
 - `rails g action` checks the action as `actions:check` does before writing any file, writes
   nothing on a problem, and puts back every file it wrote when the catalog step fails; either
-  failure exits 1. A new change action declares
-  `agents :confirm` (was `:allowed`) unless the app sets `default_connections`. The spec
+  failure exits 1. A new action declares no `agents` rule and leaves it to its verb. The spec
   template assumes no factories or roles and passes the id for any verb that takes one.
 - The shared example "refuses callers the action does not allow" checks a person without
   rights only when the spec defines `unpermitted_user`.
@@ -321,7 +326,7 @@ depend on, from Active Record's `DeleteRestrictionError`); `Caller.webmcp(user)`
 - A `permission` gate (`any_of`, `:everyone`) with `config.permissions_held`, and
   `enforce_permissions` to let it decide only the actions list.
 - `error_format :type` and `result_format :envelope`, `render meta:`, `Result#meta`.
-- `default_connections`, `strict_action_paths`, `validate_arguments`; app error
+- `strict_action_paths`, `validate_arguments`; app error
   mappings are checked before the gem's own.
 
 - Extracted from an internal application's action layer.
