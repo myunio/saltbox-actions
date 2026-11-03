@@ -85,6 +85,11 @@ RSpec.describe Saltbox::Actions::Naming do
     expect(plain.field_description("title")).to eq("The new name")
   end
 
+  it "starts every app with the six verbs every app has, and no domain verbs" do
+    expect(Saltbox::Actions::Base.verbs.keys).to eq(%w[list show export create update delete])
+    expect(Class.new(Saltbox::Actions::Base) { def self.name = "Events::PublishAction" }.kind).to be_nil
+  end
+
   it "adds an app's own verbs, each with its kind, member or collection, idempotence and agents rule" do
     base = Class.new(ApplicationAction) do
       define_verb :archive, :restore, kind: :change, on: :member, idempotent: true

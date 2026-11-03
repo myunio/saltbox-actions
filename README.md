@@ -61,7 +61,9 @@ end
 ```
 
 Agents read a JSON Schema of the input, made from these lines: `reason` is a
-string, and it is required.
+string, and it is required. `cancel` is a verb the app declares once, in its
+base class: `define_verb :cancel, kind: :change, on: :member` (see
+[Names and verbs](#names-and-verbs)).
 
 Call an action from a controller, a job or the console:
 
@@ -598,10 +600,10 @@ anything more, and whether agents may run it:
 | `export` | read | no | no | allowed | `export?` |
 | `create` | change | no | no | allowed | `create?` |
 | `update` | change | yes | yes | allowed | `update?` |
-| `cancel` | change | yes | no | allowed | `cancel?` |
-| `reinstate` | change | yes | no | allowed | `reinstate?` |
-| `publish` | change | yes | no | allowed | `publish?` |
 | `delete` | destructive | yes | yes | confirm | `destroy?` |
+
+Any other verb, such as `cancel` or `publish`, is your app's own: declare it
+once with `define_verb` (below).
 
 So `Events::ListAction` is named `list_events`, and
 `Events::ShowNotesAction` is named `show_event_notes`. The model is the
@@ -655,6 +657,7 @@ inflections:
 class ApplicationAction < Saltbox::Actions::Base
   include Saltbox::Actions::Authorization::Pundit
 
+  define_verb :cancel, :publish, kind: :change, on: :member
   define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
   define_verb :void, kind: :destructive, on: :member, agents: :never
 end

@@ -28,9 +28,6 @@ module Saltbox
         "export" => {kind: :read, member: false, idempotent: false},
         "create" => {kind: :change, member: false, idempotent: false},
         "update" => {kind: :change, member: true, idempotent: true},
-        "cancel" => {kind: :change, member: true, idempotent: false},
-        "reinstate" => {kind: :change, member: true, idempotent: false},
-        "publish" => {kind: :change, member: true, idempotent: false},
         "delete" => {kind: :destructive, member: true, idempotent: true}
       }.freeze
       # Rails verbs, and the verb actions use instead. An action named with the
@@ -39,7 +36,7 @@ module Saltbox
       # Verbs whose tool name uses the model's plural: list_events, not list_event.
       PLURAL_VERBS = %w[list export].freeze
       # The policy query each verb asks. A verb not listed asks the query of
-      # its own name: cancel asks cancel?.
+      # its own name: archive asks archive?.
       VERB_RULES = {"list" => :index?, "show" => :show?, "create" => :create?, "update" => :update?, "delete" => :destroy?}.freeze
       KINDS = %i[read change destructive].freeze
       ON = %i[member collection].freeze
