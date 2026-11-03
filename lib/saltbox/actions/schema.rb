@@ -15,7 +15,9 @@ module Saltbox
 
       # Verbs whose actions take the fields the authorization adapter permits.
       WRITING_VERBS = %w[create update].freeze
-      TIME = {"type" => "string", "pattern" => "^\\d{2}:\\d{2}$"}.freeze
+      # A time of day, "HH:MM" from 00:00 to 23:59: Active Record turns 24:00
+      # into the next day and 99:99 into nil, so neither is taken.
+      TIME = {"type" => "string", "pattern" => "^([01]\\d|2[0-3]):[0-5]\\d$"}.freeze
       COLUMN_TYPES = {
         string: {"type" => "string"}, text: {"type" => "string"}, uuid: {"type" => "string", "format" => "uuid"},
         integer: {"type" => "integer"}, decimal: {"type" => %w[number string], "pattern" => "^[+-]?(\\d+\\.?\\d*|\\.\\d+)$"},

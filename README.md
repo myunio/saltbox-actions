@@ -533,7 +533,7 @@ attribute :payments, :array, of: {amount: :decimal, paid_on: :date}
 ```
 
 The types are `:string`, `:integer`, `:decimal`, `:boolean`, `:date`,
-`:datetime`, `:time` (a time of day, `"HH:MM"`), `:array` and `:hash`.
+`:datetime`, `:time` (a time of day, `"HH:MM"` from `00:00` to `23:59`), `:array` and `:hash`.
 `nullable: true` lets `null` clear a value; otherwise `null` counts as left
 out, since agents often send it for a field they skip.
 

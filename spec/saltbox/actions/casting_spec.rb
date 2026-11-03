@@ -42,6 +42,24 @@ RSpec.describe Saltbox::Actions::Casting do
     expect(event.reload).to have_attributes(capacity: 40, price: BigDecimal(10), featured: false)
   end
 
+  it "takes a time of day from 00:00 to 23:59, in an attribute and a time column, refusing any other" do
+    ActiveRecord::Base.connection.create_table(:shows, force: true) { it.time :doors, null: false }
+    stub_const("Show", Class.new(ApplicationRecord) { self.table_name = "shows" })
+    stub_const("ShowPolicy", Class.new(EventPolicy) { def permitted_attributes = %i[doors] })
+    create = Class.new(ApplicationAction) do
+      def self.name = "Shows::CreateAction"
+      attribute :ends, :time
+    end
+    check = ->(arguments) { Saltbox::Actions::Arguments.for(create).validate!(arguments) }
+    expect(check.call(doors: "00:00", ends: "23:59")).to eq("doors" => "00:00", "ends" => "23:59")
+    %w[24:00 99:99 12:60 7:30].each do |time|
+      expect { check.call(doors: time, ends: "10:00") }.to have_field_errors(:doors)
+      expect { check.call(doors: "10:00", ends: time) }.to have_field_errors(:ends)
+    end
+  ensure
+    ActiveRecord::Base.connection.drop_table(:shows, if_exists: true)
+  end
+
   it "refuses a local date-time that is not on the calendar, rather than rolling it over" do
     expect { update.call({"doors_open_at" => "2026-02-30T12:30"}) }.to have_field_errors(:doors_open_at)
     expect { update.call({"doors_open_at" => "2026-11-02T24:30"}) }.to have_field_errors(:doors_open_at)
