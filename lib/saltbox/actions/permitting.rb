@@ -19,7 +19,7 @@ module Saltbox
       # @return [ActiveSupport::HashWithIndifferentAccess] the fields sent, keyed as the policy names them
       # @raise [ArgumentError] in an action that takes no model fields
       # @raise [Error::Forbidden] naming each field the person may not change
-      # @raise [Error::Invalid] for a reference to a record the person cannot pick
+      # @raise [Error::ValidationFailed] for a reference to a record the person cannot pick
       def permitted_attributes(record)
         unless self.class.writes_fields?
           raise ArgumentError, "#{self.class.name} takes no model fields: a create or update takes the ones its policy permits, any other action names them with accepts"
@@ -43,12 +43,12 @@ module Saltbox
       # @param value [String] the id sent
       # @param field [String] the name it was sent under
       # @return [Object] the record's id
-      # @raise [Error::Invalid] when the person cannot see such a record
+      # @raise [Error::ValidationFailed] when the person cannot see such a record
       def resolve_reference(model, value, field:)
         id = model.type_for_attribute(model.primary_key).cast(value)
         found = scoped_records(model).find_by(model.primary_key => id) if id
         return found.id if found
-        raise Error::Invalid.new("#{field.humanize} isn't a #{model.model_name.human.downcase} you can see",
+        raise Error::ValidationFailed.new("#{field.humanize} isn't a #{model.model_name.human.downcase} you can see",
           errors: {field => ["isn't a #{model.model_name.human.downcase} you can see"]})
       end
 

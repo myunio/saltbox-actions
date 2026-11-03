@@ -60,7 +60,7 @@ module Saltbox
           arguments = Arguments.new(find_tool.input_schema).validate!(arguments)
           return list(caller, page: arguments.fetch("page", 1), page_size: arguments.fetch("page_size", PAGE_SIZE)) unless arguments.key?("query")
           paging = arguments.keys & %w[page page_size]
-          raise Error::Invalid.new("page and page_size list actions only with no query", errors: paging.index_with { ["is only for find_action with no query"] }) if paging.any?
+          raise Error::ValidationFailed.new("page and page_size list actions only with no query", errors: paging.index_with { ["is only for find_action with no query"] }) if paging.any?
           return find(arguments.fetch("query"), caller)
         end
         if (kind = RUN.key(tool_name))
@@ -85,15 +85,15 @@ module Saltbox
       #
       # @param wrapper [Hash, nil] the run tool's arguments
       # @return [Array(String, Object)] the action's name and its arguments, unchecked
-      # @raise [Error::Invalid] for a wrapper that is not an object, has no name or has other keys
+      # @raise [Error::ValidationFailed] for a wrapper that is not an object, has no name or has other keys
       def self.run_wrapper!(wrapper)
         wrapper = {} if wrapper.nil?
-        raise Error::Invalid.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless wrapper.is_a?(Hash)
+        raise Error::ValidationFailed.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless wrapper.is_a?(Hash)
         wrapper = wrapper.stringify_keys
         errors = (wrapper.keys - %w[name arguments]).index_with { ["is not an argument of a run tool"] }
         name = wrapper["name"]
         errors["name"] = ["must be an action's name from find_action"] unless name.is_a?(String) && name.length.between?(1, 64)
-        raise Error::Invalid.new(errors.map { |key, messages| "#{key} #{messages.first}" }.join("; "), errors: errors) if errors.any?
+        raise Error::ValidationFailed.new(errors.map { |key, messages| "#{key} #{messages.first}" }.join("; "), errors: errors) if errors.any?
         [name, wrapper["arguments"]]
       end
 

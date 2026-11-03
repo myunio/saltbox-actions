@@ -35,14 +35,6 @@ module Saltbox
         super(message || format(default_message, app: Actions.config.app_name))
       end
 
-      # A failed result object as a refusal: validation_failed, 422, with the
-      # result's errors as the message. Raised inside a change, it rolls back
-      # everything the action wrote.
-      #
-      # @param result [#errors] a failure
-      # @return [Error::Invalid]
-      def self.from(result) = Invalid.new(Array(result.errors).join("; ").presence)
-
       # @return [String] this error class's default code: its name in snake_case
       def self.code = name.demodulize.underscore
       # @return [String] the error code callers see
@@ -78,7 +70,7 @@ module Saltbox
 
         # @param fields [Array<String>] fields the person sent but may not change
         # @return [Forbidden] naming each field
-        def self.fields(fields) = new("You can't change #{fields.to_sentence}.", errors: fields.index_with { ["you can't change this"] })
+        def self.for_fields(fields) = new("You can't change #{fields.to_sentence}.", errors: fields.index_with { ["you can't change this"] })
       end
 
       # An agent asked for an action only a person may take.
@@ -119,12 +111,17 @@ module Saltbox
       end
 
       # The arguments or request body are not valid.
-      class Invalid < Error
+      class ValidationFailed < Error
         self.default_status = :unprocessable_content
         self.default_message = "The arguments are not valid."
 
-        # @return [String] the code for invalid input
-        def self.code = "validation_failed"
+        # A failed result object as a refusal, with the result's errors
+        # joined as the message and no field errors. Raised inside a change,
+        # it rolls back everything the action wrote.
+        #
+        # @param result [#errors] a failure, whose errors are strings
+        # @return [ValidationFailed]
+        def self.from_result(result) = new(Array(result.errors).join("; ").presence)
 
         # The refusal for an action's or a record's validation errors: the
         # full messages, in the person's language, and the errors by field,
@@ -134,10 +131,17 @@ module Saltbox
         #
         # @param errors [ActiveModel::Errors]
         # @param fallback [String, nil] the message when there are none to list
-        # @return [Invalid]
+        # @return [ValidationFailed]
         def self.for(errors, fallback: nil)
           new(errors.full_messages.to_sentence.presence || fallback, errors: errors.to_hash.transform_keys(&:to_s).presence)
         end
+      end
+
+      # A record cannot be deleted while others depend on it (Active Record's
+      # DeleteRestrictionError, from `dependent: :restrict_with_exception`).
+      class InUse < Error
+        self.default_status = :unprocessable_content
+        self.default_message = "Something else still uses this, so it can't be deleted."
       end
     end
 

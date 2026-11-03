@@ -18,7 +18,7 @@ RSpec.describe Saltbox::Actions::Invocation do
 
   it "checks a generic run tool's kind after admission and before arguments" do
     expect { described_class.call(action: "update_event", caller: as_screen(manager), arguments: {nope: 1}, expected_kind: :read) }
-      .to raise_error(Saltbox::Actions::Error::Invalid, "update_event is a change action; run it with run_change_action")
+      .to raise_error(Saltbox::Actions::Error::ValidationFailed, "update_event is a change action; run it with run_change_action")
   end
 
   it "runs a change in a transaction, notes each changed record and announces them before commit" do
@@ -74,6 +74,18 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect { described_class.call(action: action, caller: as_screen(manager)) }.to be_refused.with(:locked)
   ensure
     Saltbox::Actions.config.error_mappings.pop
+  end
+
+  it "answers a delete that others depend on as in_use, a class of its own" do
+    action = Class.new(ApplicationAction) do
+      def self.name = "Events::PurgeAction"
+      kind :destructive
+      agents :confirm
+      policy_rule :destroy?
+      define_method(:perform) { raise ActiveRecord::DeleteRestrictionError, "attendees" }
+    end
+    expect { described_class.call(action:, caller: as_screen(manager)) }
+      .to raise_error(Saltbox::Actions::Error::InUse) { expect([it.code, it.status]).to eq(["in_use", :unprocessable_content]) }
   end
 
   it "refuses to run an action from inside another" do

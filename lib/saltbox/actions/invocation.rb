@@ -86,11 +86,11 @@ module Saltbox
           Current.set(invocation: self, invocation_id: @invocation_id) do
             refuse!
             if expected_kind && @action.kind != expected_kind
-              raise Error::Invalid, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
+              raise Error::ValidationFailed, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
             end
             @arguments = @action.validate_arguments(arguments, @caller)
             action = @action.new(current_caller: @caller, params: Params.new(@arguments, action: @action))
-            raise Error::Invalid.for(action.errors) unless action.valid?
+            raise Error::ValidationFailed.for(action.errors) unless action.valid?
             confirm!(@action)
             run(action)
           end
@@ -173,8 +173,8 @@ module Saltbox
         case error
         when ActiveRecord::RecordNotFound then Error::NotFound.new
         when ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed
-          Error::Invalid.for(error.record.errors, fallback: error.message)
-        when ActiveRecord::DeleteRestrictionError then Error.new(error.message, code: :in_use, status: :unprocessable_content)
+          Error::ValidationFailed.for(error.record.errors, fallback: error.message)
+        when ActiveRecord::DeleteRestrictionError then Error::InUse.new(error.message)
         when *@action.authorization_errors then Error::Forbidden.new
         end
       end

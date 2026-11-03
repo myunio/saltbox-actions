@@ -136,7 +136,7 @@ module Saltbox
         # @param arguments [Hash, nil]
         # @param caller [Caller]
         # @return [Hash] the input the action is built from
-        # @raise [Error::Invalid]
+        # @raise [Error::ValidationFailed]
         # @raise [Error::Forbidden] naming each field of the model the caller may not set
         def validate_arguments(arguments, caller) = Arguments.for(self, caller).validate!(arguments)
 

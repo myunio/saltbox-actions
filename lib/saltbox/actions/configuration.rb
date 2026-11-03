@@ -13,7 +13,7 @@ module Saltbox
     #     config.around_invocation { |caller, run| Context.within(caller) { |fresh| run.(fresh) } }
     #     config.around_perform { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
     #     config.on_changes { |changes, invocation| publish(changes, invocation) }
-    #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::Invalid.new(error.message) }
+    #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::ValidationFailed.new(error.message) }
     #   end
     class Configuration
       SCOPES = {read: "api:read", write: "api:write"}.freeze
@@ -83,7 +83,7 @@ module Saltbox
         @after_change_commit = ->(_invocation, _result) {}
         @confirm = ->(_invocation, _action) { false }
         @on_access_refused = ->(_caller, _action) { Error::InsufficientScope.new }
-        @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.fields(fields) }
+        @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.for_fields(fields) }
         @feature_enabled = ->(_key, _caller) { true }
         @validate_feature = ->(_key) {}
         @area_for = ->(_model) {}

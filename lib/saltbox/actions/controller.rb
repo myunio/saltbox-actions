@@ -31,7 +31,7 @@ module Saltbox
         around_action :as_action_caller
         rescue_from Error, with: :render_action_error
         rescue_from ActionDispatch::Http::Parameters::ParseError do
-          render_action_error(Error::Invalid.new("The request body is not valid JSON"))
+          render_action_error(Error::ValidationFailed.new("The request body is not valid JSON"))
         end
       end
 
@@ -74,12 +74,12 @@ module Saltbox
       # not an object into "_json".
       def run_arguments
         fields = request.request_parameters
-        raise Error::Invalid, 'Send a JSON object: {"arguments": {...}}' if fields.key?("_json")
+        raise Error::ValidationFailed, 'Send a JSON object: {"arguments": {...}}' if fields.key?("_json")
         unknown = fields.keys - ["arguments"]
         if unknown.any? && !request.media_type.to_s.end_with?("json")
-          raise Error::Invalid, "The body was not read as JSON: send it with Content-Type: application/json"
+          raise Error::ValidationFailed, "The body was not read as JSON: send it with Content-Type: application/json"
         end
-        raise Error::Invalid, "Unknown fields: #{unknown.join(", ")}. Put the action's arguments in \"arguments\"." if unknown.any?
+        raise Error::ValidationFailed, "Unknown fields: #{unknown.join(", ")}. Put the action's arguments in \"arguments\"." if unknown.any?
         fields["arguments"]
       end
 

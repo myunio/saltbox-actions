@@ -72,7 +72,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
       .to eq("title" => "Renamed", "capacity" => 40)
     expect(gathering.reload.parent).to eq(parent)
     expect { invoke.call(retitle, {id: gathering.id, notes: "x"}, as_screen(stranger)) }.to have_field_errors(:notes)
-    expect { invoke.call(retitle, {id: gathering.id, notes: "x"}, as_screen(stranger)) }.to raise_error(Saltbox::Actions::Error::Invalid) {
+    expect { invoke.call(retitle, {id: gathering.id, notes: "x"}, as_screen(stranger)) }.to raise_error(Saltbox::Actions::Error::ValidationFailed) {
       expect(it.message).to eq("update_gathering does not take notes. It takes id, title, capacity, parent.")
       expect(it.errors).to eq("notes" => ["is not an input; takes id, title, capacity, parent"])
     }

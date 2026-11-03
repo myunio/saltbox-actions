@@ -17,7 +17,7 @@ module Saltbox
       # @param forbidden [#call, nil] whether a name the schema does not list is a field
       #   the caller may not set, refused as forbidden rather than unknown
       # @param refuse [#call] takes those fields and returns the Error::Forbidden to raise
-      def initialize(schema, name: nil, types: {}, forbidden: nil, refuse: Error::Forbidden.method(:fields))
+      def initialize(schema, name: nil, types: {}, forbidden: nil, refuse: Error::Forbidden.method(:for_fields))
         @schema = schema
         @name = name
         @types = types
@@ -31,7 +31,7 @@ module Saltbox
       #   refusing a field they may not set with Configuration#on_forbidden_fields
       def self.for(action, caller = nil)
         input = action.input(caller)
-        refuse = caller ? ->(fields) { Actions.config.on_forbidden_fields.call(caller, action, fields) } : Error::Forbidden.method(:fields)
+        refuse = caller ? ->(fields) { Actions.config.on_forbidden_fields.call(caller, action, fields) } : Error::Forbidden.method(:for_fields)
         new(input.schema, name: action.action_name, types: input.types, forbidden: action.method(:model_field?), refuse:)
       end
 
@@ -42,7 +42,7 @@ module Saltbox
       # @param arguments [Hash, nil]
       # @param caller [Caller, nil] nil for the catalog's schema
       # @return [Hash] the checked input
-      # @raise [Error::Invalid, Error::Forbidden]
+      # @raise [Error::ValidationFailed, Error::Forbidden]
       def self.check(action, arguments, caller = nil)
         return self.for(action).validate!(arguments) unless caller
         Actions.within(caller) { |fresh| self.for(action, fresh).validate!(arguments) }
@@ -54,10 +54,10 @@ module Saltbox
       # @param arguments [Hash, nil]
       # @return [Hash{String => Object}] the input with string keys, cast, without those nulls, and each
       #   declared default for an argument left out
-      # @raise [Error::Invalid] for unknown or invalid arguments
+      # @raise [Error::ValidationFailed] for unknown or invalid arguments
       def validate!(arguments)
         arguments = {} if arguments.nil?
-        raise Error::Invalid.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless arguments.is_a?(Hash)
+        raise Error::ValidationFailed.new("Arguments must be an object", errors: {"arguments" => ["Must be an object"]}) unless arguments.is_a?(Hash)
         properties = @schema.fetch("properties")
         refuse_forbidden!(arguments.keys.map(&:to_s) - properties.keys)
         arguments = arguments.deep_stringify_keys.to_h { |name, value| [name, Casting.cast(value, @types[name])] }
@@ -70,7 +70,7 @@ module Saltbox
         out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
         out_of_range.each { (errors[it] ||= []) << "is out of range" }
         messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it}` is out of range" }
-        raise Error::Invalid.new(messages.join("; "), errors:) if errors.any?
+        raise Error::ValidationFailed.new(messages.join("; "), errors:) if errors.any?
         arguments
       end
 

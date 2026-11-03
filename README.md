@@ -912,6 +912,19 @@ To refuse in your own words, raise an error from `perform`:
 raise ApplicationAction::Error.new("Published events are locked", code: :event_locked, status: :unprocessable_content)
 ```
 
+Each refusal is a class under `ApplicationAction::Error`, whose code is its
+name in snake case: `Unauthorized`, `Forbidden`, `HumanRequired`,
+`ConfirmationRequired`, `InsufficientScope`, `NotFound`, `UnknownAction`,
+`ValidationFailed` and `InUse` (a delete that other records still depend on,
+from Active Record's `DeleteRestrictionError`). Three build a refusal for you:
+
+- `Error::ValidationFailed.for(record.errors, fallback: "Could not save")`:
+  the full messages, and the errors by field;
+- `Error::ValidationFailed.from_result(result)`: a failed result object's
+  `errors`, joined as the message, with no field errors;
+- `Error::Forbidden.for_fields(%w[notes])`: fields the person sent but may not
+  change.
+
 ### Limit what a connection reaches
 
 A token's scopes are broad: read, or read and write, across every action. To
@@ -1009,7 +1022,7 @@ with the action's errors by field:
 def update
   Tasks::UpdateAction.perform_now(caller: ApplicationAction::Caller.screen(current_user), id: @task.id, **task_params)
   redirect_to tasks_path, notice: "Task updated.", status: :see_other
-rescue Saltbox::Actions::Error::Invalid => error
+rescue Saltbox::Actions::Error::ValidationFailed => error
   @task.assign_attributes(task_params)
   error.errors.each { |field, messages| messages.each { @task.errors.add(field, it) } }
   render :edit, status: :unprocessable_content

@@ -13,10 +13,10 @@ RSpec.describe "Changes and transactions" do
   end
 
   it "undoes a failed change inside the caller's own transaction, even when the caller rescues it" do
-    allow(Saltbox::Actions.config).to receive(:on_changes).and_return(->(*) { raise Saltbox::Actions::Error::Invalid, "store failed" })
+    allow(Saltbox::Actions.config).to receive(:on_changes).and_return(->(*) { raise Saltbox::Actions::Error::ValidationFailed, "store failed" })
     ActiveRecord::Base.transaction do
       update.call("Gone")
-    rescue Saltbox::Actions::Error::Invalid
+    rescue Saltbox::Actions::Error::ValidationFailed
       nil
     end
     expect(event.reload.title).to eq("AGM")
@@ -100,7 +100,7 @@ RSpec.describe "Changes and transactions" do
         def perform
           authorize Event.first
           Entry.create!(title: "Half done")
-          raise Saltbox::Actions::Error::Invalid, "No"
+          raise Saltbox::Actions::Error::ValidationFailed, "No"
         end
       end
     end
@@ -117,16 +117,16 @@ RSpec.describe "Changes and transactions" do
           authorize event
           event.update!(title: "Archived")
           Entry.create!(title: "Archived AGM")
-          raise Saltbox::Actions::Error::Invalid, "No"
+          raise Saltbox::Actions::Error::ValidationFailed, "No"
         end
       end
-      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::ValidationFailed)
       expect(event.reload.title).to eq("AGM")
       expect(Entry.count).to eq(1)
     end
 
     it "runs the change in that model's transaction, so a failure undoes it" do
-      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::ValidationFailed)
       expect(Entry.count).to eq(0)
     end
   end

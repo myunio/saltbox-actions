@@ -95,7 +95,7 @@ module Saltbox
             @arguments = arguments
             Arguments.check(@action, arguments, @caller)
             false
-          rescue Error::Invalid => error
+          rescue Error::ValidationFailed => error
             @error = error
             true
           end

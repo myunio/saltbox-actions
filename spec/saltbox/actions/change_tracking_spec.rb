@@ -63,7 +63,7 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
         event = policy_scope(Event).first
         authorize event
         event.update!(title: "Broken")
-        raise Saltbox::Actions::Error::Invalid, "No"
+        raise Saltbox::Actions::Error::ValidationFailed, "No"
       end
     end
     expect { expect { Saltbox::Actions::Invocation.call(action: failing, caller: as_screen(manager)) }.to be_refused.with(:validation_failed) }

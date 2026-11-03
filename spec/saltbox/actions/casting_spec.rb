@@ -63,9 +63,9 @@ RSpec.describe Saltbox::Actions::Casting do
     checker = Saltbox::Actions::Arguments.new(schema, types: {"ratio" => ActiveModel::Type::Float.new})
     expect(checker.validate!("ratio" => "1.5")).to eq("ratio" => 1.5)
     %w[1e999 NaN Infinity].each do |value|
-      expect { checker.validate!("ratio" => value) }.to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to eq(["ratio"]) }
+      expect { checker.validate!("ratio" => value) }.to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["ratio"]) }
     end
-    expect { checker.validate!("ratio" => Float::INFINITY) }.to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to eq(["ratio"]) }
+    expect { checker.validate!("ratio" => Float::INFINITY) }.to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["ratio"]) }
   end
 
   it "casts attributes from a form, including the items of a list, and drops a form's blank list item" do
@@ -84,6 +84,6 @@ RSpec.describe Saltbox::Actions::Casting do
     expect([built.rows, built.ids, built.page, built.amount])
       .to eq([[{"capacity" => 3, "paid" => true, "on" => Date.new(2026, 11, 2)}], [4, 5], 2, BigDecimal("1.50")])
     expect { Saltbox::Actions::Arguments.for(action).validate!("page" => "two", "amount" => "1.5.0") }
-      .to raise_error(Saltbox::Actions::Error::Invalid) { expect(it.errors.keys).to contain_exactly("page", "amount") }
+      .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to contain_exactly("page", "amount") }
   end
 end
