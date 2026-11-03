@@ -6,10 +6,7 @@
 
 `rails g actions:install` now writes `config/initializers/saltbox_actions.rb`,
 named after the gem as Rails names initializers, and the README and the
-gem's messages name that file. Rails loads an initializer by any name, so an
-app that has `config/initializers/actions.rb` keeps working; rename it to
-match. `rails g actions:install` warns when `config/initializers/actions.rb`
-exists, since whichever configure block loads last decides a setting both make.
+gem's messages name that file.
 
 ### Approvals for :confirm actions
 
@@ -29,12 +26,9 @@ exists, since whichever configure block loads last decides a setting both make.
 - `rails g actions:approvals` writes the table's migration, with foreign keys
   to the tables of the classes `config.approvals` names and the app's key
   type (or `--primary-key-type`).
-- `Error::ConfirmationRequired` takes `request:` (a subclass may set
-  `@request` itself before calling `super`). Invocation saves a new one once
+- `Error::ConfirmationRequired` takes `request:`. Invocation saves a new one once
   the call's writes have rolled back, inside `around_invocation`, so a refusal
-  from inside a change (`Caller#confirm!`) still leaves the request. An app
-  that saved its requests in its own `around_invocation` wrapper can drop
-  the wrapper.
+  from inside a change (`Caller#confirm!`) still leaves the request.
 
 ## 1.0.0 (2026-11-03)
 

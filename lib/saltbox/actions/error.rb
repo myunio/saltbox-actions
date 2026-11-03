@@ -97,8 +97,7 @@ module Saltbox
         # @param request [#save!, #new_record?, nil] the request to approve
         # @param options [Hash] as Error#initialize
         def initialize(message = nil, request: nil, **options)
-          # A subclass may set its own request before calling super.
-          @request = request if request
+          @request = request
           super(message, **options)
         end
       end

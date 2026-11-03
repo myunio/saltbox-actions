@@ -58,18 +58,6 @@ RSpec.describe Saltbox::Actions::Approval do
     expect { request.approve! }.to raise_error(ActiveRecord::RecordNotFound)
   end
 
-  it "keeps the request a ConfirmationRequired subclass sets before calling super" do
-    subclass = Class.new(Saltbox::Actions::Error::ConfirmationRequired) do
-      def initialize(request)
-        @request = request
-        super("Approve it first")
-      end
-    end
-    request = Object.new
-    expect(subclass.new(request).request).to equal(request)
-    expect(Saltbox::Actions::Error::ConfirmationRequired.new.request).to be_nil
-  end
-
   it "matches the arguments whatever their order" do
     expect(approvals.digest({"a" => 1, "b" => {"d" => 2, "c" => [3]}})).to eq(approvals.digest({"b" => {"c" => [3], "d" => 2}, "a" => 1}))
   end
