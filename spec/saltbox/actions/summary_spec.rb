@@ -70,7 +70,7 @@ RSpec.describe Saltbox::Actions::Summary do
   end
 
   it "renders the view for an agent when no summary is declared" do
-    bare_base = Class.new(Saltbox::Actions::Base) { include Saltbox::Actions::Authorization::Pundit }
+    bare_base = Class.new(Saltbox::Actions::Base) { include Saltbox::Actions::Adapters::Authorization::Pundit }
     expect(list(base: bare_base).summary).to be_nil
     expect(list_events(as_mcp(manager), action: list(base: bare_base))).to eq("data" => {"events" => [{"id" => Event.last.id, "title" => "AGM"}]})
   end

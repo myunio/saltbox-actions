@@ -239,7 +239,7 @@ RSpec.describe "Namespaced policies" do
     end
   end
 
-  describe "with Pundit" do
+  describe "with Pundit", authorization: :pundit do
     let(:list) do
       admin_action("Admin::Events::ListAction") do
         def perform
@@ -356,7 +356,7 @@ RSpec.describe "Namespaced policies" do
     end
   end
 
-  describe "with ActionPolicy" do
+  describe "with ActionPolicy", authorization: :action_policy do
     before do
       ActionPolicy::LookupChain::NamespaceCache.clear
       stub_const("EventPolicy", Class.new(ActionPolicy::Base) {
@@ -367,7 +367,7 @@ RSpec.describe "Namespaced policies" do
         def permitted_attributes = %i[title]
         relation_scope { |relation| relation.where(org_id: user.org_id) }
       })
-      stub_const("PolicyAction", Class.new(Saltbox::Actions::Base) { include Saltbox::Actions::Authorization::ActionPolicy })
+      stub_const("PolicyAction", Class.new(Saltbox::Actions::Base))
     end
 
     after { ActionPolicy::LookupChain::NamespaceCache.clear }

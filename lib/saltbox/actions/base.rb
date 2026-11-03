@@ -20,7 +20,9 @@ module Saltbox
     # - Schema: the JSON Schema of the action's input;
     # - Rendering: render and head;
     # - Permitting: permitted_attributes;
-    # - Authorization::None, until the app includes an adapter.
+    # - Authorization::None, until the app declares an authorization adapter
+    #   (config.adapters), which the declaration includes here, so every
+    #   action has it.
     #
     # The gem's classes are reachable through the app's base class too
     # (ApplicationAction::Error::NotFound, ApplicationAction::Invocation),
@@ -67,7 +69,7 @@ module Saltbox
         #   result = Events::UpdateAction.perform_now(caller:, id: @event.id, title: "AGM")
         def perform_now(caller:, **input) = Invocation.call(action: self, caller:, arguments: input)
 
-        # Runs the action later, as an Active Job (InvocationJob), as the same
+        # Runs the action later, as an Active Job (the :invocation_job adapter), as the same
         # caller. Every refusal runs again when the job runs, so a person who
         # lost access in between is refused; the refusal is logged and the
         # job dropped, never retried. The caller and the input must be what
@@ -75,9 +77,10 @@ module Saltbox
         #
         # @param caller [Caller]
         # @param input [Hash]
-        # @return [InvocationJob, false] the enqueued job, or false when enqueuing failed
+        # @return [Adapters::FrontDoors::InvocationJob, false] the enqueued job, or false when enqueuing failed
         def perform_later(caller:, **input)
-          InvocationJob.perform_later(action_name, input.deep_stringify_keys, InvocationJob.serialize_caller(caller))
+          job = Adapters::FrontDoors::InvocationJob
+          job.perform_later(action_name, input.deep_stringify_keys, job.serialize_caller(caller))
         end
 
         # The name of the method that reads a member action's record: event

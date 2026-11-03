@@ -2,7 +2,7 @@ require "test_helper"
 require "tmpdir"
 
 class ActionsTest < ActiveSupport::TestCase
-  include Saltbox::Actions::TestHelper
+  include Saltbox::Actions::Adapters::Testing::Minitest
 
   tests Events::UpdateAction
 
@@ -36,9 +36,9 @@ class ActionsTest < ActiveSupport::TestCase
   end
 
   test "custom caller factories run in the test context with default and explicit scopes" do
-    original = Saltbox::Actions::TestHelper.config
-    Saltbox::Actions::TestHelper.instance_variable_set(:@config, Saltbox::Actions::Testing::Configuration.new)
-    Saltbox::Actions::TestHelper.configure do |config|
+    original = Saltbox::Actions::Adapters::Testing::Minitest.config
+    Saltbox::Actions::Adapters::Testing::Minitest.instance_variable_set(:@config, Saltbox::Actions::Adapters::Testing::Configuration.new)
+    Saltbox::Actions::Adapters::Testing::Minitest.configure do |config|
       config.caller_for(:screen) { |user| ApplicationAction::Caller.screen(user || @manager) }
       config.caller_for(:mcp) { |user, scopes:| ApplicationAction::Caller.new(user:, surface: "mcp", scopes:, agent_name: @event.title) }
     end
@@ -48,7 +48,7 @@ class ActionsTest < ActiveSupport::TestCase
     assert_equal [], as_mcp(@manager, scopes: []).scopes
     assert_equal "api", as_api(@manager).surface
   ensure
-    Saltbox::Actions::TestHelper.instance_variable_set(:@config, original)
+    Saltbox::Actions::Adapters::Testing::Minitest.instance_variable_set(:@config, original)
   end
 
   test "runs the configured action and an explicit class or name" do
@@ -139,7 +139,7 @@ class ActionsTest < ActiveSupport::TestCase
 
   def without_change_tracking
     tracking = Saltbox::Actions::ChangeTracking
-    paper_trail = Saltbox::Actions::PaperTrail
+    paper_trail = Saltbox::Actions::Adapters::Audit::PaperTrail
     saved = [tracking.instance_variable_get(:@in_use), paper_trail.instance_variable_get(:@installed)]
     tracking.in_use = false
     paper_trail.instance_variable_set(:@installed, false)

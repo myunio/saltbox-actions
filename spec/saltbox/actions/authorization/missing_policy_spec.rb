@@ -1,6 +1,3 @@
-require "saltbox/actions/mcp"
-require "saltbox/actions/ruby_llm"
-
 # An action whose policy does not exist, such as Reports::ExportAction before
 # Reports::EventPolicy is added, is left out of every list, so the other
 # actions stay listed; running it still fails, and the app is warned once.
@@ -16,7 +13,7 @@ RSpec.describe "An action whose policy is missing" do
   def mcp(method, params = {})
     env = Rack::MockRequest.env_for("http://dummy.test/mcp", :method => "POST", "CONTENT_TYPE" => "application/json",
       "HTTP_ACCEPT" => "application/json, text/event-stream", :input => {jsonrpc: "2.0", id: 1, method:, params:}.to_json)
-    _, _, body = Saltbox::Actions::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
+    _, _, body = Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
     JSON.parse(body.each.to_a.join)
   end
 
@@ -28,7 +25,7 @@ RSpec.describe "An action whose policy is missing" do
       expect(mcp("tools/list").dig("result", "tools").pluck("name")).to include("show_event", "find_action", "run_read_action")
       found = mcp("tools/call", {name: "find_action"}).dig("result", "structuredContent", "actions").pluck("name")
       expect(found).to include("list_events").and exclude("export_reports_events")
-      tools = Saltbox::Actions::RubyLLMTool.for(as_assistant(manager))
+      tools = Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool.for(as_assistant(manager))
       listed = JSON.parse(tools.find { it.name == "find_action" }.execute.delete_prefix("<record-data>\n").delete_suffix("\n</record-data>"))
       expect(listed["actions"].pluck("name")).to include("list_events").and exclude("export_reports_events")
     end
@@ -54,21 +51,27 @@ RSpec.describe "An action whose policy is missing" do
     end
   end
 
-  context "with Pundit" do
+  context "with Pundit", authorization: :pundit do
     let(:missing) { stub_const("Reports::ExportAction", Class.new(ApplicationAction) { model Event }) }
     let(:missing_policy) { Pundit::NotDefinedError }
 
     it_behaves_like "left out of every list"
   end
 
-  context "with ActionPolicy" do
-    let(:missing) do
-      stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) {
-        include Saltbox::Actions::Authorization::ActionPolicy
-
-        model Event
-      })
+  context "with ActionPolicy", authorization: :action_policy do
+    # The dummy app's own actions are Pundit's; these are the others listed.
+    let(:dummy_actions) do
+      %w[Events::ListAction Events::ShowAction].map do |name|
+        Class.new(Saltbox::Actions::Base) do
+          define_singleton_method(:name) { name }
+          policy_namespace ActionPolicies
+          model Event
+          featured
+        end
+      end
     end
+
+    let(:missing) { stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) { model Event }) }
     let(:missing_policy) { ActionPolicy::NotFound }
 
     it_behaves_like "left out of every list"
