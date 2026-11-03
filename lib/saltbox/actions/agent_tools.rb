@@ -4,7 +4,7 @@ module Saltbox
     # and the assistant tools: the `featured` actions as tools of their own,
     # find_action to search the rest, and one run tool per kind.
     # @api private
-    module FrontDoor
+    module AgentTools
       # A tool as MCP clients and assistants see it: its name, title,
       # description, input schema and behavior hints (read-only, destructive,
       # idempotent).
@@ -81,7 +81,7 @@ module Saltbox
         response(Invocation.call(action: action, caller: caller, arguments: arguments))
       end
 
-      # What FrontDoor.call returns for a response with no body, which each
+      # What AgentTools.call returns for a response with no body, which each
       # tool adapter reports as "Done.". A JSON null is a body.
       # @api private
       EMPTY = Object.new.freeze

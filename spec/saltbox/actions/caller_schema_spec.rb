@@ -31,11 +31,11 @@ RSpec.describe "Schemas for the caller, on every surface", type: :request do
   end
 
   it "lists each caller's own fields in tools, find_action, the actions list and the catalog" do
-    expect(Saltbox::Actions::FrontDoor.tools(as_mcp(note_keeper)).map(&:name)).to include("find_action")
-    found = ->(user) { Saltbox::Actions::FrontDoor.find("add an event", as_mcp(user))[:actions].find { it[:name] == "create_event" } }
+    expect(Saltbox::Actions::AgentTools.tools(as_mcp(note_keeper)).map(&:name)).to include("find_action")
+    found = ->(user) { Saltbox::Actions::AgentTools.find("add an event", as_mcp(user))[:actions].find { it[:name] == "create_event" } }
     expect(found.call(note_keeper)[:input_schema]["properties"]).to have_key("notes")
     expect(found.call(manager)[:input_schema]["properties"]).not_to have_key("notes")
-    expect(Saltbox::Actions::FrontDoor.list(as_mcp(manager), page: 1, page_size: 50)[:actions]).not_to be_empty
+    expect(Saltbox::Actions::AgentTools.list(as_mcp(manager), page: 1, page_size: 50)[:actions]).not_to be_empty
     entry = Saltbox::Actions::Registry.catalog(as_screen(note_keeper)).find { it["name"] == "create_event" }
     expect(entry.dig("input_schema", "properties")).to have_key("notes")
     expect(Saltbox::Actions::Registry.version).to match(/\A\h{16}\z/)
@@ -44,7 +44,7 @@ RSpec.describe "Schemas for the caller, on every surface", type: :request do
   it "serves MCP tools/list and the API's actions list" do
     env = Rack::MockRequest.env_for("http://dummy.test/mcp", :method => "POST", "CONTENT_TYPE" => "application/json",
       "HTTP_ACCEPT" => "application/json, text/event-stream", :input => {jsonrpc: "2.0", id: 1, method: "tools/list", params: {}}.to_json)
-    status, _, body = Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
+    status, _, body = Saltbox::Actions::Adapters::EntryPoints::MCP.call(env, caller: as_mcp(manager), name: "dummy", allowed_hosts: ["dummy.test"])
     expect(status).to eq(200)
     expect(JSON.parse(body.each.to_a.join).dig("result", "tools").pluck("name")).to include("find_action")
     get "/api/v1/actions", headers: {"Authorization" => "Bearer manager"}

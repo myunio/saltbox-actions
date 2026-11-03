@@ -1,4 +1,4 @@
-RSpec.describe Saltbox::Actions::FrontDoor do
+RSpec.describe Saltbox::Actions::AgentTools do
   let(:event) { Event.create!(org_id: 1, title: "Annual general meeting") }
 
   it "offers featured actions as tools of their own, then find_action and one run tool per kind the caller may run" do

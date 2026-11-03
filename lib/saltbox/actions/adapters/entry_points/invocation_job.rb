@@ -3,7 +3,7 @@ require "active_job"
 module Saltbox
   module Actions
     module Adapters
-      module FrontDoors
+      module EntryPoints
         # Runs an action later (Base.perform_later), as the caller who enqueued
         # it, through the same Invocation every surface uses. The caller travels
         # as its fields: the person and the connection as Active Job serializes

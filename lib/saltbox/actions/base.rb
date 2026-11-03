@@ -44,7 +44,7 @@ module Saltbox
       Arguments = Actions::Arguments
       Invocation = Actions::Invocation
       Registry = Actions::Registry
-      FrontDoor = Actions::FrontDoor
+      AgentTools = Actions::AgentTools
       Finder = Actions::Finder
       Naming = Actions::Naming
       Declarations = Actions::Declarations
@@ -77,9 +77,9 @@ module Saltbox
         #
         # @param caller [Caller]
         # @param input [Hash]
-        # @return [Adapters::FrontDoors::InvocationJob, false] the enqueued job, or false when enqueuing failed
+        # @return [Adapters::EntryPoints::InvocationJob, false] the enqueued job, or false when enqueuing failed
         def perform_later(caller:, **input)
-          job = Adapters::FrontDoors::InvocationJob
+          job = Adapters::EntryPoints::InvocationJob
           job.perform_later(action_name, input.deep_stringify_keys, job.serialize_caller(caller))
         end
 

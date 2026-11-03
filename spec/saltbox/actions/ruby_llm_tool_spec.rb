@@ -1,7 +1,7 @@
-RSpec.describe Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool do
+RSpec.describe Saltbox::Actions::Adapters::EntryPoints::RubyLLMTool do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
 
-  it "gives the chat the tools its person may run, each with the front door's schema" do
+  it "gives the chat the tools its person may run, each with the schema AgentTools gives it" do
     tools = described_class.for(as_assistant(manager))
     expect(tools.map(&:name)).to eq(%w[show_event whoami find_action run_read_action run_change_action])
     expect(tools.first.parameters_schema).to eq(Events::ShowAction.input_schema)

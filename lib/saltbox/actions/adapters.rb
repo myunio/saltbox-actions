@@ -22,7 +22,7 @@ module Saltbox
       # adapters/<group>/; its constant is in the group's module.
       #
       # @!attribute name [Symbol] what config.adapters lists, the file's name: :mcp
-      # @!attribute group [Symbol] the folder and module it is in: :front_doors
+      # @!attribute group [Symbol] the folder and module it is in: :entry_points
       # @!attribute constant [String] its constant in the group: "MCP"
       # @!attribute gem [String, nil] the gem it needs, beyond Rails
       # @!attribute summary [String] what it does, in one line
@@ -42,13 +42,13 @@ module Saltbox
           "authorizes each action with the model's Pundit policy", nil),
         Adapter.new(:action_policy, :authorization, "ActionPolicy", "action_policy",
           "authorizes each action with the model's ActionPolicy policy", nil),
-        Adapter.new(:controller, :front_doors, "Controller", nil,
+        Adapter.new(:controller, :entry_points, "Controller", nil,
           "serves every action as a JSON API, from one controller that includes it", nil),
-        Adapter.new(:mcp, :front_doors, "MCP", "mcp",
+        Adapter.new(:mcp, :entry_points, "MCP", "mcp",
           "serves every action to AI agents over the Model Context Protocol", nil),
-        Adapter.new(:ruby_llm_tool, :front_doors, "RubyLLMTool", "ruby_llm",
+        Adapter.new(:ruby_llm_tool, :entry_points, "RubyLLMTool", "ruby_llm",
           "gives an in-app RubyLLM chat the actions as tools", nil),
-        Adapter.new(:invocation_job, :front_doors, "InvocationJob", nil,
+        Adapter.new(:invocation_job, :entry_points, "InvocationJob", nil,
           "runs an action later as an Active Job, for perform_later", :active_job),
         Adapter.new(:paper_trail, :audit, "PaperTrail", "paper_trail",
           "hears of every record a change versions with PaperTrail, for on_changes", nil)
@@ -205,8 +205,8 @@ module Saltbox
         end
       end
 
-      # Front doors: the ways into the app beside its own screens.
-      module FrontDoors
+      # Entry points: the ways into the app beside its own screens.
+      module EntryPoints
         def self.const_missing(name) = Adapters.missing(self, name) || super
       end
 

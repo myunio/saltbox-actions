@@ -33,7 +33,7 @@ RSpec.describe "Actions from an engine" do
     env = Rack::MockRequest.env_for("http://dummy.test/mcp", :method => "POST", "CONTENT_TYPE" => "application/json",
       "HTTP_ACCEPT" => "application/json, text/event-stream",
       :input => {jsonrpc: "2.0", id: 1, method: "tools/call", params: {name: "run_read_action", arguments: {name: "list_billing_invoices", arguments: {}}}}.to_json)
-    _, _, body = Saltbox::Actions::Adapters::FrontDoors::MCP.call(env, caller: as_mcp(billing_clerk), name: "dummy", allowed_hosts: ["dummy.test"])
+    _, _, body = Saltbox::Actions::Adapters::EntryPoints::MCP.call(env, caller: as_mcp(billing_clerk), name: "dummy", allowed_hosts: ["dummy.test"])
     expect(JSON.parse(body.each.to_a.join).dig("result", "structuredContent")).to eq("invoices" => [])
   end
 

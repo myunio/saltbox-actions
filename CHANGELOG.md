@@ -7,10 +7,10 @@
 **Breaking.** What is optional is now in one folder and switched on in one place:
 
 - Everything optional moved under `lib/saltbox/actions/adapters/`, grouped by job, and each
-  constant follows its path: `front_doors/` (`Controller`, `MCP`, `RubyLLMTool`,
+  constant follows its path: `entry_points/` (`Controller`, `MCP`, `RubyLLMTool`,
   `InvocationJob`), `authorization/` (Pundit, ActionPolicy, and the `Policies` they
   share), `audit/` (`PaperTrail`) and `testing/` (`RSpec`, `Minitest`, formerly `TestHelper`).
-  `Saltbox::Actions::MCP` is now `Saltbox::Actions::Adapters::FrontDoors::MCP`, and so on.
+  `Saltbox::Actions::MCP` is now `Saltbox::Actions::Adapters::EntryPoints::MCP`, and so on.
   Everything outside `adapters/` is core and always loads.
 - `config.adapters = [:pundit, :mcp, :paper_trail]` declares the adapters an app uses; only
   those load. The names are each adapter's file name: `:pundit`, `:action_policy`,
@@ -382,7 +382,7 @@ that are not part of the public API are marked `@api private`.
 - Each call gets its own deep copy of an argument's default.
 - The API encodes the body once, so a string body arrives as a JSON string.
 
-- MCP and RubyLLM send `false` and `null` bodies as JSON; only `head` reads "Done." (`FrontDoor::EMPTY`).
+- MCP and RubyLLM send `false` and `null` bodies as JSON; only `head` reads "Done." (`AgentTools::EMPTY`).
 - Argument defaults are checked against the schema and satisfy a required input.
 - `Invocation#invocation_id` stays readable in a deferred `after_change_commit`.
 
@@ -404,7 +404,7 @@ that are not part of the public API are marked `@api private`.
 - Extracted from an internal application's action layer.
 - Core: naming, declarations, input schema from policy-permitted columns, argument
   checks, the catalog, rendering, permitting, invocation, registry boot checks,
-  the front door (find_action and run tools) and the finder.
+  the agent tools (find_action and run tools) and the finder.
 - Authorization adapters for Pundit and ActionPolicy.
 - Surface adapters: MCP (streamable HTTP), RubyLLM tools, and a controller concern
   for /api/v1/actions.

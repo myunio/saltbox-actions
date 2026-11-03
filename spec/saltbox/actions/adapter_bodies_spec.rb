@@ -23,12 +23,12 @@ RSpec.describe "Response bodies on every surface" do
 
   def mcp_text(body)
     serving(body)
-    Saltbox::Actions::Adapters::FrontDoors::MCP.invoke("run_read_action", {"name" => "answer"}, as_mcp(manager)).to_h.dig(:content, 0, :text)
+    Saltbox::Actions::Adapters::EntryPoints::MCP.invoke("run_read_action", {"name" => "answer"}, as_mcp(manager)).to_h.dig(:content, 0, :text)
   end
 
   def assistant_answer(body)
     serving(body)
-    tool = Saltbox::Actions::Adapters::FrontDoors::RubyLLMTool.for(as_assistant(manager)).find { it.name == "run_read_action" }
+    tool = Saltbox::Actions::Adapters::EntryPoints::RubyLLMTool.for(as_assistant(manager)).find { it.name == "run_read_action" }
     tool.call(name: "answer")
   end
 

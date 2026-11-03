@@ -224,10 +224,10 @@ module Saltbox
       # @api private
       def self.name_problem(action)
         name = action.action_name
-        if FrontDoor::RESERVED.include?(name)
-          "#{name} is one of the gem's own tools (#{FrontDoor::RESERVED.join(", ")}): declare another action_name"
-        elsif !name.match?(FrontDoor::NAME)
-          "#{name} is not a tool name, which is 1 to #{FrontDoor::MAX_NAME_LENGTH} letters, digits, _ and -: declare another action_name"
+        if AgentTools::RESERVED.include?(name)
+          "#{name} is one of the gem's own tools (#{AgentTools::RESERVED.join(", ")}): declare another action_name"
+        elsif !name.match?(AgentTools::NAME)
+          "#{name} is not a tool name, which is 1 to #{AgentTools::MAX_NAME_LENGTH} letters, digits, _ and -: declare another action_name"
         end
       end
 
