@@ -690,8 +690,8 @@ end
 ### Callers
 
 A **caller** says who runs an action and from where. It holds the person
-(`user`), the **surface** they come from, the agent's name, and the token's
-scopes. The surfaces are:
+(`user`), the **surface** they come from, the agent's name (`agent_name`), and
+the token's scopes. The surfaces are:
 
 - `screen`: a person on your app's own screens;
 - `webmcp`: a browser assistant on the person's page;
@@ -704,6 +704,7 @@ Build a caller from a real credential, never from anything the client sends:
 
 ```ruby
 ApplicationAction::Caller.screen(current_user)
+ApplicationAction::Caller.webmcp(current_user)      # when the page's tool wrapper marks the call
 ApplicationAction::Caller.assistant(current_user)
 ApplicationAction::Caller.new(user: token.user, surface: "api", agent_name: "Billing script", scopes: token.scopes)
 ```

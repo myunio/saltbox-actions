@@ -2,6 +2,97 @@
 
 ## 0.1.0 (unreleased)
 
+### Names and defaults before 1.0
+
+These names are the ones 1.0 keeps. Each rename is breaking and has no alias: an app on an
+earlier commit renames its calls with the list below.
+
+**`enforce_confirm` is on by default.** An agent's call to a `:confirm` action is refused with
+`confirmation_required` until the app's `config.confirm` hook returns `true`. Every surface but
+the person's own screen and the app itself counts as an agent, so a script on the API is refused
+too, as are MCP and a browser assistant. With no `confirm` hook, every such call is refused. The
+chat assistant still never runs a `:confirm` action, and a person on a screen and
+`Caller.system` are never asked.
+
+- To approve through the app, set the hook:
+  `config.confirm { |invocation, action| Approval.granted?(invocation.caller.user, action.action_name, invocation.arguments) }`.
+- To let agents run `:confirm` actions with nothing checked, on purpose:
+  `config.enforce_confirm = false`. Agents are then only told to ask first.
+
+**The default verbs are `list`, `show`, `export`, `create`, `update` and `delete`.** `cancel`,
+`reinstate` and `publish` are no longer built in. An app that uses them declares them once in its
+base class, which keeps them exactly as they were (on one record, not safe to repeat, agents
+allowed, asking `cancel?`, `reinstate?` and `publish?`):
+
+```ruby
+define_verb :cancel, :reinstate, :publish, kind: :change, on: :member
+```
+
+**New:** `Error::InUse`, the class for the `in_use` code (a delete that other records still
+depend on, from Active Record's `DeleteRestrictionError`); `Caller.webmcp(user)`; the Minitest
+`tests` macro. Names that are not part of the public API are marked `@api private`.
+
+**Renamed** (old → new):
+
+- Who calls:
+  - Caller member `account`, keyword `account:` → `user`, `user:`; `Caller.system(account)` →
+    `Caller.system(user)`; `SystemAccount` → `SystemUser`
+  - the person, inside an action: `account` → `current_user` (a `User` member action keeps
+    `user` for its record)
+  - the caller, inside an action: `actor` → `current_caller`; `Base.new(actor:, params:)` →
+    `Base.new(current_caller:, params:)`
+  - the JSON API controller's hook: `resolve_caller` → `current_caller`
+  - Caller member `agent`, keyword `agent:` → `agent_name`, `agent_name:`
+    (`Caller.assistant(user, agent_name:)`, `Caller.system(agent_name:)`)
+  - `Caller#allows?(scope)` → `Caller#includes_scope?(scope)` (`access.allows?(action)` stays)
+  - `Caller#refresh!` → `Caller#refresh`
+  - `Caller.screen(user, webmcp: true)` → `Caller.webmcp(user)`
+  - adapter hooks: `permitted?(account)` → `permitted?(user)`,
+    `permitted_attribute_names_for(principal, record)` → `permitted_attribute_names_for(user, record)`,
+    ActionPolicy's `authorization_context_for(account)` → `authorization_context_for(user)`
+- Declarations:
+  - `connections :allowed / :confirm / :never` → `agents :allowed / :confirm / :never`;
+    `define_verb connections:` → `define_verb agents:`
+  - `returns(schema)` → `output_schema(schema)`, which also reads it back
+  - `policy_query` (reader) → `policy_rule` with no argument; `VERB_QUERIES` → `VERB_RULES`
+  - `paginated(per_page:, max_per_page:)` → `paginated(page_size:, max_page_size:)`
+  - `Action.scope` (the token scope it needs) → `required_scope`
+  - `available_to?(caller)` → `listed_for?(caller)`
+- Configuration:
+  - `after_change` → `after_change_commit`
+  - `around_run` → `around_perform`
+  - `schema_principal` → `schema_user`
+  - `every_file_an_action` → `strict_action_paths`
+  - `catalogue_path` → `catalog_path`
+- Errors:
+  - `Error::Invalid` → `Error::ValidationFailed` (the code stays `validation_failed`, and
+    `validation_error` in the `:type` format)
+  - `Error.from(result)` → `Error::ValidationFailed.from_result(result)`
+  - `Invalid.for(errors, fallback:)` → `ValidationFailed.for(errors, fallback:)`
+  - `Forbidden.fields(fields)` → `Forbidden.for_fields(fields)`
+- Running: `Invocation.call(name:, caller:, arguments:)` → `Invocation.call(action:, caller:, arguments:)`
+  (a name or an action class)
+- Wire names:
+  - catalog keys `connections` → `agents`, `scope` → `required_scope`
+  - `find_action` match `arguments` (its JSON Schema) → `input_schema`;
+    `response_description` → `output_description` (the run tools' `arguments` stay)
+  - `GET /api/v1/actions` meta `count` → `total`, `version` → `catalog_version`
+- Testing:
+  - `run(arguments, as:, action:)` → `run_action(arguments, as:, action:)`, in RSpec and Minitest
+  - Minitest `self.action_class = Events::UpdateAction` → `tests Events::UpdateAction`
+    (`action_class` still reads it)
+  - `be_runnable_by` → `be_runnable_for`; `assert_runnable_by` → `assert_runnable_for`
+  - `assert_matches_catalogue` → `assert_matches_catalog`
+  - shared-example lets `permitted_account`, `unpermitted_account` → `permitted_user`,
+    `unpermitted_user`
+- Tasks and generators:
+  - `rails actions:catalogue` → `rails actions:dump`
+  - `rails g action ... --catalogue / --no-catalogue` → `--catalog / --no-catalog`
+  - `rails g action ... --id / --no-id` → `--member / --no-member`
+- "catalogue" is spelled "catalog" everywhere, including the `Catalog` module.
+
+### Earlier in 0.1.0
+
 - An action in a module its model is not in asks that module's policy, as Pundit's
   `authorize [:admin, record]` does: `Admin::Projects::ListAction` asks `Admin::ProjectPolicy`,
   never `ProjectPolicy`, in `permitted?`, the record loader, `authorize`, `policy_scope`, its
@@ -75,8 +166,8 @@
   nothing notes changes.
 
 - `Caller.system` runs an action as the app itself, from a job, a rake task or the console. It is
-  not an agent: `connections` never bar it, it holds every scope and is never asked to confirm.
-  Its account is `Saltbox::Actions::SystemAccount` unless the app passes one, and the policy sees
+  not an agent: `agents` never bar it, it holds every scope and is never asked to confirm.
+  Its user is `Saltbox::Actions::SystemUser` unless the app passes one, and the policy sees
   it like a person, so the app decides what it may do. `Caller#system?` tells it apart. The JSON
   API controller, MCP and the assistant raise `ArgumentError` for a system caller. `perform_later`
   carries it to the job. The test helpers add `as_system`.
@@ -99,7 +190,7 @@
   Adapters answer `supplies_fields?`.
 - The verb carries the defaults: kind, whether it works on one record, whether it is safe to
   repeat, and its rule for agents (`:confirm` for a destructive action, `:allowed` for the
-  rest). `connections` is declared only where an action departs from its verb, and
+  rest). `agents` is declared only where an action departs from its verb, and
   `Configuration#default_connections` is removed. `update` and `delete` are now idempotent.
   `define_verb :archive, kind: :change, on: :member, idempotent: true` adds an app's own verbs
   in its base class; `verbs` reads the table. `idempotent false` overrides a verb.
@@ -108,9 +199,9 @@
   `find_<record>(scope)`), then `authorize`. It sets `@event` for the view and the reader `event`
   returns it. `rails actions:check` refuses an attribute named like the reader.
   `attribute :id` declares a member action for a verb outside the table.
-- `paginated(per_page: 25, max_per_page: 100)` declares `page` and `page_size` as attributes.
-- `featured` replaces `mcp_core`, in the class and on the wire: the catalogue's `mcp_core` key is
-  now `featured`. A client that reads the catalogue reads the new key.
+- `paginated(page_size: 25, max_page_size: 100)` declares `page` and `page_size` as attributes.
+- `featured` replaces `mcp_core`, in the class and on the wire: the catalog's `mcp_core` key is
+  now `featured`. A client that reads the catalog reads the new key.
 - `policy_rule :archive?` replaces the class-level `authorize :archive?`.
 - Titles and descriptions are written in the class. A locale entry wins over the class text,
   as Action Mailer's `default_i18n_subject` does. A field's description comes from the action's
@@ -119,12 +210,12 @@
 - `Events::UpdateAction.perform_now(caller:, **input)` runs an action through every check;
   `perform_later` runs it through Active Job (`Saltbox::Actions::InvocationJob`), checking
   everything again when the job runs and dropping it on a refusal.
-- `Error::Invalid.for(errors)` turns Active Model errors into a `validation_failed` refusal.
-- A subclass of an action inherits its `connections`, `policy_rule`, `permission`, `feature`,
+- `Error::ValidationFailed.for(errors)` turns Active Model errors into a `validation_failed` refusal.
+- A subclass of an action inherits its `agents`, `policy_rule`, `permission`, `feature`,
   `featured`, `idempotent`, `attribute :id` and `accepts`, as `class_attribute` does. Before, a
-  subclass lost them, so a parent's `connections :never` or `permission` did not reach it.
+  subclass lost them, so a parent's `agents :never` or `permission` did not reach it.
 - `rails actions:check` refuses a model whose record reader would replace a method every action
-  has (`account`, `result`), a string attribute whose `inclusion` lists symbols, and `presence`
+  has (`current_user`, `result`), a string attribute whose `inclusion` lists symbols, and `presence`
   on a boolean. A `find_<record>` that returns `nil` is `not_found`.
 - A `:datetime` attribute reads a local date and time in the app's `Time.zone`, as a datetime
   column does, in a list too. `cli args: [:id]` works for an action that takes an id. An
@@ -132,9 +223,9 @@
   a validation of a name that is not an attribute, such as a model field.
 
 - Booting never touches the database. With eager loading, the boot checks only what each action
-  declares (name, verb, kind, connections, unique names and CLI commands). `rails actions:check`
+  declares (name, verb, kind, agents rule, unique names and CLI commands). `rails actions:check`
   runs every other check (policy rules, fields, summaries, `check_action` and `check_registry`), as
-  do the registry shared example and `assert_valid_action_registry`. It and `actions:catalogue`
+  do the registry shared example and `assert_valid_action_registry`. It and `actions:dump`
   say they need the database when they cannot connect. An app that does not run
   `rails actions:check` in CI (or the registry spec or test) now boots with a missing policy
   rule, a policy field that is not a column or a bad summary, and finds out only at run time,
@@ -146,7 +237,7 @@
 - `on_forbidden_fields { |caller, action, fields| ... }` returns the error for a field the caller
   may not set, wherever it is refused: against the caller's schema or by the policy for the
   record. The default is the same `forbidden` error as before: "You can't change notes."
-- `schema_principal` is used only where there is no caller: the committed catalogue,
+- `schema_user` is used only where there is no caller: the committed catalog,
   `actions:check` and the registry spec, the generator's field list, and the schema matchers
   without `as:`. `be_invalid_against_schema` and `assert_invalid_against_schema` take `as:` a
   caller. `input_types` and `Registry.runnable` are gone.
@@ -165,12 +256,12 @@
   README documents the adapter contract with a plain-model example.
 - A list action needs only `policy_scope`, as Pundit's `verify_policy_scoped` on `index`.
 - `rails g action` checks the action as `actions:check` does before writing any file, writes
-  nothing on a problem, and puts back every file it wrote when the catalogue step fails; either
+  nothing on a problem, and puts back every file it wrote when the catalog step fails; either
   failure exits 1. A new change action declares
-  `connections :confirm` (was `:allowed`) unless the app sets `default_connections`. The spec
+  `agents :confirm` (was `:allowed`) unless the app sets `default_connections`. The spec
   template assumes no factories or roles and passes the id for any verb that takes one.
 - The shared example "refuses callers the action does not allow" checks a person without
-  rights only when the spec defines `unpermitted_account`.
+  rights only when the spec defines `unpermitted_user`.
 - The README's API controller inherits `ActionController::API`.
 - `find_action` with no query lists every action the caller can run from its surface, a page
   at a time (`page`, `page_size`: 50 by default, at most 100), sorted by area then name, with
@@ -198,13 +289,13 @@
   Writes on any other connection are not covered.
 
 - `enforce_confirm`: when on, an agent's call to a `:confirm` action is refused with
-  `confirmation_required` unless the app's `config.confirm` hook approves it. Off by
-  default, which keeps `:confirm` as advice to agents.
-- `Caller#confirm!(action)` applies another action's `connections` rule inside a running action.
+  `confirmation_required` unless the app's `config.confirm` hook approves it. On by default
+  (see "Names and defaults before 1.0").
+- `Caller#confirm!(action)` applies another action's `agents` rule inside a running action.
 
 - `summary` declares the fields a list action sends agents in place of its view, once per model
   in the base class or on one action. It replaces `cli_columns` and the `columns:` of `cli`:
-  the catalogue's `cli.columns` is now the top-level `summary`. A list's catalogue `output_schema`
+  the catalog's `cli.columns` is now the top-level `summary`. A list's catalog `output_schema`
   is its `summary_output_schema`. `render collection:` hands over a list's records; a list with a
   summary refuses `render json:`, missing records, field values whose JSON is not plain, and
   meta that is not plain data (hashes, arrays, text, numbers, booleans, dates, times, nil).
@@ -216,33 +307,33 @@
 
 - MCP and RubyLLM send `false` and `null` bodies as JSON; only `head` reads "Done." (`FrontDoor::EMPTY`).
 - Argument defaults are checked against the schema and satisfy a required input.
-- `Invocation#invocation_id` stays readable in a deferred `after_change`.
+- `Invocation#invocation_id` stays readable in a deferred `after_change_commit`.
 
 - A change runs in its own savepoint, so a failure rolls back inside a caller's transaction.
-- `after_change` runs once every enclosing transaction commits, and never on rollback.
+- `after_change_commit` runs once every enclosing transaction commits, and never on rollback.
 - `render json: false` and `render json: nil` send that JSON; `Result#empty?` marks `head`.
 - A declared `permission` replaces the policy's role question (`permitted?`) rather than adding to it.
 - Argument defaults are filled in at run time.
-- The registry shared example works with `every_file_an_action` off.
+- The registry shared example works with `strict_action_paths` off.
 
 - For apps whose names were public first: `action_name`, `title`, `description` and `cli`
   declarations, `argument` descriptions and JSON Schema keywords.
 - A `permission` gate (`any_of`, `:everyone`) with `config.permissions_held`, and
   `enforce_permissions` to let it decide only the actions list.
 - `error_format :type` and `result_format :envelope`, `render meta:`, `Result#meta`.
-- `default_connections`, `every_file_an_action`, `validate_arguments`; app error
+- `default_connections`, `strict_action_paths`, `validate_arguments`; app error
   mappings are checked before the gem's own.
 
 - Extracted from an internal application's action layer.
 - Core: naming, declarations, input schema from policy-permitted columns, argument
-  checks, the catalogue, rendering, permitting, invocation, registry boot checks,
+  checks, the catalog, rendering, permitting, invocation, registry boot checks,
   the front door (find_action and run tools) and the finder.
 - Authorization adapters for Pundit and ActionPolicy.
 - Surface adapters: MCP (streamable HTTP), RubyLLM tools, and a controller concern
   for /api/v1/actions.
 - Hooks for the app's tenancy, audit, change publishing, feature flags, areas,
   error mapping and per-connection access.
-- `returns` output schemas.
+- `output_schema` declarations.
 - RSpec layer: `type: :action`, surface callers, matchers, shared examples and the
   registry lint.
 - `rails g action`, with the spec through `hook_for :test_framework`.
