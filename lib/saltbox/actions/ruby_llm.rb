@@ -9,7 +9,7 @@ module Saltbox
     #
     # @example
     #   chat.with_instructions(Saltbox::Actions::RecordData::NOTE)
-    #   chat.with_tools(*Saltbox::Actions::RubyLLMTool.for(ApplicationAction::Caller.assistant(account)))
+    #   chat.with_tools(*Saltbox::Actions::RubyLLMTool.for(ApplicationAction::Caller.assistant(user)))
     class RubyLLMTool < ::RubyLLM::Tool
       # @param caller [Caller] usually an assistant caller
       # @return [Array<RubyLLMTool>] the tools that caller may run now

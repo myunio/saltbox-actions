@@ -7,8 +7,8 @@ class ActionsTest < ActiveSupport::TestCase
   self.action_class = Events::UpdateAction
 
   setup do
-    @manager = Account.new(id: 1, permissions: %w[events.view events.manage events.delete])
-    @reader = Account.new(id: 2, permissions: %w[events.view])
+    @manager = User.new(id: 1, permissions: %w[events.view events.manage events.delete])
+    @reader = User.new(id: 2, permissions: %w[events.view])
     @event = Event.create!(org_id: 1, title: "AGM")
   end
 
@@ -20,17 +20,17 @@ class ActionsTest < ActiveSupport::TestCase
     {as_screen: "screen", as_webmcp: "webmcp", as_api: "api", as_mcp: "mcp", as_assistant: "assistant"}.each do |helper, surface|
       caller = public_send(helper, @manager)
       assert_equal surface, caller.surface
-      assert_equal @manager, caller.account
+      assert_equal @manager, caller.user
     end
     assert_equal [Saltbox::Actions.config.scopes.fetch(:read)], as_read_only(@manager).scopes
     assert_equal [], as_mcp(@manager, scopes: []).scopes
-    assert_equal "Test agent", as_mcp(@manager).agent
+    assert_equal "Test agent", as_mcp(@manager).agent_name
   end
 
   test "builds the system caller, which the policy decides for" do
     assert as_system.system?
-    assert_equal Saltbox::Actions::SystemAccount.instance, as_system.account
-    assert_equal @manager, as_system(@manager).account
+    assert_equal Saltbox::Actions::SystemUser.instance, as_system.user
+    assert_equal @manager, as_system(@manager).user
     assert_equal "Renamed", run({id: @event.id.to_s, title: "Renamed"}, as: as_system).body.dig("data", "event", "title")
     assert_refused(:forbidden) { run({id: @event.id.to_s}, as: as_system, action: Events::DeleteAction) }
   end
@@ -39,11 +39,11 @@ class ActionsTest < ActiveSupport::TestCase
     original = Saltbox::Actions::TestHelper.config
     Saltbox::Actions::TestHelper.instance_variable_set(:@config, Saltbox::Actions::Testing::Configuration.new)
     Saltbox::Actions::TestHelper.configure do |config|
-      config.caller_for(:screen) { |account| ApplicationAction::Caller.screen(account || @manager) }
-      config.caller_for(:mcp) { |account, scopes:| ApplicationAction::Caller.new(account:, surface: "mcp", scopes:, agent: @event.title) }
+      config.caller_for(:screen) { |user| ApplicationAction::Caller.screen(user || @manager) }
+      config.caller_for(:mcp) { |user, scopes:| ApplicationAction::Caller.new(user:, surface: "mcp", scopes:, agent_name: @event.title) }
     end
-    assert_equal @manager, as_screen(nil).account
-    assert_equal "AGM", as_mcp(@manager).agent
+    assert_equal @manager, as_screen(nil).user
+    assert_equal "AGM", as_mcp(@manager).agent_name
     assert_equal Saltbox::Actions.config.scopes.values, as_mcp(@manager).scopes
     assert_equal [], as_mcp(@manager, scopes: []).scopes
     assert_equal "api", as_api(@manager).surface
@@ -56,7 +56,7 @@ class ActionsTest < ActiveSupport::TestCase
     assert_equal "Annual meeting", result.body.dig("data", "event", "title")
     assert_equal "Annual meeting", @event.reload.title
     [WhoamiAction, "whoami"].each do |action|
-      assert_equal 1, run(as: as_api(@manager), action:).body.dig("data", "account_id")
+      assert_equal 1, run(as: as_api(@manager), action:).body.dig("data", "user_id")
     end
     self.class.action_class = nil
     assert_raises(ArgumentError) { run(as: as_screen(@manager)) }

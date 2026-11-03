@@ -1,6 +1,6 @@
 RSpec.describe Saltbox::Actions::Casting do
   let(:event) { Event.create!(org_id: 1, title: "AGM", capacity: 40, price: 10, starts_on: Date.new(2026, 11, 2)) }
-  let(:update) { ->(arguments, caller = as_screen(manager)) { Saltbox::Actions::Invocation.call(name: "update_event", caller:, arguments: {id: event.id}.merge(arguments)) } }
+  let(:update) { ->(arguments, caller = as_screen(manager)) { Saltbox::Actions::Invocation.call(action: "update_event", caller:, arguments: {id: event.id}.merge(arguments)) } }
 
   it "takes what an HTML form sends from a screen, as Active Record would" do
     update.call({"capacity" => "12", "price" => "12.30", "featured" => "on", "doors_open_at" => "2026-11-02T18:30", "status" => "published"})
@@ -80,7 +80,7 @@ RSpec.describe Saltbox::Actions::Casting do
     input = {"rows" => [{"capacity" => "3", "paid" => "1", "on" => "2026-11-02"}], "ids" => ["", "4", "5"], "page" => "2", "amount" => "1.50"}
     checked = Saltbox::Actions::Arguments.for(action).validate!(input)
     expect(checked).to eq("rows" => [{"capacity" => 3, "paid" => true, "on" => "2026-11-02"}], "ids" => [4, 5], "page" => 2, "amount" => "1.50")
-    built = action.new(actor: as_screen(manager), params: Saltbox::Actions::Params.new(checked, action:))
+    built = action.new(current_caller: as_screen(manager), params: Saltbox::Actions::Params.new(checked, action:))
     expect([built.rows, built.ids, built.page, built.amount])
       .to eq([[{"capacity" => 3, "paid" => true, "on" => Date.new(2026, 11, 2)}], [4, 5], 2, BigDecimal("1.50")])
     expect { Saltbox::Actions::Arguments.for(action).validate!("page" => "two", "amount" => "1.5.0") }

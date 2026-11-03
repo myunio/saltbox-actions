@@ -52,7 +52,7 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     spec = destination.join("spec/actions/events/update_action_spec.rb").read
     expect(spec).to include("RSpec.describe Events::UpdateAction", "let(:arguments) { {id: event.id} }",
       %(it_behaves_like "refuses callers the action does not allow"), %(it_behaves_like "hides records the caller cannot see"))
-    expect(spec).not_to include("unpermitted_account) {", "create(")
+    expect(spec).not_to include("unpermitted_user) {", "create(")
     expect(output).to include("write its description in the class", "Describe starts_on, capacity", "under actions.events.fields")
     generate("Event::Update", "--force")
     expect(destination.join("app/actions/events/update_action.rb").read).to eq(action)

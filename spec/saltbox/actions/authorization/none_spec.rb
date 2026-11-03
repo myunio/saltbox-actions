@@ -20,7 +20,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
     end
   end
 
-  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(name: klass, caller:, arguments:) } }
+  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(action: klass, caller:, arguments:) } }
 
   it "asks for no policy, rule or rule name, at boot or in rails actions:check" do
     with_settings(require_area: false) do
@@ -80,7 +80,7 @@ RSpec.describe Saltbox::Actions::Authorization::None do
 
   it "takes a model given to policy_scope as all its records" do
     open = action("Gatherings::ListAction") { agents :allowed }
-    expect(open.new(actor: as_screen(stranger), params: nil).policy_scope(Gathering)).to be_a(ActiveRecord::Relation)
+    expect(open.new(current_caller: as_screen(stranger), params: nil).policy_scope(Gathering)).to be_a(ActiveRecord::Relation)
   end
 
   describe "the README's plain-model adapter" do

@@ -17,12 +17,12 @@ module Saltbox
     # - permitted_attribute_names(record): the fields the person may set;
     # - scoped_records(model): the records the person may pick, for a reference;
     # and, on the class:
-    # - permitted?(account): whether the person's role allows the action at all;
+    # - permitted?(user): whether the person's role allows the action at all;
     # - authorization_problems: what rails actions:check reports, such as a missing policy;
     # - supplies_fields?: whether the model's policy says which fields a person
     #   may set; when it does, it is the one list of a create's or update's
     #   fields, and an action may not also name them with `accepts`;
-    # - permitted_attribute_names_for(principal, record), for the input schema;
+    # - permitted_attribute_names_for(user, record), for the input schema;
     # - authorization_errors: the library's refusal, answered as forbidden.
     #
     # Without an adapter, every action is allowed and rails actions:check asks
@@ -205,7 +205,7 @@ module Saltbox
 
         class_methods do
           # @return [Boolean]
-          def permitted?(_account) = true
+          def permitted?(_user) = true
 
           # @return [Array<String>]
           def authorization_problems = []
@@ -224,7 +224,7 @@ module Saltbox
           def policy_class = nil
 
           # @return [Array<String>]
-          def permitted_attribute_names_for(_principal, _record) = []
+          def permitted_attribute_names_for(_user, _record) = []
 
           # @return [Array<Class<Exception>>]
           def authorization_errors = []

@@ -41,7 +41,7 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
   end
 
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
-  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(name: klass, caller:, arguments:) } }
+  let(:invoke) { ->(klass, arguments, caller) { Saltbox::Actions::Invocation.call(action: klass, caller:, arguments:) } }
 
   it "finds the namespaced policy, and answers aliased and default rules" do
     expect(update.policy_class).to eq(ActionPolicies::EventPolicy)

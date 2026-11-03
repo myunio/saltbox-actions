@@ -29,7 +29,7 @@ module Saltbox
         # @return [Result]
         # @raise [Error] when the action refuses
         def run(arguments = {}, as:, action: described_class)
-          Invocation.call(name: action, caller: as, arguments:)
+          Invocation.call(action: action, caller: as, arguments:)
         end
       end
     end

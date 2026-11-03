@@ -20,7 +20,7 @@ module Saltbox
         # @param caller [Caller]
         # @return [Boolean] whether the actions list shows it to this caller: its policy exists, and all four checks above
         def available_to?(caller)
-          !policy_missing? && enabled_for?(caller) && caller.reaches?(self) && caller.allows?(scope) && permitted_for?(caller)
+          !policy_missing? && enabled_for?(caller) && caller.reaches?(self) && caller.includes_scope?(scope) && permitted_for?(caller)
         end
 
         # Whether the person may use the action at all: they hold every
@@ -30,7 +30,7 @@ module Saltbox
         # @param caller [Caller]
         # @return [Boolean]
         def permitted_for?(caller)
-          return permitted?(caller.account) if permissions.nil?
+          return permitted?(caller.user) if permissions.nil?
           permissions_met?(Actions.config.permissions_held.call(caller))
         end
 

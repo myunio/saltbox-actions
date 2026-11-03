@@ -20,7 +20,7 @@ RSpec.describe Saltbox::Actions::Summary do
     end
   end
 
-  def list_events(caller, action: Events::ListAction) = Saltbox::Actions::Invocation.call(name: action, caller:).as_json
+  def list_events(caller, action: Events::ListAction) = Saltbox::Actions::Invocation.call(action: action, caller:).as_json
 
   it "sends an agent each record's summary, computed fields included, with the meta beside it" do
     expect(list_events(as_mcp(manager))).to eq(
@@ -36,10 +36,10 @@ RSpec.describe Saltbox::Actions::Summary do
   end
 
   it "matches the output schema the catalog gives agents, in either result format" do
-    expect(Saltbox::Actions::Invocation.call(name: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
+    expect(Saltbox::Actions::Invocation.call(action: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
     expect(Events::ListAction.definition["output_schema"]).to eq(Events::ListAction.summary_output_schema)
     with_settings(result_format: :envelope) do
-      expect(Saltbox::Actions::Invocation.call(name: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
+      expect(Saltbox::Actions::Invocation.call(action: Events::ListAction, caller: as_mcp(manager))).to match_output_schema(Events::ListAction.summary_output_schema)
     end
     expect(Events::ListAction.summary_output_schema.dig("properties", "data", "properties", "events", "items", "properties"))
       .to eq("id" => {"type" => "integer"}, "title" => {"type" => "string"}, "starts_on" => {"type" => %w[string null], "format" => "date"},
@@ -128,13 +128,13 @@ RSpec.describe Saltbox::Actions::Summary do
       authorize @event
       render :show, collection: [@event]
     end)
-    expect { Saltbox::Actions::Invocation.call(name: show, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s}) }.to raise_error(ArgumentError, /render collection: is for a list action with a summary/)
+    expect { Saltbox::Actions::Invocation.call(action: show, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s}) }.to raise_error(ArgumentError, /render collection: is for a list action with a summary/)
   end
 
   it "sends a decimal column as text, as its schema says" do
     Event.last.update!(price: "12.34")
     priced = list { summary :id, :price }
-    result = Saltbox::Actions::Invocation.call(name: priced, caller: as_mcp(manager))
+    result = Saltbox::Actions::Invocation.call(action: priced, caller: as_mcp(manager))
     expect(result.as_json.dig("data", "events", 0, "price")).to eq("12.34")
     expect(priced.summary_output_schema.dig("properties", "data", "properties", "events", "items", "properties", "price"))
       .to eq("type" => %w[number string null])
@@ -183,7 +183,7 @@ RSpec.describe Saltbox::Actions::Summary do
   end
 
   it "sends summaries only from a list action" do
-    show = Saltbox::Actions::Invocation.call(name: Events::ShowAction, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s})
+    show = Saltbox::Actions::Invocation.call(action: Events::ShowAction, caller: as_mcp(manager), arguments: {id: Event.last.id.to_s})
     expect(show.body.dig("data", "event")).to include("capacity" => nil)
   end
 

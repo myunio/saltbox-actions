@@ -1,6 +1,6 @@
 RSpec.describe Events::ListAction do
-  let(:permitted_account) { reader }
-  let(:unpermitted_account) { stranger }
+  let(:permitted_user) { reader }
+  let(:unpermitted_user) { stranger }
   let(:arguments) { {} }
 
   it_behaves_like "refuses callers the action does not allow"

@@ -17,7 +17,7 @@ module Saltbox
     # a person on each surface, since people and tokens are its own models:
     #
     #   Saltbox::Actions::RSpec.configure do |config|
-    #     config.caller_for(:mcp) { |account, scopes:| ApplicationAction::Caller.connection(create(:token, account:, scopes:), surface: "mcp") }
+    #     config.caller_for(:mcp) { |user, scopes:| ApplicationAction::Caller.connection(create(:token, user:, scopes:), surface: "mcp") }
     #   end
     module RSpec
       class << self

@@ -5,7 +5,7 @@ require "saltbox/actions/mcp"
 RSpec.describe "Actions from an engine" do
   let(:registry) { Saltbox::Actions::Registry }
   let(:engine_folder) { Billing::Engine.root.join("app/actions") }
-  let(:billing_clerk) { Account.new(id: 5, permissions: %w[billing.view]) }
+  let(:billing_clerk) { User.new(id: 5, permissions: %w[billing.view]) }
 
   def with_paths(paths)
     with_settings(action_paths: paths) do

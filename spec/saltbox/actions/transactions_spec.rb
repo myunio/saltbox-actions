@@ -4,7 +4,7 @@ RSpec.describe "Changes and transactions" do
   self.use_transactional_tests = false
 
   let!(:event) { Event.create!(org_id: 1, title: "AGM") }
-  let(:update) { ->(title) { Saltbox::Actions::Invocation.call(name: "update_event", caller: as_screen(manager), arguments: {id: event.id.to_s, title:}) } }
+  let(:update) { ->(title) { Saltbox::Actions::Invocation.call(action: "update_event", caller: as_screen(manager), arguments: {id: event.id.to_s, title:}) } }
 
   after do
     Event.delete_all
@@ -70,7 +70,7 @@ RSpec.describe "Changes and transactions" do
         head :no_content
       end
     end
-    Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager))
+    Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager))
     expect(Event.pluck(:title)).to include("Before commit", "After commit")
     expect(Dummy::ANNOUNCED.sole[:changes]).to eq([["Booking", Event.find_by!(title: "Booking").id.to_s, "create"]])
   end
@@ -120,13 +120,13 @@ RSpec.describe "Changes and transactions" do
           raise Saltbox::Actions::Error::Invalid, "No"
         end
       end
-      expect { Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
       expect(event.reload.title).to eq("AGM")
       expect(Entry.count).to eq(1)
     end
 
     it "runs the change in that model's transaction, so a failure undoes it" do
-      expect { Saltbox::Actions::Invocation.call(name: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
+      expect { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error::Invalid)
       expect(Entry.count).to eq(0)
     end
   end

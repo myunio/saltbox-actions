@@ -65,7 +65,7 @@ module Saltbox
         # @example From a controller
         #   caller = ApplicationAction::Caller.screen(Current.user)
         #   result = Events::UpdateAction.perform_now(caller:, id: @event.id, title: "AGM")
-        def perform_now(caller:, **input) = Invocation.call(name: self, caller:, arguments: input)
+        def perform_now(caller:, **input) = Invocation.call(action: self, caller:, arguments: input)
 
         # Runs the action later, as an Active Job (InvocationJob), as the same
         # caller. Every refusal runs again when the job runs, so a person who
@@ -93,7 +93,7 @@ module Saltbox
         # lives in a module of its own, as Active Model's attribute methods
         # do, so the action may override it and call super. A subclass keeps
         # its parent's reader. A name every action already answers to, such
-        # as account or result, gets no reader: rails actions:check refuses
+        # as current_user or result, gets no reader: rails actions:check refuses
         # the action (record_reader_conflict).
         #
         # @return [void]
@@ -107,7 +107,7 @@ module Saltbox
         end
 
         # @return [Module, nil] what already answers to the record reader's name, when the
-        #   gem, an adapter or Ruby does (account for an Account, result for a Result)
+        #   gem, an adapter or Ruby does (result for a Result, params for a Params)
         def record_reader_conflict
           reader = record_name
           return if reader.nil?
@@ -129,22 +129,22 @@ module Saltbox
       end
 
       # @return [Caller] who is calling, and from where
-      attr_reader :actor
+      attr_reader :current_caller
       # @return [Params] the checked input
       attr_reader :params
 
-      # @param actor [Caller]
+      # @param current_caller [Caller]
       # @param params [Params] the input, already checked against the action's JSON Schema;
       #   each attribute is cast once, by its type, from its value here
-      def initialize(actor:, params:)
-        @actor = actor
+      def initialize(current_caller:, params:)
+        @current_caller = current_caller
         @params = params
         self.class.define_record_reader
         super(params.to_h.slice(*self.class.declared_attributes.keys))
       end
 
       # @return [Object] the person the action acts for
-      def account = actor.account
+      def current_user = current_caller.user
 
       # @return [Object, nil] the id the caller sent, for a member action
       def id = self.class.takes_id? ? params[:id] : nil

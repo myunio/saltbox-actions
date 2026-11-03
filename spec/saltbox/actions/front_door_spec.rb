@@ -22,12 +22,12 @@ RSpec.describe Saltbox::Actions::FrontDoor do
   end
 
   it "tells the agent when only a person may run what it found" do
-    found = described_class.call("find_action", {"query" => "private notes"}, caller: as_mcp(Account.new(id: 9, permissions: %w[events.view events.notes])))
+    found = described_class.call("find_action", {"query" => "private notes"}, caller: as_mcp(User.new(id: 9, permissions: %w[events.view events.notes])))
     expect(found[:actions].first).to include(name: "show_event_notes", run_with: nil, message: "Only a person can do this, in Dummy")
   end
 
   describe "find_action with no query" do
-    def listed(account, caller: as_mcp(account), **paging) = described_class.call("find_action", paging, caller:)[:actions]
+    def listed(user, caller: as_mcp(user), **paging) = described_class.call("find_action", paging, caller:)[:actions]
 
     it "lists every action the caller can run, by area then name, without descriptions or arguments" do
       expect(listed(manager).pluck(:name)).to eq(%w[cancel_event create_event delete_event list_events postpone_event show_event update_event count_events whoami])
@@ -39,7 +39,7 @@ RSpec.describe Saltbox::Actions::FrontDoor do
     it "lists only what the caller can run from its surface, never what only a person may run" do
       expect(listed(reader).pluck(:name)).to eq(%w[list_events show_event whoami])
       expect(listed(manager, caller: as_read_only(manager)).pluck(:kind).uniq).to eq(%w[read])
-      expect(listed(Account.new(id: 9, permissions: %w[events.view events.notes])).pluck(:name)).not_to include("show_event_notes")
+      expect(listed(User.new(id: 9, permissions: %w[events.view events.notes])).pluck(:name)).not_to include("show_event_notes")
       expect(listed(manager, caller: as_assistant(manager)).pluck(:name)).not_to include("cancel_event", "delete_event")
       expect(listed(manager, caller: as_webmcp(manager)).pluck(:name)).not_to include("delete_event")
       expect(listed(manager, caller: as_assistant(manager))).to all(satisfy { |entry| entry[:run_with] && !entry.key?(:message) })
@@ -95,7 +95,7 @@ RSpec.describe Saltbox::Actions::FrontDoor do
 
   it "lists only what a connection's access reaches, in its tools, find_action and the catalog" do
     reads_only = Struct.new(:kind) { def allows?(action) = action.kind == kind }.new(:read)
-    connection = Saltbox::Actions::Caller.new(account: manager, surface: "mcp", agent: "Claude", access: reads_only)
+    connection = Saltbox::Actions::Caller.new(user: manager, surface: "mcp", agent_name: "Claude", access: reads_only)
     expect(described_class.tools(connection).map(&:name)).to eq(%w[show_event whoami find_action run_read_action])
     expect(described_class.call("find_action", {"query" => "cancel the meeting"}, caller: connection)[:actions]).to be_empty
     listed = Saltbox::Actions::Registry.catalog(connection).pluck("name")

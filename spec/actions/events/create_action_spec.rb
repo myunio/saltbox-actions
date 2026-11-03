@@ -1,6 +1,6 @@
 RSpec.describe Events::CreateAction do
-  let(:permitted_account) { manager }
-  let(:unpermitted_account) { reader }
+  let(:permitted_user) { manager }
+  let(:unpermitted_user) { reader }
   let(:arguments) { {title: "Picnic", starts_on: "2026-07-01"} }
 
   it_behaves_like "refuses callers the action does not allow"

@@ -4,7 +4,7 @@ require "saltbox/actions/mcp"
 RSpec.describe "Confirming a :confirm action" do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
   let(:config) { Saltbox::Actions.config }
-  let(:cancel) { ->(caller) { Saltbox::Actions::Invocation.call(name: "cancel_event", caller:, arguments: {id: event.id.to_s}) } }
+  let(:cancel) { ->(caller) { Saltbox::Actions::Invocation.call(action: "cancel_event", caller:, arguments: {id: event.id.to_s}) } }
 
   def approve(answer = true, &block)
     allow(config).to receive(:confirm).and_return(block || ->(*) { answer })
@@ -77,7 +77,7 @@ RSpec.describe "Confirming a :confirm action" do
     approve { raise "asked" }
     with_settings(enforce_confirm: true) do
       expect { cancel.call(as_mcp(reader)) }.to be_refused.with(:forbidden)
-      expect { Saltbox::Actions::Invocation.call(name: "cancel_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, reason: 1}) }
+      expect { Saltbox::Actions::Invocation.call(action: "cancel_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, reason: 1}) }
         .to have_field_errors(:reason)
     end
   end
@@ -85,7 +85,7 @@ RSpec.describe "Confirming a :confirm action" do
   it "never asks for an :allowed action" do
     approve { raise "asked" }
     with_settings(enforce_confirm: true) do
-      expect { Saltbox::Actions::Invocation.call(name: "update_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, title: "New"}) }
+      expect { Saltbox::Actions::Invocation.call(action: "update_event", caller: as_mcp(manager), arguments: {id: event.id.to_s, title: "New"}) }
         .not_to be_refused
     end
   end
@@ -103,13 +103,13 @@ RSpec.describe "Confirming a :confirm action" do
 
         def perform
           event.update!(title: "Moved")
-          actor.confirm!(Events::CancelAction) if cancel
+          current_caller.confirm!(Events::CancelAction) if cancel
           event.update!(status: cancel ? "cancelled" : "published")
           render :show
         end
       end
     end
-    let(:reschedule) { ->(caller, cancel: true) { Saltbox::Actions::Invocation.call(name: action, caller:, arguments: {id: event.id.to_s, cancel:}) } }
+    let(:reschedule) { ->(caller, cancel: true) { Saltbox::Actions::Invocation.call(action: action, caller:, arguments: {id: event.id.to_s, cancel:}) } }
 
     it "lets the call through with enforce_confirm off, and a person on a screen always" do
       reschedule.call(as_mcp(manager))

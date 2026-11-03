@@ -25,7 +25,7 @@ module Saltbox
           raise ArgumentError, "#{self.class.name} takes no model fields: a create or update takes the ones its policy permits, any other action names them with accepts"
         end
         allowed = self.class.accepted_fields.any? ? self.class.writable_fields.values.map(&:key) : permitted_attribute_names(record)
-        sent = self.class.writable_fields(actor).select { |name, _| params.key?(name) }
+        sent = self.class.writable_fields(current_caller).select { |name, _| params.key?(name) }
         forbidden = sent.reject { |_, field| allowed.include?(field.key) }.keys
         refuse_forbidden_fields!(forbidden) if forbidden.any?
         sent.to_h do |name, field|
@@ -55,7 +55,7 @@ module Saltbox
       # @param fields [Array<String>] the fields sent that the person may not change
       # @raise [Error::Forbidden] the one Configuration#on_forbidden_fields returns
       def refuse_forbidden_fields!(fields)
-        raise Actions.config.on_forbidden_fields.call(actor, self.class, fields)
+        raise Actions.config.on_forbidden_fields.call(current_caller, self.class, fields)
       end
     end
   end

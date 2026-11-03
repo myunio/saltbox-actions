@@ -20,7 +20,7 @@ module Saltbox
     module Rendering
       # Instance variables the base class, Active Model and the adapters set
       # for themselves; views never see them. Any starting @_ are left out too.
-      PROTECTED_IVARS = %i[@actor @params @pundit @attributes @errors @validation_context @context_for_validation].freeze
+      PROTECTED_IVARS = %i[@current_caller @params @pundit @attributes @errors @validation_context @context_for_validation].freeze
       # Tells render json: false or json: nil from no json: at all.
       NO_JSON = Object.new.freeze
       # Tells render collection: nil from no collection: at all.
@@ -100,7 +100,7 @@ module Saltbox
           raise ArgumentError, "#{action.name} sends agents #{action.model.name}'s summary: set #{variable} to its records, or render collection:"
         end
         plain_meta!(meta)
-        records if actor.agent?
+        records if current_caller.agent?
       end
 
       # The same JSON in either result format: {"data": {"events": [...]}, "meta": {...}}.

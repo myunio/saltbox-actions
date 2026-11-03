@@ -1,6 +1,6 @@
 RSpec.describe Saltbox::Actions::Invocation do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
-  let(:invoke) { ->(name, arguments, caller) { described_class.call(name:, caller:, arguments:) } }
+  let(:invoke) { ->(name, arguments, caller) { described_class.call(action: name, caller:, arguments:) } }
 
   it "answers unknown_action for a name no action has" do
     expect { invoke.call("fly_event", {}, as_screen(manager)) }.to be_refused.with(:unknown_action)
@@ -17,7 +17,7 @@ RSpec.describe Saltbox::Actions::Invocation do
   end
 
   it "checks a generic run tool's kind after admission and before arguments" do
-    expect { described_class.call(name: "update_event", caller: as_screen(manager), arguments: {nope: 1}, expected_kind: :read) }
+    expect { described_class.call(action: "update_event", caller: as_screen(manager), arguments: {nope: 1}, expected_kind: :read) }
       .to raise_error(Saltbox::Actions::Error::Invalid, "update_event is a change action; run it with run_change_action")
   end
 
@@ -71,7 +71,7 @@ RSpec.describe Saltbox::Actions::Invocation do
       policy_rule :update?
       define_method(:perform) { raise domain_error }
     end
-    expect { described_class.call(name: action, caller: as_screen(manager)) }.to be_refused.with(:locked)
+    expect { described_class.call(action: action, caller: as_screen(manager)) }.to be_refused.with(:locked)
   ensure
     Saltbox::Actions.config.error_mappings.pop
   end
@@ -90,7 +90,7 @@ RSpec.describe Saltbox::Actions::Invocation do
       policy_rule :show?
       def perform = render(json: {})
     end
-    expect { described_class.call(name: action, caller: as_screen(manager)) }.to raise_error(Pundit::AuthorizationNotPerformedError)
+    expect { described_class.call(action: action, caller: as_screen(manager)) }.to raise_error(Pundit::AuthorizationNotPerformedError)
   end
 
   it "takes policy_scope as a list action's authorization, but still needs it" do
@@ -102,7 +102,7 @@ RSpec.describe Saltbox::Actions::Invocation do
         render :index
       end
     end
-    expect(described_class.call(name: listed, caller: as_screen(manager)).status).to eq(200)
+    expect(described_class.call(action: listed, caller: as_screen(manager)).status).to eq(200)
     unscoped = Class.new(ApplicationAction) do
       def self.name = "Events::ListAction"
       agents :allowed
@@ -111,7 +111,7 @@ RSpec.describe Saltbox::Actions::Invocation do
         render :index
       end
     end
-    expect { described_class.call(name: unscoped, caller: as_screen(manager)) }.to raise_error(Pundit::PolicyScopingNotPerformedError)
+    expect { described_class.call(action: unscoped, caller: as_screen(manager)) }.to raise_error(Pundit::PolicyScopingNotPerformedError)
   end
 
   it "refuses a read of an input the action does not declare" do
@@ -122,13 +122,13 @@ RSpec.describe Saltbox::Actions::Invocation do
       policy_rule :show?
       def perform = params[:colour]
     end
-    expect { described_class.call(name: action, caller: as_screen(manager)) }
+    expect { described_class.call(action: action, caller: as_screen(manager)) }
       .to raise_error(ArgumentError, "peek_event reads params[:colour] but declares no input colour")
   end
 
   describe "a connection's access (Caller#access)" do
     let(:events_read_only) { Struct.new(:kinds) { def allows?(action) = kinds.include?(action.kind) }.new([:read]) }
-    let(:connection) { Saltbox::Actions::Caller.new(account: manager, surface: "mcp", agent: "Claude", access: events_read_only) }
+    let(:connection) { Saltbox::Actions::Caller.new(user: manager, surface: "mcp", agent_name: "Claude", access: events_read_only) }
 
     it "hides and refuses what the access does not reach, with the app's refusal" do
       refusal = Saltbox::Actions::Error::InsufficientScope.new("Not allowed changes in Events", details: {"area" => "events", "needs" => "change"})

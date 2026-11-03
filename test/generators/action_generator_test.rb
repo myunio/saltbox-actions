@@ -21,7 +21,7 @@ class ActionGeneratorTest < ActiveSupport::TestCase
       # Supply this app's records where the template asks for them, then run
       # the generated test through Minitest itself in a separate process.
       source = source.sub('raise NotImplementedError, "a person who may run Events::UpdateAction"',
-        "Account.new(id: 1, permissions: %w[events.view events.manage])")
+        "User.new(id: 1, permissions: %w[events.view events.manage])")
       source = source.sub('raise NotImplementedError, "a record the person can see"',
         'Event.create!(org_id: 1, title: "AGM")')
       test_file.write(source)

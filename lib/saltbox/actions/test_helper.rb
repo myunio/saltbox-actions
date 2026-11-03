@@ -24,7 +24,7 @@ module Saltbox
       def run(arguments = {}, as: nil, action: action_class)
         return super() unless as
         raise ArgumentError, "pass action: or set self.action_class" unless action
-        Invocation.call(name: action, caller: as, arguments:)
+        Invocation.call(action: action, caller: as, arguments:)
       end
 
       # Returns the refusal so its message and details can also be checked.
@@ -42,7 +42,7 @@ module Saltbox
       end
 
       # Without `as:` it checks the catalog's schema, built for
-      # Configuration#schema_principal; pass a caller when the policy needs a person.
+      # Configuration#schema_user; pass a caller when the policy needs a person.
       def assert_invalid_against_schema(arguments, action: action_class, as: nil)
         assert_raises(Error::Invalid) { Arguments.check(action, arguments, as) }
       end

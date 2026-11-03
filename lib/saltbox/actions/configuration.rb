@@ -11,7 +11,7 @@ module Saltbox
     #   Saltbox::Actions.configure do |config|
     #     config.app_name = "Acme"
     #     config.around_invocation { |caller, run| Context.within(caller) { |fresh| run.(fresh) } }
-    #     config.around_run { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.account.id) { run.() } }
+    #     config.around_run { |invocation, run| PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
     #     config.on_changes { |changes, invocation| publish(changes, invocation) }
     #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::Invalid.new(error.message) }
     #   end
@@ -86,7 +86,7 @@ module Saltbox
         @feature_enabled = ->(_key, _caller) { true }
         @validate_feature = ->(_key) {}
         @area_for = ->(_model) {}
-        @schema_principal = nil
+        @schema_user = nil
         @error_mappings = []
         @action_checks = []
         @registry_checks = []
@@ -201,17 +201,17 @@ module Saltbox
       # Who a create or update's input schema is built for where there is
       # no caller: the committed catalog (config/actions.json),
       # `rails actions:check` and the registry spec or test, the generator's
-      # field list, and the schema matchers without `as:`. A principal
+      # field list, and the schema matchers without `as:`. A user
       # holding every permission, so the catalog lists every field.
       # Callers never see it: each gets the fields their policy permits them. Without it the policy is asked
-      # with no person (nil). The block calls run with the principal, inside
+      # with no person (nil). The block calls run with the user, inside
       # whatever the policy needs, such as a tenant.
       #
       # @example A policy that needs a person, in a multi-tenant app
-      #   config.schema_principal { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
+      #   config.schema_user { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
       #
-      # @yieldparam run [Proc] takes the principal
-      def schema_principal(&block) = block ? @schema_principal = block : @schema_principal
+      # @yieldparam run [Proc] takes the user
+      def schema_user(&block) = block ? @schema_user = block : @schema_user
 
       # Turns an app error raised inside an action into an Error callers
       # see. Checked in the order given, before the gem's own mappings, so an

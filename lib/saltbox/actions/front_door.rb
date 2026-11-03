@@ -65,11 +65,11 @@ module Saltbox
         end
         if (kind = RUN.key(tool_name))
           name, action_arguments = run_wrapper!(arguments)
-          return response(Invocation.call(name: name, caller: caller, arguments: action_arguments, expected_kind: kind))
+          return response(Invocation.call(action: name, caller: caller, arguments: action_arguments, expected_kind: kind))
         end
         action = Registry.fetch(tool_name)
         raise Error::UnknownAction, tool_name unless action.featured?
-        response(Invocation.call(name: action, caller: caller, arguments: arguments))
+        response(Invocation.call(action: action, caller: caller, arguments: arguments))
       end
 
       # What FrontDoor.call returns for a response with no body, which each

@@ -4,9 +4,9 @@ require "json_schemer"
 # defines.
 
 # The refusal ladder, by surface. The including spec defines:
-# - `permitted_account`: a person whose role allows the action;
+# - `permitted_user`: a person whose role allows the action;
 # - `arguments`: input that succeeds for the permitted person;
-# - `unpermitted_account`, only when some people may not run it at all: a
+# - `unpermitted_user`, only when some people may not run it at all: a
 #   person whose role does not allow it.
 #
 # Checked: the person without rights, when defined, is refused; each agent surface is
@@ -20,14 +20,14 @@ require "json_schemer"
 #     let(:arguments) { {id: event.id, title: "AGM"} }
 #   end
 RSpec.shared_examples "refuses callers the action does not allow" do
-  if method_defined?(:unpermitted_account)
+  if method_defined?(:unpermitted_user)
     it "refuses a person without its rights" do
-      expect { run(arguments, as: as_screen(unpermitted_account)) }.to be_refused.with(:forbidden)
+      expect { run(arguments, as: as_screen(unpermitted_user)) }.to be_refused.with(:forbidden)
     end
   end
 
   it "lets the person run it on a screen" do
-    expect { run(arguments, as: as_screen(permitted_account)) }.not_to be_refused
+    expect { run(arguments, as: as_screen(permitted_user)) }.not_to be_refused
   end
 
   {mcp: :as_mcp, api: :as_api, assistant: :as_assistant, webmcp: :as_webmcp}.each do |surface, helper|
@@ -37,7 +37,7 @@ RSpec.shared_examples "refuses callers the action does not allow" do
       when :confirm then surface != :assistant && !(surface == :webmcp && described_class.kind == :destructive)
       else false
       end
-      caller = public_send(helper, permitted_account)
+      caller = public_send(helper, permitted_user)
       if allowed && described_class.agents == :confirm && Saltbox::Actions.config.enforce_confirm
         allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { false })
         expect { run(arguments, as: caller) }.to be_refused.with(:confirmation_required)
@@ -51,25 +51,25 @@ RSpec.shared_examples "refuses callers the action does not allow" do
   # A read runs on a read-only token, and agents never run a :never action.
   if described_class.kind != :read && described_class.agents != :never
     it "needs a token that may change" do
-      expect { run(arguments, as: as_read_only(permitted_account)) }.to be_refused.with(:insufficient_scope)
+      expect { run(arguments, as: as_read_only(permitted_user)) }.to be_refused.with(:insufficient_scope)
     end
   end
 end
 
 # For an action that works on one record. The including spec defines
-# `permitted_account` and `hidden_arguments`: input that names a record the
+# `permitted_user` and `hidden_arguments`: input that names a record the
 # person may not see, such as another tenant's.
 RSpec.shared_examples "hides records the caller cannot see" do
   it "answers a record the person cannot see as not found" do
-    expect { run(hidden_arguments, as: as_screen(permitted_account)) }.to be_not_found
+    expect { run(hidden_arguments, as: as_screen(permitted_user)) }.to be_not_found
   end
 end
 
 # For an action that declares `returns`. The including spec defines
-# `permitted_account` and `arguments`.
+# `permitted_user` and `arguments`.
 RSpec.shared_examples "renders its declared output schema" do
   it "renders a body that matches its output schema" do
-    expect(run(arguments, as: as_screen(permitted_account))).to match_output_schema
+    expect(run(arguments, as: as_screen(permitted_user))).to match_output_schema
   end
 end
 

@@ -1,6 +1,6 @@
 RSpec.describe Events::ShowAction do
-  let(:permitted_account) { reader }
-  let(:unpermitted_account) { stranger }
+  let(:permitted_user) { reader }
+  let(:unpermitted_user) { stranger }
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
   let(:arguments) { {id: event.id.to_s} }
 

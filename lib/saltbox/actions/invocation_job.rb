@@ -14,18 +14,18 @@ module Saltbox
         job.logger&.info("#{job.arguments.first} was refused when it ran later: #{error.code}: #{error.message}")
       end
 
-      # Carries SystemAccount, Caller.system's default account, to the job.
-      class SystemAccountSerializer < ActiveJob::Serializers::ObjectSerializer
+      # Carries SystemUser, Caller.system's default user, to the job.
+      class SystemUserSerializer < ActiveJob::Serializers::ObjectSerializer
         # @return [Hash]
-        def serialize(_account) = super({})
+        def serialize(_user) = super({})
 
-        # @return [SystemAccount]
-        def deserialize(_hash) = SystemAccount.instance
+        # @return [SystemUser]
+        def deserialize(_hash) = SystemUser.instance
 
         # @return [Class]
-        def klass = SystemAccount
+        def klass = SystemUser
       end
-      ActiveJob::Serializers.add_serializers(SystemAccountSerializer)
+      ActiveJob::Serializers.add_serializers(SystemUserSerializer)
 
       # @param caller [Caller]
       # @return [Hash] what the job needs to build the caller again
@@ -39,7 +39,7 @@ module Saltbox
       def perform(action, input, caller)
         caller_class = caller.fetch("class").safe_constantize
         raise ArgumentError, "#{caller["class"]} is not a Saltbox::Actions::Caller" unless caller_class.is_a?(Class) && caller_class <= Caller
-        Invocation.call(name: Registry.fetch(action), caller: caller_class.new(**caller.except("class").symbolize_keys), arguments: input)
+        Invocation.call(action: Registry.fetch(action), caller: caller_class.new(**caller.except("class").symbolize_keys), arguments: input)
       end
     end
   end

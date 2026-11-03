@@ -133,7 +133,7 @@ module Saltbox
       # each action's model, policy, fields and summary, and the app's own
       # checks (Configuration#action_checks and #registry_checks). It reads
       # the models' columns, so it needs the database; a write action's
-      # schema is built for Configuration#schema_principal.
+      # schema is built for Configuration#schema_user.
       #
       # @return [Array<Class>] every action, once all pass
       # @raise [ArgumentError] naming every problem with each action
@@ -286,7 +286,7 @@ module Saltbox
       end
 
       # Builds the catalog's input schema, which asks the policy's
-      # permitted_attributes of the schema principal.
+      # permitted_attributes of the schema user.
       #
       # @param action [Class] an action with a model
       # @return [Array<String>] what stops its schema being built, and the fix
@@ -299,7 +299,7 @@ module Saltbox
         raise
       rescue => error
         ["building its input schema asked #{action.policy_class ? "#{action.policy_class}#permitted_attributes" : "permitted_attribute_names_for"}, which raised #{error.class}: #{error.message}. " \
-          "If the policy needs a person or a tenant, set config.schema_principal, which actions:check and the catalog build schemas for"]
+          "If the policy needs a person or a tenant, set config.schema_user, which actions:check and the catalog build schemas for"]
       end
 
       # @param action [Class] an action with a model
@@ -335,7 +335,7 @@ module Saltbox
       end
 
       # @return [Array<Hash>] every action's definition, as written to the catalog file:
-      #   a create or update lists the fields the policy permits Configuration#schema_principal
+      #   a create or update lists the fields the policy permits Configuration#schema_user
       def self.definitions = actions.map(&:definition)
 
       # The version of the actions' code, for the API's meta and the MCP

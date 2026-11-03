@@ -5,6 +5,6 @@ class WhoamiAction < ApplicationAction
   def perform
     skip_authorization
     skip_policy_scope
-    render json: {data: {account_id: account.id, surface: actor.surface, agent: actor.agent}}
+    render json: {data: {user_id: current_user.id, surface: current_caller.surface, agent: current_caller.agent_name}}
   end
 end

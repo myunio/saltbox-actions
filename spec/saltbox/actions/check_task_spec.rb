@@ -23,9 +23,9 @@ RSpec.describe "rails actions:check" do
       .to output(/Events::CancelAction: EventPolicy#archive\? is missing: add it, or name another with policy_rule/).to_stderr
   end
 
-  it "fails naming the action when its policy needs a person and no schema principal is set" do
-    allow(Saltbox::Actions.config).to receive(:schema_principal).and_return(nil)
+  it "fails naming the action when its policy needs a person and no schema user is set" do
+    allow(Saltbox::Actions.config).to receive(:schema_user).and_return(nil)
     expect { expect { check }.to raise_error(SystemExit) }
-      .to output(/Events::CreateAction: building its input schema asked EventPolicy#permitted_attributes, which raised NoMethodError.*set config.schema_principal/).to_stderr
+      .to output(/Events::CreateAction: building its input schema asked EventPolicy#permitted_attributes, which raised NoMethodError.*set config.schema_user/).to_stderr
   end
 end

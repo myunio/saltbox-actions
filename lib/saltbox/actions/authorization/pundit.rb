@@ -6,7 +6,7 @@ module Saltbox
       # Authorizes actions with Pundit. Events::UpdateAction asks
       # EventPolicy#update?, and #perform must call authorize and
       # policy_scope, as Pundit's verify_authorized and verify_policy_scoped
-      # check after a controller action. The person is the caller's account
+      # check after a controller action. The person is the caller's user,
       # (pundit_user). An action with a policy namespace
       # (Policies#policy_namespace) asks it the way authorize [:admin, record]
       # does: Admin::Projects::UpdateAction asks Admin::ProjectPolicy#update?.
@@ -24,11 +24,11 @@ module Saltbox
           # model's policy before any record is loaded. An action with no
           # model is always allowed.
           #
-          # @param account [Object]
+          # @param user [Object]
           # @return [Boolean]
-          def permitted?(account)
+          def permitted?(user)
             return true unless model
-            ::Pundit.policy!(account, policy_target(model)).public_send(policy_query!)
+            ::Pundit.policy!(user, policy_target(model)).public_send(policy_query!)
           end
 
           # @return [Class, nil] the model's Pundit policy, in the action's policy namespace
@@ -60,11 +60,11 @@ module Saltbox
           # @return [Boolean] whether the model's policy defines permitted_attributes
           def supplies_fields? = !!policy_class&.method_defined?(:permitted_attributes)
 
-          # @param principal [Object]
+          # @param user [Object]
           # @param record [ActiveRecord::Base]
           # @return [Array<String>]
-          def permitted_attribute_names_for(principal, record)
-            ::Pundit.policy!(principal, policy_target(record)).permitted_attributes.map(&:to_s)
+          def permitted_attribute_names_for(user, record)
+            ::Pundit.policy!(user, policy_target(record)).permitted_attributes.map(&:to_s)
           end
 
           # @return [Array<Class<Exception>>]
@@ -73,7 +73,7 @@ module Saltbox
 
         private
 
-        def pundit_user = account
+        def pundit_user = current_user
 
         # Pundit's authorize. With no rule given, it asks the action's own:
         # the one declared with `policy_rule`, otherwise the one for its verb.
@@ -92,7 +92,7 @@ module Saltbox
 
         def permitted_attribute_names(record) = policy(record).permitted_attributes.map(&:to_s)
 
-        def scoped_records(model) = ::Pundit.policy_scope!(account, self.class.policy_target(model))
+        def scoped_records(model) = ::Pundit.policy_scope!(current_user, self.class.policy_target(model))
       end
     end
   end

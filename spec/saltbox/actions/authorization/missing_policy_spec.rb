@@ -34,7 +34,7 @@ RSpec.describe "An action whose policy is missing" do
     end
 
     it "still fails when run" do
-      expect { Saltbox::Actions::Invocation.call(name: missing, caller: as_api(manager), arguments: {}) }.to raise_error(missing_policy)
+      expect { Saltbox::Actions::Invocation.call(action: missing, caller: as_api(manager), arguments: {}) }.to raise_error(missing_policy)
       expect { missing.perform_now(caller: as_api(manager)) }.to raise_error(missing_policy)
     end
 

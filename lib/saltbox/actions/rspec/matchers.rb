@@ -134,8 +134,8 @@ module Saltbox
           # @param record [ActiveRecord::Base] the record the entry is for
           def on(record) = tap { @record = record }
 
-          # @param account [Object] the person named on the entry
-          def by(account) = tap { @whodunnit = account.respond_to?(:id) ? account.id : account }
+          # @param user [Object] the person named on the entry
+          def by(user) = tap { @whodunnit = user.respond_to?(:id) ? user.id : user }
 
           # @param attributes [Hash] other columns the entry must hold, such as agent: "Claude"
           def with(**attributes) = tap { @expected = attributes }
@@ -231,7 +231,7 @@ module Saltbox
 
         # Passes when the action's input schema refuses the arguments, before
         # any caller is checked. Without `as:` it is the catalog's schema,
-        # built for Configuration#schema_principal; pass a caller when the
+        # built for Configuration#schema_user; pass a caller when the
         # policy needs a person, or to check that caller's fields.
         #
         # @example

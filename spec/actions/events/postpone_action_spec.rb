@@ -1,6 +1,6 @@
 RSpec.describe Events::PostponeAction do
-  let(:permitted_account) { manager }
-  let(:unpermitted_account) { reader }
+  let(:permitted_user) { manager }
+  let(:unpermitted_user) { reader }
   let(:event) { Event.create!(org_id: 1, title: "AGM", starts_on: Date.new(2026, 11, 2)) }
   let(:arguments) { {id: event.id.to_s, starts_on: "2026-12-01", reason: "Snow"} }
 

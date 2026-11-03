@@ -100,7 +100,7 @@ module Saltbox
         # fields the authorization adapter permits that caller, so two callers
         # see different schemas when their policy permits different fields.
         # Without a caller it is the catalog's schema, built for
-        # Configuration#schema_principal.
+        # Configuration#schema_user.
         #
         # @param caller [Caller, nil]
         # @return [Hash]
@@ -119,7 +119,7 @@ module Saltbox
         # is set: every surface does. Permitting#permitted_attributes checks
         # the fields against the real record again.
         #
-        # @param caller [Caller, nil] nil for the catalog's schema (Configuration#schema_principal)
+        # @param caller [Caller, nil] nil for the catalog's schema (Configuration#schema_user)
         # @return [Input]
         def input(caller = nil)
           keys = writes_fields? ? permitted_keys(caller) : []
@@ -168,12 +168,12 @@ module Saltbox
         private
 
         # @return [Array<String>] the keys the action accepts; otherwise the
-        #   ones the policy permits the caller, or the schema principal without one
+        #   ones the policy permits the caller, or the schema user without one
         def permitted_keys(caller)
           return accepted_keys if accepted_fields.any?
-          return policy_keys(caller.account) if caller
-          principal = Actions.config.schema_principal
-          principal ? principal.call(->(account) { policy_keys(account) }) : policy_keys(nil)
+          return policy_keys(caller.user) if caller
+          schema_user = Actions.config.schema_user
+          schema_user ? schema_user.call(->(user) { policy_keys(user) }) : policy_keys(nil)
         end
 
         # The fields named with `accepts`, keyed as the model takes them: a
@@ -185,7 +185,7 @@ module Saltbox
           end.freeze
         end
 
-        def policy_keys(account) = permitted_attribute_names_for(account, model.new).uniq.freeze
+        def policy_keys(user) = permitted_attribute_names_for(user, model.new).uniq.freeze
 
         def input_for(keys)
           (@inputs ||= Concurrent::Map.new).compute_if_absent([keys, I18n.locale]) { build_input(keys) }

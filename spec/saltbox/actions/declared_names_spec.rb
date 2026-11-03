@@ -40,7 +40,7 @@ RSpec.describe "Declared names" do
       model Event
       def perform = render(json: {})
     end
-    expect { Saltbox::Actions::Invocation.call(name: unruled, caller: as_screen(manager), arguments: {}) }
+    expect { Saltbox::Actions::Invocation.call(action: unruled, caller: as_screen(manager), arguments: {}) }
       .to raise_error(ArgumentError, "Events::PeekAction: Event is its model: name the policy rule, policy_rule :show? or another")
   end
 

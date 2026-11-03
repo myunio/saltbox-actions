@@ -16,14 +16,14 @@ module Saltbox
       # @return [Hash, nil] its input, once checked
       attr_reader :arguments
 
-      # @param name [String, Class] the action's name, or the action class
+      # @param action [String, Class] the action's name, or the action class (not an instance)
       # @param caller [Caller]
       # @param arguments [Hash]
       # @param expected_kind [Symbol, nil] the kind a generic run tool requires
       # @return [Result]
       # @raise [Error]
-      def self.call(name:, caller:, arguments: {}, expected_kind: nil)
-        action = name.is_a?(Class) ? name : Registry.fetch(name)
+      def self.call(action:, caller:, arguments: {}, expected_kind: nil)
+        action = Registry.fetch(action) unless action.is_a?(Class)
         new(action, caller).call(arguments, expected_kind:)
       end
 
@@ -89,7 +89,7 @@ module Saltbox
               raise Error::Invalid, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
             end
             @arguments = @action.validate_arguments(arguments, @caller)
-            action = @action.new(actor: @caller, params: Params.new(@arguments, action: @action))
+            action = @action.new(current_caller: @caller, params: Params.new(@arguments, action: @action))
             raise Error::Invalid.for(action.errors) unless action.valid?
             confirm!(@action)
             run(action)
@@ -135,8 +135,8 @@ module Saltbox
         raise Error::NotFound unless @action.enabled_for?(@caller)
         raise Error::HumanRequired unless @caller.agent_allowed?(@action)
         raise Actions.config.on_access_refused.call(@caller, @action) unless @caller.reaches?(@action)
-        raise Error::InsufficientScope unless @caller.allows?(@action.scope)
-        allowed = Actions.config.enforce_permissions ? @action.permitted_for?(@caller) : @action.permitted?(@caller.account)
+        raise Error::InsufficientScope unless @caller.includes_scope?(@action.scope)
+        allowed = Actions.config.enforce_permissions ? @action.permitted_for?(@caller) : @action.permitted?(@caller.user)
         raise Error::Forbidden unless allowed
       end
 
