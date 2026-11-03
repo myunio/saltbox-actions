@@ -6,7 +6,7 @@
     "area": "events",
     "kind": "change",
     "idempotent": false,
-    "scope": "api:write",
+    "required_scope": "api:write",
     "agents": "confirm",
     "featured": false,
     "cli": {
@@ -50,7 +50,7 @@
     "description": "Use this when the person asks how many events there are, or how many have a status. Returns the count.",
     "kind": "read",
     "idempotent": true,
-    "scope": "api:read",
+    "required_scope": "api:read",
     "agents": "allowed",
     "permissions": [
       "events.view"
@@ -120,7 +120,7 @@
     "area": "events",
     "kind": "change",
     "idempotent": false,
-    "scope": "api:write",
+    "required_scope": "api:write",
     "agents": "allowed",
     "featured": false,
     "cli": {
@@ -210,7 +210,7 @@
     "area": "events",
     "kind": "destructive",
     "idempotent": true,
-    "scope": "api:write",
+    "required_scope": "api:write",
     "agents": "confirm",
     "featured": false,
     "cli": {
@@ -251,7 +251,7 @@
     "area": "events",
     "kind": "read",
     "idempotent": true,
-    "scope": "api:read",
+    "required_scope": "api:read",
     "agents": "allowed",
     "featured": false,
     "cli": {
@@ -335,7 +335,7 @@
     "area": "billing",
     "kind": "read",
     "idempotent": true,
-    "scope": "api:read",
+    "required_scope": "api:read",
     "agents": "allowed",
     "featured": false,
     "cli": {
@@ -359,7 +359,7 @@
     "area": "events",
     "kind": "read",
     "idempotent": true,
-    "scope": "api:read",
+    "required_scope": "api:read",
     "agents": "allowed",
     "featured": false,
     "cli": {
@@ -465,7 +465,7 @@
     "area": "events",
     "kind": "change",
     "idempotent": true,
-    "scope": "api:write",
+    "required_scope": "api:write",
     "agents": "allowed",
     "featured": false,
     "cli": {
@@ -517,7 +517,7 @@
     "area": "events",
     "kind": "read",
     "idempotent": true,
-    "scope": "api:read",
+    "required_scope": "api:read",
     "agents": "allowed",
     "featured": true,
     "cli": {
@@ -559,7 +559,7 @@
     "area": "events",
     "kind": "read",
     "idempotent": true,
-    "scope": "api:read",
+    "required_scope": "api:read",
     "agents": "never",
     "featured": false,
     "cli": {
@@ -601,7 +601,7 @@
     "area": "events",
     "kind": "change",
     "idempotent": true,
-    "scope": "api:write",
+    "required_scope": "api:write",
     "agents": "allowed",
     "featured": false,
     "cli": {
@@ -700,7 +700,7 @@
     "description": "Says who this connection acts for.",
     "kind": "read",
     "idempotent": true,
-    "scope": "api:read",
+    "required_scope": "api:read",
     "agents": "allowed",
     "featured": true,
     "cli": {

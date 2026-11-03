@@ -135,7 +135,7 @@ module Saltbox
         raise Error::NotFound unless @action.enabled_for?(@caller)
         raise Error::HumanRequired unless @caller.agent_allowed?(@action)
         raise Actions.config.on_access_refused.call(@caller, @action) unless @caller.reaches?(@action)
-        raise Error::InsufficientScope unless @caller.includes_scope?(@action.scope)
+        raise Error::InsufficientScope unless @caller.includes_scope?(@action.required_scope)
         allowed = Actions.config.enforce_permissions ? @action.permitted_for?(@caller) : @action.permitted?(@caller.user)
         raise Error::Forbidden unless allowed
       end
