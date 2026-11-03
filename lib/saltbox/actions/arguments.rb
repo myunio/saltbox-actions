@@ -91,14 +91,15 @@ module Saltbox
 
       # The default of each input left out, for this call: a callable's
       # value, or a copy of a literal one, since an action may change a value
-      # it was given. Each is turned into JSON, as a caller would send it, so
-      # the schema checks it and the action casts it like any other input;
+      # it was given. Each is turned into JSON by its type, as a caller would
+      # send it (Casting.json_value), so the schema checks it and the action
+      # casts it like any other input;
       # the input checked is then the input the action runs with, which a
       # confirmation sees whole. A null for a field that cannot be null
       # counts as left out, as a sent one does.
       def defaults(properties, sent)
         @defaults.except(*sent)
-          .to_h { |name, default| [name, (default.respond_to?(:call) ? default.call : default).as_json.deep_dup] }
+          .to_h { |name, default| [name, Casting.json_value(default.respond_to?(:call) ? default.call : default, @types[name]).deep_dup] }
           .reject { |name, value| value.nil? && !Schema.nullable?(properties.fetch(name, {})) }
       end
 

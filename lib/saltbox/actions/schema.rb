@@ -273,7 +273,7 @@ module Saltbox
             end
           end
           default = attribute[:default]
-          schema["default"] = default.as_json if attribute.key?(:default) && !default.respond_to?(:call)
+          schema["default"] = Casting.json_value(default, attribute[:cast_type]) if attribute.key?(:default) && !default.respond_to?(:call)
           schema.compact
         end
 
