@@ -85,6 +85,20 @@ RSpec.describe Saltbox::Actions::Base do
       end
       expect(run_action({id: event.id}, as: as_screen(manager), action: cancelled).body).to eq("reason" => "No reason given")
     end
+
+    it "check a callable default against the schema, as a literal one is, each call getting its own value" do
+      counted = action("Events::CancelAction") do
+        attribute :copies, :integer, default: -> { "lots" }
+        def perform = render(json: {copies:})
+      end
+      expect { run_action({id: event.id}, as: as_screen(manager), action: counted) }.to have_field_errors(:copies)
+      dated = action("Events::CancelAction") do
+        attribute :on, :date, default: -> { Date.new(2026, 11, 3) }
+        attribute :tags, :array, default: -> { ["new"] }
+        def perform = render(json: {on:, tags: tags << "seen"})
+      end
+      2.times { expect(run_action({id: event.id}, as: as_screen(manager), action: dated).body).to eq("on" => "2026-11-03", "tags" => %w[new seen]) }
+    end
   end
 
   describe "inherited declarations" do

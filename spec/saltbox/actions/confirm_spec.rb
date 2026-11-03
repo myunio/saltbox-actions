@@ -47,6 +47,23 @@ RSpec.describe "Confirming a :confirm action" do
     expect(seen).to eq(["mcp", {"id" => event.id.to_s}, Events::CancelAction])
   end
 
+  it "hands the hook the input the action runs with, a callable default's value included" do
+    reason = "Snow"
+    cancelling = Class.new(Events::CancelAction) do
+      def self.name = "Events::CancelAction"
+      attribute :reason, :string, default: -> { reason }
+    end
+    seen = []
+    approve { |invocation, _action| seen << invocation.arguments and true }
+    with_settings(enforce_confirm: true) do
+      Saltbox::Actions::Invocation.call(action: cancelling, caller: as_mcp(manager), arguments: {id: event.id.to_s})
+      reason = "Flood"
+      Saltbox::Actions::Invocation.call(action: cancelling, caller: as_mcp(manager), arguments: {id: event.id.to_s})
+    end
+    expect(seen).to eq([{"id" => event.id.to_s, "reason" => "Snow"}, {"id" => event.id.to_s, "reason" => "Flood"}])
+    expect(event.reload.notes).to eq("Flood")
+  end
+
   it "refuses when the hook answers anything but true, and passes on an error it raises" do
     with_settings(enforce_confirm: true) do
       approve("yes")

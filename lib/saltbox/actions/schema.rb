@@ -95,8 +95,10 @@ module Saltbox
       # @!attribute types [Hash{String => ActiveModel::Type::Value, Array, Hash}] what casts each
       #   input before the schema checks it (Casting.cast)
       # @!attribute fields [Hash{String => Field}] the model fields among them, keyed by the name callers send
+      # @!attribute defaults [Hash{String => Object}] each attribute's default, a value or a callable
+      #   giving it, which Arguments fills in for an input left out
       # @api private
-      Input = Data.define(:schema, :types, :fields)
+      Input = Data.define(:schema, :types, :fields, :defaults)
 
       class_methods do
         # The input schema for one caller. A create or update lists the
@@ -225,7 +227,8 @@ module Saltbox
           properties = properties.to_h { |name, schema| [name, schema.merge("description" => field_description(name)).compact] }
           schema = {"type" => "object", "properties" => properties, "required" => required.uniq, "additionalProperties" => false}.freeze
           types = fields.transform_values(&:type).merge(declared_attributes.transform_values { it[:cast_type] }).freeze
-          Input.new(schema:, types:, fields: fields.freeze)
+          defaults = declared_attributes.filter_map { |name, attribute| [name, attribute[:default]] if attribute.key?(:default) }.to_h.freeze
+          Input.new(schema:, types:, fields: fields.freeze, defaults:)
         end
 
         def fields_source
@@ -239,9 +242,9 @@ module Saltbox
           validators_on(name).reject { |validator| validator.options.key?(:if) || validator.options.key?(:unless) || validator.options.key?(:on) }
         end
 
-        # A callable default fills a left-out value only once the action is
-        # built, after the schema check, so such an attribute is not required:
-        # its presence validation still runs on the default.
+        # A callable default's value is not in the schema, so an agent cannot
+        # tell it may leave the attribute out: such an attribute is not
+        # required. Its presence validation still runs on the default.
         def required_attribute?(name)
           return false if declared_attributes.dig(name, :default).respond_to?(:call)
           schema_validators(name).any? { it.kind == :presence && !it.options[:allow_nil] && !it.options[:allow_blank] }

@@ -537,6 +537,11 @@ The types are `:string`, `:integer`, `:decimal`, `:boolean`, `:date`,
 `nullable: true` lets `null` clear a value; otherwise `null` counts as left
 out, since agents often send it for a field they skip.
 
+A `default:` is a value, listed in the schema, or a callable giving one
+each call (`default: -> { Date.current }`). Either is filled in before the
+schema check, as if the caller had sent it, so a default the schema refuses
+fails the call instead of being cast.
+
 Validations are the action's checks. They run on every call, after the
 schema check and before the action runs. A failure is refused as
 `validation_failed`, with errors by field, in the person's language. The
@@ -872,7 +877,9 @@ end
 
 An agent on the API, MCP or a browser page gets `confirmation_required` for a
 `:confirm` action until the hook returns `true`. The hook sees the caller, the
-action and the checked arguments, so it can ask the person in your app. It can
+action and the checked arguments, every default filled in, so what it
+approves is what runs: an approval keyed on `invocation.arguments` does not
+match a later call whose default changed. It can ask the person in your app. It can
 also raise an error of its own, such as
 `Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
 A person on a screen and the app itself (`Caller.system`) are never asked.
