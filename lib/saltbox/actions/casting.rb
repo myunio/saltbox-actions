@@ -63,6 +63,33 @@ module Saltbox
         type.cast(value)&.iso8601([fraction.to_s.length, type.precision || 6].min) || value
       end
 
+      # A Ruby value, such as a default, as a caller would send it for its
+      # type, so the schema checks it and the action casts it back to the
+      # same value: a time of day as "HH:MM", a date as "2026-11-03", and a
+      # date and time in the app's time zone to the microsecond. as_json
+      # alone would send a time of day as a whole timestamp, and a date and
+      # time to the millisecond.
+      #
+      # @param value [Object]
+      # @param type [ActiveModel::Type::Value, Inputs::List, Hash, nil] as for Casting.cast
+      # @return [Object] a JSON value
+      def self.json_value(value, type)
+        case type
+        when Inputs::List then value.is_a?(Array) ? value.map { json_value(it, type.item) } : value.as_json
+        when Hash then value.is_a?(Hash) ? value.to_h { |name, item| [name.to_s, json_value(item, type[name.to_s])] } : value.as_json
+        when ActiveModel::Type::Value then (value.is_a?(String) || value.nil?) ? value : temporal_json(value, type) || value.as_json
+        else value.as_json
+        end
+      end
+
+      def self.temporal_json(value, type)
+        case type.type
+        when :time then value.strftime("%H:%M") if value.respond_to?(:strftime)
+        when :date then value.to_date.iso8601 if value.respond_to?(:to_date)
+        when :datetime then value.in_time_zone.iso8601(type.precision || 6) if value.respond_to?(:in_time_zone)
+        end
+      end
+
       # @param value [Object] one input, after Casting.cast
       # @param type [ActiveModel::Type::Value, Inputs::List, Hash, nil]
       # @return [Boolean] whether it holds an integer the type cannot store, or
@@ -77,7 +104,7 @@ module Saltbox
         end
       end
 
-      private_class_method :cast_list, :cast_string, :local_time
+      private_class_method :cast_list, :cast_string, :local_time, :temporal_json
     end
   end
 end

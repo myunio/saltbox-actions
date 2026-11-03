@@ -702,6 +702,7 @@
     "idempotent": true,
     "required_scope": "api:read",
     "agents": "allowed",
+    "permissions": [],
     "featured": true,
     "cli": {
       "command": [

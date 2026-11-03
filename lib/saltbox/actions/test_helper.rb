@@ -114,7 +114,7 @@ module Saltbox
       def assert_valid_action_registry(test_root: Rails.root.join("test/actions"))
         refute_empty Registry.check!
         paths = Actions.config.action_paths
-        files = Actions.config.strict_action_paths ? Registry.action_files : Registry.actions.map { Registry.source(it) }
+        files = Registry.actions.map { Registry.source(it) }.uniq
         missing = files.map { |file| [file, paths.relative(file).sub_ext("_test.rb")] }
           .reject { |file, test| [Pathname(test_root), paths.for(file).root.join("../../test/actions")].any? { it.join(test).exist? } }
           .map(&:last)

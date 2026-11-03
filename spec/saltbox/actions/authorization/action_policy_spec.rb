@@ -94,4 +94,51 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
     expect(Saltbox::Actions::Registry.problems(missing)).to eq([])
     expect(Saltbox::Actions::Registry.problems(show)).to eq([])
   end
+
+  it "refuses ActionPolicy's authorize macro, whose context the checks before perform would never see" do
+    expect { Class.new(PolicyAction) { authorize :tenant, through: :current_tenant } }
+      .to raise_error(ArgumentError, /authorize :tenant would reach only the checks inside perform: override authorization_context_for/)
+  end
+
+  it "gives the policy the same context everywhere: the role check, the schema, authorize, scopes and references" do
+    stub_const("TenantPolicies::EventPolicy", Class.new(ActionPolicy::Base) {
+      authorize :user
+      authorize :tenant
+
+      def index? = user.can?("events.view")
+      def update? = user.can?("events.manage")
+      def permitted_attributes = %i[title parent_id]
+
+      relation_scope { |relation| relation.where(org_id: tenant) }
+    })
+    tenant_action = Class.new(PolicyAction) do
+      policy_namespace TenantPolicies
+      def self.authorization_context_for(user) = {user:, tenant: user.org_id}
+    end
+    update = Class.new(tenant_action) do
+      def self.name = "Events::UpdateAction"
+      agents :allowed
+      def perform
+        event.update!(permitted_attributes(event))
+        render :show
+      end
+    end
+    hidden = Event.create!(org_id: 2, title: "Elsewhere")
+    expect(update.input_schema(as_screen(manager))["properties"].keys).to eq(%w[id title parent])
+    expect { invoke.call(update, {id: event.id, parent: hidden.id}, as_screen(manager)) }.to have_field_errors(:parent)
+    expect { invoke.call(update, {id: hidden.id, title: "Mine"}, as_screen(manager)) }.to be_not_found
+    invoke.call(update, {id: event.id, title: "Annual meeting"}, as_screen(manager))
+    expect(event.reload.title).to eq("Annual meeting")
+  end
+
+  it "lists an action with no model only when it declares its permissions" do
+    tally = Class.new(PolicyAction) do
+      def self.name = "TallyEventsAction"
+      kind :read
+    end
+    expect(tally).not_to be_listed_for(as_api(manager))
+    tally.permission "events.view"
+    expect(tally).to be_listed_for(as_api(manager))
+    expect(tally).not_to be_listed_for(as_api(stranger))
+  end
 end

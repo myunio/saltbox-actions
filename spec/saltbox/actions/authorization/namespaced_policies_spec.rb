@@ -186,6 +186,7 @@ RSpec.describe "Namespaced policies" do
       define(name, parent) {
         action_name name.underscore.tr("/", "_")
         kind :read
+        permission :everyone
       }.tap { it.class_eval(&perform) }
     end
 

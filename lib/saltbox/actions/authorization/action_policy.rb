@@ -7,7 +7,10 @@ module Saltbox
       # EventPolicy's update? rule (aliases and default rules apply), and
       # #perform must call authorize and policy_scope (authorized_scope).
       # The policy's authorization context is the caller's person as
-      # `user`; override authorization_context_for to add more.
+      # `user`; override authorization_context_for to add more. It is the
+      # one context every check gets: the role check before any record
+      # loads, the input schema's fields, and authorize, policy_scope,
+      # permitted_attributes and references inside #perform.
       #
       # Policies are looked up in the action's policy namespace
       # (Policies#policy_namespace), strictly: Admin::Projects::ListAction
@@ -19,7 +22,8 @@ module Saltbox
       module ActionPolicy
         extend ActiveSupport::Concern
 
-        # Included after ActionPolicy's own modules, so it wins over them.
+        # Included after ActionPolicy's own modules, so it wins over them:
+        # the policy namespace, and the one authorization context.
         module Namespace
           private
 
@@ -41,14 +45,32 @@ module Saltbox
           # kept per namespace, so Events::ShowAction's never answers
           # Admin::Events::ShowAction.
           def policy_for_cache_key(namespace: self.class.policy_namespace.join("/"), **) = super
+
+          public
+
+          # ActionPolicy's, built by the class's authorization_context_for,
+          # so #perform's checks get what permitted? and the schema got.
+          #
+          # @return [Hash]
+          def authorization_context = @_authorization_context ||= self.class.authorization_context_for(current_user)
+        end
+
+        # In place of ActionPolicy's `authorize :tenant, through:` class
+        # macro, whose context the role check and the input schema would
+        # never see. Extended after ActionPolicy's, so it wins.
+        module ContextMacro
+          # @raise [ArgumentError] always, naming authorization_context_for
+          def authorize(key, **)
+            raise ArgumentError, "#{name || "An action"}: authorize #{key.inspect} would reach only the checks inside perform: " \
+              "override authorization_context_for, which every check uses"
+          end
         end
 
         included do
           include ::ActionPolicy::Behaviour
           include Namespace
           include Policies
-
-          authorize :user, through: :current_user
+          extend ContextMacro
         end
 
         class_methods do
@@ -56,17 +78,23 @@ module Saltbox
           # @return [Module, nil] the policy namespace, as ActionPolicy's authorization_namespace takes it
           def policy_namespace_module = policy_namespace.presence&.then { it.map { it.to_s.camelize }.join("::").safe_constantize }
 
+          # The policy's authorization context for the person, in every
+          # check. Override it to add a tenant or anything else the
+          # policies declare with `authorize`.
+          #
           # @param user [Object]
           # @return [Hash] the policy's authorization context
           def authorization_context_for(user) = {user:}
 
           # Whether the person's role allows the action at all, asked of the
-          # model's policy before any record is loaded.
+          # model's policy before any record is loaded. An action with no
+          # model has no policy to ask: it is allowed only when it declares
+          # its permissions (Policies#permission_problems).
           #
           # @param user [Object]
           # @return [Boolean]
           def permitted?(user)
-            return true unless model
+            return !permissions.nil? unless model
             policy = policy_class || raise(namespaced_policy_not_found(model))
             policy.new(model, **authorization_context_for(user)).apply(policy_rule!)
           end

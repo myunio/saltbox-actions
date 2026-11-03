@@ -85,6 +85,40 @@ RSpec.describe Saltbox::Actions::Base do
       end
       expect(run_action({id: event.id}, as: as_screen(manager), action: cancelled).body).to eq("reason" => "No reason given")
     end
+
+    it "check a callable default against the schema, as a literal one is, each call getting its own value" do
+      counted = action("Events::CancelAction") do
+        attribute :copies, :integer, default: -> { "lots" }
+        def perform = render(json: {copies:})
+      end
+      expect { run_action({id: event.id}, as: as_screen(manager), action: counted) }.to have_field_errors(:copies)
+      dated = action("Events::CancelAction") do
+        attribute :on, :date, default: -> { Date.new(2026, 11, 3) }
+        attribute :tags, :array, default: -> { ["new"] }
+        def perform = render(json: {on:, tags: tags << "seen"})
+      end
+      2.times { expect(run_action({id: event.id}, as: as_screen(manager), action: dated).body).to eq("on" => "2026-11-03", "tags" => %w[new seen]) }
+    end
+
+    it "send a callable default as its declared type sends it: a time of day, a date, a date and time to the microsecond" do
+      at = Time.zone.local(2026, 11, 3, 18, 30, 12.123456r)
+      timed = action("Events::CancelAction") do
+        attribute :doors, :time, default: -> { at }
+        attribute :on, :date, default: -> { at }
+        attribute :at, :datetime, default: -> { at }
+        attribute :times, :array, of: :time, default: -> { [at] }
+        def perform = render(json: {doors: doors.strftime("%H:%M"), on:, usec: self.at.usec, times: times.map { it.strftime("%H:%M") }})
+      end
+      expect(run_action({id: event.id}, as: as_screen(manager), action: timed).body)
+        .to eq("doors" => "18:30", "on" => "2026-11-03", "usec" => 123456, "times" => ["18:30"])
+      arguments = Saltbox::Actions::Arguments.for(timed).validate!({"id" => event.id.to_s})
+      expect(arguments.slice("doors", "on", "at")).to eq("doors" => "18:30", "on" => "2026-11-03", "at" => at.iso8601(6))
+    end
+
+    it "list a literal time default in the schema as its type sends it" do
+      timed = action("Events::CancelAction") { attribute :doors, :time, default: Time.utc(2000, 1, 1, 18, 30) }
+      expect(timed.input_schema.dig("properties", "doors", "default")).to eq("18:30")
+    end
   end
 
   describe "inherited declarations" do

@@ -84,12 +84,13 @@ module Saltbox
           @invocation_id = SecureRandom.uuid_v7
           # Approvals are for this call's arguments only.
           @confirmed = Set.new
-          Current.set(invocation: self, invocation_id: @invocation_id) do
+          Current.set(invocation: self, invocation_id: @invocation_id, arguments_checked: false) do
             refuse!
             if expected_kind && @action.kind != expected_kind
               raise Error::ValidationFailed, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
             end
             @arguments = @action.validate_arguments(arguments, @caller)
+            refuse_lost_defaults!
             action = @action.new(current_caller: @caller, params: Params.new(@arguments, action: @action))
             raise Error::ValidationFailed.for(action.errors) unless action.valid?
             confirm!(@action)
@@ -140,6 +141,21 @@ module Saltbox
         raise Error::InsufficientScope unless @caller.includes_scope?(@action.required_scope)
         allowed = Actions.config.enforce_permissions ? @action.permitted_for?(@caller) : @action.permitted?(@caller.user)
         raise Error::Forbidden unless allowed
+      end
+
+      # Defaults are filled in by Arguments#validate!, which the action's
+      # validate_arguments calls through super. An override that skips it
+      # and leaves a default out would run the action with nil there, such
+      # as a page_size of nil, which pages nothing: that is a bug in the
+      # override, raised in every environment.
+      #
+      # @raise [ArgumentError] naming the override and the defaults it left out
+      def refuse_lost_defaults!
+        return if Current.arguments_checked
+        lost = @action.declared_attributes.select { |_, attribute| attribute.key?(:default) }.keys - @arguments.keys.map(&:to_s)
+        return if lost.empty?
+        raise ArgumentError, "#{@action.name}.validate_arguments never called super, so #{lost.to_sentence} would have no default: " \
+          "call super, which checks the input and fills in each default"
       end
 
       def run(action)

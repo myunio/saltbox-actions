@@ -34,6 +34,22 @@ RSpec.describe Saltbox::Actions::Registry do
     end
   end
 
+  it "finds an action other actions inherit from, as it does in strict folders, leaving out only the base class's own files" do
+    parent = action("Events::ArchiveAction") {
+      kind :change
+      policy_rule :update?
+    }
+    child = Class.new(parent) { define_singleton_method(:name) { "Events::ArchiveAllAction" } }
+    shared = action("Events::ApplicationAction") { kind :read }
+    root = Rails.root.join("app/actions")
+    files = {parent => "events/archive_action.rb", child => "events/archive_all_action.rb", shared => "events/application_action.rb"}
+    allow(described_class).to receive(:named_descendants).and_return(files.keys)
+    allow(described_class).to receive(:source) { |action| files[action]&.then { root.join(it).to_s } }
+    with_settings(strict_action_paths: false) do
+      expect(described_class.descendants).to eq([parent, child])
+    end
+  end
+
   it "refuses a Rails verb, naming the one to use" do
     expect(problems(action("Events::DestroyAction"))).to eq(["destroy is spelled delete in actions: rename it Events::DeleteAction"])
   end
@@ -136,6 +152,15 @@ RSpec.describe Saltbox::Actions::Registry do
     end
   end
 
+  it "refuses an action with no model that declares no permission, which no policy would keep out of the actions list" do
+    tally = action("TallyEventsAction") { kind :read }
+    expect(described_class.problems(tally, declared_only: true))
+      .to eq(["it has no model, so no policy says who may see it: declare permission with the keys it needs, or permission :everyone"])
+    expect { described_class.validate!([tally]) }.to raise_error(ArgumentError, /TallyEventsAction: it has no model/)
+    tally.permission :everyone
+    expect(described_class.problems(tally, declared_only: true)).to be_empty
+  end
+
   it "names both classes when two actions share a name" do
     upcoming = action("Events::ListUpcomingAction") {
       action_name "list_events"
@@ -145,6 +170,23 @@ RSpec.describe Saltbox::Actions::Registry do
     }
     expect { described_class.validate!([upcoming, Events::ListAction]) }
       .to raise_error(ArgumentError, /Action names must be unique: list_events \(Events::ListAction, Events::ListUpcomingAction\)\. To fix: declare action_name/)
+  end
+
+  it "refuses a name a tool cannot have: one of the gem's own tools, other characters, or more than 64 characters" do
+    named = ->(name) {
+      action("Reports::PeekAction") {
+        action_name name
+        kind :read
+        permission :everyone
+      }
+    }
+    expect { described_class.validate!([named.call("find_action")]) }
+      .to raise_error(ArgumentError, "Reports::PeekAction: find_action is one of the gem's own tools (find_action, run_read_action, run_change_action, run_destructive_action): declare another action_name")
+    expect { described_class.validate!([named.call("run_change_action")]) }.to raise_error(ArgumentError, /run_change_action is one of the gem's own tools/)
+    expect { described_class.validate!([named.call("count.events")]) }
+      .to raise_error(ArgumentError, "Reports::PeekAction: count.events is not a tool name, which is 1 to 64 letters, digits, _ and -: declare another action_name")
+    expect { described_class.validate!([named.call("a" * 65)]) }.to raise_error(ArgumentError, /#{"a" * 65} is not a tool name/)
+    expect(described_class.validate!([named.call("a" * 64)])).to be_nil
   end
 
   it "keeps a back-office action apart from the public one, by its outer namespace" do

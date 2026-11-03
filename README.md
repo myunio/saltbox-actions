@@ -457,9 +457,17 @@ default_url_options host: "events.example.com", protocol: "https"
 ```
 
 `perform` must call `authorize` and `policy_scope`, or the action fails, as
-Pundit's `verify_authorized` would. A list action needs only `policy_scope`,
-as a controller's `index` does. Whether the person may list at all
-(`index?`) is asked before `perform` runs.
+Pundit's `verify_authorized` would. A list action on a model needs only
+`policy_scope`, as a controller's `index` does: whether the person may list
+at all (`index?`) is asked of the model's policy before `perform` runs. A
+list action with no model has no policy to ask first, so it calls
+`authorize` too (`authorize Event, :index?`), or `skip_authorization` when
+anyone may run it.
+
+With an authorization adapter, an action with no model also declares who
+may see it, since no policy can keep it out of a caller's actions list:
+`permission "events.view"`, or `permission :everyone`. The boot refuses one
+that declares neither.
 
 ### The record
 
@@ -511,7 +519,12 @@ An action's input has two parts.
 permits the person, typed from the model's columns (see
 [Authorization](#authorization)). A `belongs_to` is sent under its
 association's name (`parent`, not `parent_id`) and is looked up through the
-person's scope. `perform` reads them with `permitted_attributes(record)`.
+person's scope. The association is found by its foreign key, so
+`belongs_to :account, foreign_key: :organization_id` takes `account`. A
+foreign key that no one scope can check (polymorphic, part of a composite
+key, or shared by two associations), or whose `primary_key:` is not the
+record's id, fails `rails actions:check`: take that record in an attribute
+instead. `perform` reads them with `permitted_attributes(record)`.
 With no authorization adapter, list them with `accepts` (see below).
 
 **Attributes.** Any other input is an Active Model attribute. `perform`
@@ -526,9 +539,18 @@ attribute :payments, :array, of: {amount: :decimal, paid_on: :date}
 ```
 
 The types are `:string`, `:integer`, `:decimal`, `:boolean`, `:date`,
-`:datetime`, `:time` (a time of day, `"HH:MM"`), `:array` and `:hash`.
+`:datetime`, `:time` (a time of day, `"HH:MM"` from `00:00` to `23:59`), `:array` and `:hash`.
 `nullable: true` lets `null` clear a value; otherwise `null` counts as left
 out, since agents often send it for a field they skip.
+
+A `default:` is a value, listed in the schema, or a callable giving one
+each call (`default: -> { Date.current }`). Either is filled in before the
+schema check, as if the caller had sent it, so a default the schema refuses
+fails the call instead of being cast. It is sent as its type sends it: a
+`:time` as `"HH:MM"`, a `:date` as `"2026-11-03"`, and a `:datetime` in the
+app's time zone to the microsecond. A `validate_arguments` override calls
+`super`, which fills the defaults in; one that skips it and leaves a default
+out raises an `ArgumentError` when the action runs.
 
 Validations are the action's checks. They run on every call, after the
 schema check and before the action runs. A failure is refused as
@@ -865,7 +887,9 @@ end
 
 An agent on the API, MCP or a browser page gets `confirmation_required` for a
 `:confirm` action until the hook returns `true`. The hook sees the caller, the
-action and the checked arguments, so it can ask the person in your app. It can
+action and the checked arguments, every default filled in, so what it
+approves is what runs: an approval keyed on `invocation.arguments` does not
+match a later call whose default changed. It can ask the person in your app. It can
 also raise an error of its own, such as
 `Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
 A person on a screen and the app itself (`Caller.system`) are never asked.
@@ -987,7 +1011,7 @@ give them.
 | `idempotent` | Running it twice with the same input changes nothing more, when the verb does not say so. `idempotent false` says it does. |
 | `featured` | Lists it as an MCP tool of its own (see MCP). The catalog marks it `"featured": true`. |
 | `feature "key"` | A feature flag. While it is off, callers get `not_found`. |
-| `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
+| `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. An action with no model declares one, under an authorization adapter. |
 | `output_schema(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
 | `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_reports_customers` and asks `Admin::Reports::CustomerPolicy`. |
@@ -1191,6 +1215,10 @@ module in its name, so a namespace would be added to it
 
 Names and CLI commands must be unique. Two engines with an `Invoice`
 model need a namespace each, or the boot stops and names both classes.
+Every name is also a tool name on MCP and in the assistants, so the boot
+stops for a name longer than 64 characters, one with characters other than
+letters, digits, `_` and `-`, or one of the gem's own tools (`find_action`
+and the `run_*_action` tools).
 
 An action's spec can live in the app's `spec/actions` or in the engine's
 own `spec/actions` folder (`test/actions` with Minitest).
@@ -1341,7 +1369,20 @@ fields from the policy's `permitted_attributes`.
 `Saltbox::Actions::Authorization::ActionPolicy` does the same with
 ActionPolicy. ActionPolicy has no `permitted_attributes`, so define one on
 the policy, returning field names, if create and update actions should take
-the model's fields.
+the model's fields. The policy's authorization context is `{user:}`. A
+policy that declares more, such as `authorize :tenant`, gets it from one
+class method, used for every check before and during `perform`:
+
+```ruby
+class ApplicationAction < Saltbox::Actions::Base
+  include Saltbox::Actions::Authorization::ActionPolicy
+
+  def self.authorization_context_for(user) = {user:, tenant: user.organization}
+end
+```
+
+ActionPolicy's own `authorize :tenant, through:` macro is refused on an
+action class: the checks before `perform` would never see what it adds.
 
 An action in a module its model is not in asks that module's policy, as
 Pundit's `authorize [:admin, event]` does. `Admin::Events::UpdateAction`
@@ -1362,8 +1403,8 @@ whatever its `perform` names, so every module it is in counts.
 ask `Admin::ProjectPolicy`, and a top-level `CountProjectsAction`'s ask
 `ProjectPolicy`. Until `Admin::ProjectPolicy` exists, the action fails and
 the error names it. `rails actions:check` cannot name it: only `perform`
-says which model the action authorizes, and the action stays in every
-actions list until it runs. An action with a declared name that works on
+says which model the action authorizes, so the actions list shows it to
+whoever holds its declared `permission`. An action with a declared name that works on
 one model declares `model`, so the model's own modules are left out:
 without it, `Billing::Invoices::CountAction` asks
 `Billing::Invoices::Billing::InvoicePolicy`.
@@ -1384,6 +1425,9 @@ the declaring class's, after it. So it never inherits a way out of them:
 A back office's base class goes in `app/actions/admin/application_action.rb`,
 as `Admin::ApplicationController` goes beside its controllers. A file named
 `application_action.rb` holds shared code, not an action, in any folder.
+That is the one way a base class is told apart: any other class in the
+action folders is an action, including one other actions inherit from,
+whether or not `strict_action_paths` is on.
 
 A model that names its policy with `policy_class` stays inside the
 namespace too. With Pundit the name is looked up there, as
@@ -1614,7 +1658,9 @@ action. `run_action(arguments, as: caller)` runs it the way every surface does.
 
 `run_action` returns the action's `Result`. Its `body` is what the view rendered.
 Its `as_json` is what the API and MCP send: the same body, unless you set
-`config.result_format = :envelope`, which wraps it with the action's meta:
+`config.result_format = :envelope`, which wraps it with the action's meta.
+The envelope always has `data`, `null` and `false` included, and `meta` only
+when the action sent one:
 
 ```ruby
 result = run_action({id: event.id}, as: as_mcp(manager))

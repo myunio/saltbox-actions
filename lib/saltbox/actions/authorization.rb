@@ -13,7 +13,7 @@ module Saltbox
     # - authorize(record, rule = nil): rule defaults to the action's own;
     # - policy_scope(scope), skip_authorization, skip_policy_scope;
     # - verify_authorized and verify_policy_scoped, run after #perform (a
-    #   list action runs only verify_policy_scoped);
+    #   list action on a model runs only verify_policy_scoped);
     # - permitted_attribute_names(record): the fields the person may set;
     # - scoped_records(model): the records the person may pick, for a reference;
     # and, on the class:
@@ -121,6 +121,18 @@ module Saltbox
             true
           end
 
+          # @api private
+          # An action with no model has no policy to ask before #perform, so
+          # nothing would keep it out of a caller's actions list: it declares
+          # who may see it with `permission`, or `permission :everyone`. A
+          # boot check.
+          #
+          # @return [Array<String>] for such an action that declares none, the fix
+          def permission_problems
+            return [] if model || permissions
+            ["it has no model, so no policy says who may see it: declare permission with the keys it needs, or permission :everyone"]
+          end
+
           # @return [Array<String>] a missing policy or rule, and the fix
           def authorization_problems
             return [] unless model
@@ -211,6 +223,10 @@ module Saltbox
 
           # @return [Array<String>]
           def authorization_problems = []
+
+          # @api private
+          # @return [Array<String>] none: without an adapter every action is allowed
+          def permission_problems = []
 
           # @api private
           # @return [Boolean] false: without a policy, nothing is missing

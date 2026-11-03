@@ -14,7 +14,7 @@ module Saltbox
       # @return [Array<Class>] every action, sorted by name
       def self.actions
         @actions ||= begin
-          entries = Actions.config.strict_action_paths ? action_files.map { |path| action_at(path) } : descendants
+          entries = descendants
           validate!(entries)
           entries.each(&:define_record_reader)
           warn_outside(entries)
@@ -40,12 +40,7 @@ module Saltbox
       # @raise [ArgumentError] for a file in an action folder that is not an action
       # @api private
       def self.action_files
-        support = "/#{Actions.config.base_class.underscore}/"
-        files = roots.flat_map do |root|
-          Dir[root.join("**/*.rb").to_s].reject do |path|
-            "/#{Pathname(path).relative_path_from(root).to_s.delete_suffix(".rb")}/".include?(support)
-          end
-        end
+        files = roots.flat_map { |root| Dir[root.join("**/*.rb").to_s].reject { shared_code?(it, root) } }
         # A folder inside another lists its files twice: each counts once.
         files = files.uniq
         misnamed = files.reject { it.end_with?("_action.rb") }
@@ -53,17 +48,40 @@ module Saltbox
         files
       end
 
-      # For an app whose action folders hold other files too
-      # (Configuration#strict_action_paths off): the base class's named
-      # subclasses defined in those folders, once they are loaded.
+      # Whether a file in an action folder is the base class's own
+      # (application_action.rb, or under application_action/), shared code
+      # rather than an action. An engine's base class is too:
+      # billing/application_action.rb.
+      #
+      # @param path [String]
+      # @param root [Pathname] the action folder it is in
+      # @return [Boolean]
+      # @api private
+      def self.shared_code?(path, root)
+        "/#{Pathname(path).relative_path_from(root).to_s.delete_suffix(".rb")}/".include?("/#{Actions.config.base_class.underscore}/")
+      end
+
+      # The actions: the base class's named subclasses defined in the action
+      # folders, outside the base class's own files (.shared_code?). An
+      # action other actions inherit from is an action too. With
+      # Configuration#strict_action_paths on, each file is loaded and
+      # checked first (.action_files, .action_at); otherwise the folders
+      # are eager loaded. Either way the actions are the same.
       #
       # @return [Array<Class>]
       # @api private
       def self.descendants
-        roots.select(&:directory?).each { Rails.autoloaders.main.eager_load_dir(it.to_s) }
+        if Actions.config.strict_action_paths
+          action_files.each { action_at(it) }
+        else
+          roots.select(&:directory?).each { Rails.autoloaders.main.eager_load_dir(it.to_s) }
+        end
         paths = Actions.config.action_paths
-        named = named_descendants
-        named.select { |action| paths.for(source(action)) }.reject { |action| named.any? { it < action } }
+        named_descendants.select do |action|
+          file = source(action)
+          path = file && paths.for(file)
+          path && !shared_code?(file, path.root)
+        end
       end
 
       # The base class's subclasses that hold a name now: not anonymous
@@ -118,8 +136,8 @@ module Saltbox
         constant
       end
 
-      # The boot checks: what each action declares, and that names are
-      # unique. Nothing here touches the database.
+      # The boot checks: what each action declares, that each name can be a
+      # tool's, and that names are unique. Nothing here touches the database.
       #
       # @param entries [Array<Class>]
       # @return [void]
@@ -128,7 +146,7 @@ module Saltbox
       def self.validate!(entries)
         # Each action's own checks come first: a name the others need, such
         # as a model's, may be the problem.
-        problems = entries.flat_map { |action| problems(action, declared_only: true).map { "#{action.name}: #{it}" } }
+        problems = entries.flat_map { |action| [*name_problem(action), *problems(action, declared_only: true)].map { "#{action.name}: #{it}" } }
         raise ArgumentError, problems.join("\n") if problems.any?
         unique!(entries, "Action names", "declare action_name on one, or give one engine's action path a namespace") { [it.action_name] }
         unique!(entries, "CLI commands", "declare cli on one, or give one engine's action path a namespace") do |action|
@@ -191,10 +209,26 @@ module Saltbox
         return problems << singular if singular
         unmodelled = not_a_model(action)
         problems << unmodelled if unmodelled
+        problems.concat(action.permission_problems) unless unmodelled
         problems.concat(input_problems(action)) unless unmodelled
         return problems if declared_only
         problems.concat(model_problems(action)) unless unmodelled
         problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
+      end
+
+      # Every action's name is a tool's on MCP and in the assistants: the
+      # run tools take it, and a featured action is a tool of its own.
+      #
+      # @param action [Class]
+      # @return [String, nil] what stops its name being a tool's, and the fix
+      # @api private
+      def self.name_problem(action)
+        name = action.action_name
+        if FrontDoor::RESERVED.include?(name)
+          "#{name} is one of the gem's own tools (#{FrontDoor::RESERVED.join(", ")}): declare another action_name"
+        elsif !name.match?(FrontDoor::NAME)
+          "#{name} is not a tool name, which is 1 to #{FrontDoor::MAX_NAME_LENGTH} letters, digits, _ and -: declare another action_name"
+        end
       end
 
       # @param action [Class]
@@ -261,6 +295,7 @@ module Saltbox
         problems = []
         problems << "declare kind :read, :change or :destructive" unless action.declared_kind
         problems.concat(agents_problems(action))
+        problems.concat(action.permission_problems)
         problems.concat(input_problems(action))
         return problems if declared_only
         problems.concat(model_problems(action)) if action.model
