@@ -9,16 +9,25 @@
 - A list action with no model must call `authorize` (or `skip_authorization`), as every other
   action does. Its role was never asked before `perform`, so any caller with the read scope
   could run it. A list action on a model still needs only `policy_scope`.
+- Under an authorization adapter, an action with no model declares `permission` (keys, or
+  `permission :everyone`), and the boot refuses one that does not. No policy could keep it out
+  of a caller's actions list, find_action or featured tools, so it was shown to everyone.
 - A `belongs_to` with `foreign_key:` is taken under its association's name and looked up
   through the person's scope: `belongs_to :account, foreign_key: :organization_id` takes
   `account`, no longer `organization_id` as a plain value. A foreign key that no one scope can
   check (polymorphic, part of a composite key, or shared by two associations) fails
-  `rails actions:check`.
+  `rails actions:check`, as does one whose `primary_key:` is not the record's id, since the id
+  sent would be written where another column's value belongs.
 - A callable `default:` is filled in before the schema check and checked as if sent, as a
   literal one is: a callable returning `"lots"` for an integer is refused, no longer cast to 0.
-  `invocation.arguments`, which the `confirm` hook sees, holds every default. An app that
-  overrides `validate_arguments` without calling `super` fills in the defaults itself: the
-  action takes its attributes only from what it returns.
+  `invocation.arguments`, which the `confirm` hook sees, holds every default. A
+  `validate_arguments` override must call `super`, which fills them in: one that skips it and
+  leaves a default out raises an `ArgumentError` naming it, in every environment, rather than
+  running the action with nil there.
+- A default is sent as its declared type sends it: a `:time` as `HH:MM`, a `:date` as an ISO
+  date, and a `:datetime` in the app's time zone to the microsecond. `as_json` sent a time of
+  day as a whole timestamp, which the schema refused, and cut a date and time to the
+  millisecond.
 - The boot refuses an action name over 64 characters, with characters other than letters,
   digits, `_` and `-`, or that is one of the gem's own tools (`find_action`, `run_read_action`,
   `run_change_action`, `run_destructive_action`).
