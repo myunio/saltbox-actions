@@ -34,6 +34,19 @@ RSpec.describe Saltbox::Actions::Registry do
     end
   end
 
+  it "finds an action other actions inherit from, as it does in strict folders, leaving out only the base class's own files" do
+    parent = action("Events::ArchiveAction") { kind :change; policy_rule :update? }
+    child = Class.new(parent) { define_singleton_method(:name) { "Events::ArchiveAllAction" } }
+    shared = action("Events::ApplicationAction") { kind :read }
+    root = Rails.root.join("app/actions")
+    files = {parent => "events/archive_action.rb", child => "events/archive_all_action.rb", shared => "events/application_action.rb"}
+    allow(described_class).to receive(:named_descendants).and_return(files.keys)
+    allow(described_class).to receive(:source) { |action| files[action]&.then { root.join(it).to_s } }
+    with_settings(strict_action_paths: false) do
+      expect(described_class.descendants).to eq([parent, child])
+    end
+  end
+
   it "refuses a Rails verb, naming the one to use" do
     expect(problems(action("Events::DestroyAction"))).to eq(["destroy is spelled delete in actions: rename it Events::DeleteAction"])
   end

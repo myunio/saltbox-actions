@@ -14,7 +14,7 @@ module Saltbox
       # @return [Array<Class>] every action, sorted by name
       def self.actions
         @actions ||= begin
-          entries = Actions.config.strict_action_paths ? action_files.map { |path| action_at(path) } : descendants
+          entries = descendants
           validate!(entries)
           entries.each(&:define_record_reader)
           warn_outside(entries)
@@ -40,12 +40,7 @@ module Saltbox
       # @raise [ArgumentError] for a file in an action folder that is not an action
       # @api private
       def self.action_files
-        support = "/#{Actions.config.base_class.underscore}/"
-        files = roots.flat_map do |root|
-          Dir[root.join("**/*.rb").to_s].reject do |path|
-            "/#{Pathname(path).relative_path_from(root).to_s.delete_suffix(".rb")}/".include?(support)
-          end
-        end
+        files = roots.flat_map { |root| Dir[root.join("**/*.rb").to_s].reject { shared_code?(it, root) } }
         # A folder inside another lists its files twice: each counts once.
         files = files.uniq
         misnamed = files.reject { it.end_with?("_action.rb") }
@@ -53,17 +48,40 @@ module Saltbox
         files
       end
 
-      # For an app whose action folders hold other files too
-      # (Configuration#strict_action_paths off): the base class's named
-      # subclasses defined in those folders, once they are loaded.
+      # Whether a file in an action folder is the base class's own
+      # (application_action.rb, or under application_action/), shared code
+      # rather than an action. An engine's base class is too:
+      # billing/application_action.rb.
+      #
+      # @param path [String]
+      # @param root [Pathname] the action folder it is in
+      # @return [Boolean]
+      # @api private
+      def self.shared_code?(path, root)
+        "/#{Pathname(path).relative_path_from(root).to_s.delete_suffix(".rb")}/".include?("/#{Actions.config.base_class.underscore}/")
+      end
+
+      # The actions: the base class's named subclasses defined in the action
+      # folders, outside the base class's own files (.shared_code?). An
+      # action other actions inherit from is an action too. With
+      # Configuration#strict_action_paths on, each file is loaded and
+      # checked first (.action_files, .action_at); otherwise the folders
+      # are eager loaded. Either way the actions are the same.
       #
       # @return [Array<Class>]
       # @api private
       def self.descendants
-        roots.select(&:directory?).each { Rails.autoloaders.main.eager_load_dir(it.to_s) }
+        if Actions.config.strict_action_paths
+          action_files.each { action_at(it) }
+        else
+          roots.select(&:directory?).each { Rails.autoloaders.main.eager_load_dir(it.to_s) }
+        end
         paths = Actions.config.action_paths
-        named = named_descendants
-        named.select { |action| paths.for(source(action)) }.reject { |action| named.any? { it < action } }
+        named_descendants.select do |action|
+          file = source(action)
+          path = file && paths.for(file)
+          path && !shared_code?(file, path.root)
+        end
       end
 
       # The base class's subclasses that hold a name now: not anonymous

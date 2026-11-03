@@ -1412,6 +1412,9 @@ the declaring class's, after it. So it never inherits a way out of them:
 A back office's base class goes in `app/actions/admin/application_action.rb`,
 as `Admin::ApplicationController` goes beside its controllers. A file named
 `application_action.rb` holds shared code, not an action, in any folder.
+That is the one way a base class is told apart: any other class in the
+action folders is an action, including one other actions inherit from,
+whether or not `strict_action_paths` is on.
 
 A model that names its policy with `policy_class` stays inside the
 namespace too. With Pundit the name is looked up there, as
