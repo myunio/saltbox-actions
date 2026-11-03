@@ -23,7 +23,7 @@ RSpec.describe "Names in the README and CHANGELOG" do
   # authorizes and the policy that asks.
   examples = [
     {doc: "README.md", says: "`Events::UpdateAction` works on `Event`, asks the policy's `update?` rule, and is named `update_event`",
-     action: "Events::UpdateAction", model: "Event", gives: {action_name: "update_event", expected_policy_name: "EventPolicy", policy_query: :update?}},
+     action: "Events::UpdateAction", model: "Event", gives: {action_name: "update_event", expected_policy_name: "EventPolicy", policy_rule: :update?}},
     {doc: "README.md", says: "`Tasks::List`, `Tasks::Show`, `Tasks::Create`, `Tasks::Update` and `Tasks::Delete`, named `list_tasks`, `show_task` and so on",
      action: "Tasks::ListAction", model: "Task", gives: {action_name: "list_tasks"}},
     {doc: "README.md", says: "the walkthrough above, `TaskPolicy` lets it list tasks", action: "Tasks::ListAction", model: "Task", gives: {expected_policy_name: "TaskPolicy"}},
@@ -45,9 +45,9 @@ RSpec.describe "Names in the README and CHANGELOG" do
     {doc: "README.md", says: "A model in an engine that is not isolated keeps its module in its name, so a namespace would be added to it (`list_billing_billing_invoices`).",
      action: "Billing::Invoices::ListAction", model: "Billing::Invoice", isolated: false, declared: true, namespace: "billing", gives: {action_name: "list_billing_billing_invoices"}},
     {doc: "README.md", says: "`Events::UpdateAction` asks `EventPolicy#update?`, and its input takes the fields from the policy's `permitted_attributes`.",
-     action: "Events::UpdateAction", model: "Event", gives: {expected_policy_name: "EventPolicy", policy_query: :update?}},
+     action: "Events::UpdateAction", model: "Event", gives: {expected_policy_name: "EventPolicy", policy_rule: :update?}},
     {doc: "README.md", says: "`Admin::Events::UpdateAction` asks `Admin::EventPolicy#update?`: before any record loads",
-     action: "Admin::Events::UpdateAction", model: "Event", gives: {expected_policy_name: "Admin::EventPolicy", policy_query: :update?}},
+     action: "Admin::Events::UpdateAction", model: "Event", gives: {expected_policy_name: "Admin::EventPolicy", policy_rule: :update?}},
     {doc: "README.md", says: "`Admin::CountProjectsAction`'s `authorize Project` and `policy_scope(Project)` ask `Admin::ProjectPolicy`",
      action: "Admin::CountProjectsAction", declare: {action_name: "count_admin_projects", kind: :read}, asks: %w[Project Admin::ProjectPolicy]},
     {doc: "README.md", says: "a top-level `CountProjectsAction`'s ask `ProjectPolicy`",
@@ -147,7 +147,7 @@ RSpec.describe "Names in the README and CHANGELOG" do
     named = prose.scan(/`((?:[A-Z]\w*::)*[A-Z]\w*Policy(?:#\w+\?)?)`/).flatten.uniq - ["Saltbox::Actions::Authorization::ActionPolicy"]
     given = examples.flat_map do |example|
       policy = example.dig(:gives, :expected_policy_name) || example[:asks]&.last
-      [policy, example.dig(:gives, :policy_query)&.then { "#{policy}##{it}" }]
+      [policy, example.dig(:gives, :policy_rule)&.then { "#{policy}##{it}" }]
     end
     expect(named - given.compact).to eq([])
   end

@@ -65,7 +65,7 @@ RSpec.shared_examples "hides records the caller cannot see" do
   end
 end
 
-# For an action that declares `returns`. The including spec defines
+# For an action that declares `output_schema`. The including spec defines
 # `permitted_user` and `arguments`.
 RSpec.shared_examples "renders its declared output schema" do
   it "renders a body that matches its output schema" do

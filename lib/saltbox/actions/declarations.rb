@@ -15,20 +15,20 @@ module Saltbox
     # - `feature`: the feature flag the action needs.
     # - `summary`: the fields a list sends agents, and the CLI's columns.
     # - `cli`: the CLI's whole command.
-    # - `returns`: the JSON Schema of the body it renders.
+    # - `output_schema`: the JSON Schema of the body it renders.
     #
     # What decides who may run an action (agents, policy_rule,
     # permission, feature) and how agents treat it (idempotent, featured) is
     # inherited, as class_attribute is: a subclass runs under its parent's
     # rules until it declares its own. What names it (action_name, title,
-    # description, cli, kind, summary, returns) belongs to its own class.
+    # description, cli, kind, summary, output_schema) belongs to its own class.
     module Declarations
       extend ActiveSupport::Concern
 
       AGENT_RULES = %i[allowed confirm never].freeze
 
       included do
-        class_attribute :_agents, :_declared_query, :_idempotent, :_featured, :_feature, :_permissions,
+        class_attribute :_agents, :_declared_rule, :_idempotent, :_featured, :_feature, :_permissions,
           instance_accessor: false, instance_predicate: false
       end
 
@@ -75,14 +75,22 @@ module Saltbox
 
         # Declares the policy rule the action asks. An action named with more
         # than a verb, or with a verb outside the verb table, must declare one:
-        # Events::ShowAttendeesAction asks view_attendees?.
+        # Events::ShowAttendeesAction asks view_attendees?. Called with
+        # nothing, it returns the rule the action asks: the declared one,
+        # otherwise its verb's (destroy? for delete, "<verb>?" for a verb with
+        # no rule of its own). An action with a declared name has only the
+        # declared one.
         #
-        # @param rule [Symbol]
-        # @return [Symbol]
-        def policy_rule(rule) = self._declared_query = rule
+        # @param rule [Symbol, nil]
+        # @return [Symbol, nil]
+        def policy_rule(rule = nil)
+          return self._declared_rule = rule if rule
+          declared_rule || verb_policy_rule
+        end
 
+        # @api private
         # @return [Symbol, nil] the rule declared with `policy_rule`
-        def declared_query = _declared_query
+        def declared_rule = _declared_rule
 
         # Declares whether calling the action again with the same input
         # changes nothing more than the first call did, when its verb's
@@ -211,12 +219,14 @@ module Saltbox
         # On a list action with a summary it describes the view screens get;
         # the catalog gives agents summary_output_schema instead.
         #
-        # @param schema [Hash]
-        # @return [Hash]
-        def returns(schema) = @output_schema = schema.deep_stringify_keys.freeze
-
-        # @return [Hash, nil] the schema declared with `returns`
-        def output_schema = @output_schema
+        # Called with nothing, it returns the declared schema, or nil.
+        #
+        # @param schema [Hash, nil]
+        # @return [Hash, nil]
+        def output_schema(schema = nil)
+          return @output_schema unless schema
+          @output_schema = schema.deep_stringify_keys.freeze
+        end
 
         private
 

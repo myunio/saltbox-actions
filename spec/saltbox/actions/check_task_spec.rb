@@ -18,7 +18,7 @@ RSpec.describe "rails actions:check" do
   end
 
   it "fails naming the action and the fix for a policy without the action's rule" do
-    allow(Events::CancelAction).to receive(:policy_query).and_return(:archive?)
+    allow(Events::CancelAction).to receive(:policy_rule).and_return(:archive?)
     expect { expect { check }.to raise_error(SystemExit) }
       .to output(/Events::CancelAction: EventPolicy#archive\? is missing: add it, or name another with policy_rule/).to_stderr
   end

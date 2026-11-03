@@ -48,7 +48,7 @@ module Saltbox
       end
 
       def assert_matches_output_schema(result, schema: action_class.output_schema)
-        raise ArgumentError, "the action declares no output schema: add returns" unless schema
+        raise ArgumentError, "the action declares no output schema: add output_schema" unless schema
         body = result.respond_to?(:body) ? result.body : result
         failures = JSONSchemer.schema(schema).validate(body.as_json).map { it["error"] }
         assert_empty failures, "expected the body to match the output schema:\n#{failures.join("\n")}"

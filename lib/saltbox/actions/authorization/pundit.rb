@@ -28,7 +28,7 @@ module Saltbox
           # @return [Boolean]
           def permitted?(user)
             return true unless model
-            ::Pundit.policy!(user, policy_target(model)).public_send(policy_query!)
+            ::Pundit.policy!(user, policy_target(model)).public_send(policy_rule!)
           end
 
           # @return [Class, nil] the model's Pundit policy, in the action's policy namespace
@@ -79,7 +79,7 @@ module Saltbox
         # the one declared with `policy_rule`, otherwise the one for its verb.
         # A delete action asks destroy?.
         def authorize(record, query = nil, policy_class: nil)
-          super(policy_class ? record : self.class.policy_target(record), query || self.class.policy_query!, policy_class:)
+          super(policy_class ? record : self.class.policy_target(record), query || self.class.policy_rule!, policy_class:)
         end
 
         # Pundit's policy, in the action's policy namespace.

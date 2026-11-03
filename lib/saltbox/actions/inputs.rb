@@ -139,25 +139,25 @@ module Saltbox
 
         # Declares the paging inputs a list takes, as attributes the action
         # reads like any other: page, from 1, and page_size, up to
-        # max_per_page. The action pages its records itself, with the app's
+        # max_page_size. The action pages its records itself, with the app's
         # own paging library.
         #
-        # @param per_page [Integer] page_size when the caller leaves it out
-        # @param max_per_page [Integer] the largest page_size a caller may ask for
+        # @param page_size [Integer] page_size when the caller leaves it out
+        # @param max_page_size [Integer] the largest page_size a caller may ask for
         # @return [void]
         #
         # @example
-        #   paginated per_page: 50
+        #   paginated page_size: 50
         #
         #   def perform
         #     @events = policy_scope(Event).order(:starts_on).offset((page - 1) * page_size).limit(page_size)
         #     render :index
         #   end
-        def paginated(per_page: 25, max_per_page: 100)
+        def paginated(page_size: 25, max_page_size: 100)
           attribute :page, :integer, default: 1
-          attribute :page_size, :integer, default: per_page
+          attribute :page_size, :integer, default: page_size
           validates :page, numericality: {greater_than_or_equal_to: 1}
-          validates :page_size, numericality: {greater_than_or_equal_to: 1, less_than_or_equal_to: max_per_page}
+          validates :page_size, numericality: {greater_than_or_equal_to: 1, less_than_or_equal_to: max_page_size}
         end
 
         # Active Model's; a validation may change the schema, so it is built again.

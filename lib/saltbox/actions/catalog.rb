@@ -71,7 +71,7 @@ module Saltbox
 
         # The JSON Schema of the body a list action renders for agents, in the
         # configured result format: its records' summaries, typed from the
-        # model's columns, and the meta. Screens get the view, which `returns`
+        # model's columns, and the meta. Screens get the view, which `output_schema`
         # describes.
         #
         # @return [Hash, nil] nil for an action that does not send summaries

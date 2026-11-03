@@ -68,7 +68,7 @@ module Saltbox
           def permitted?(user)
             return true unless model
             policy = policy_class || raise(namespaced_policy_not_found(model))
-            policy.new(model, **authorization_context_for(user)).apply(policy_query!)
+            policy.new(model, **authorization_context_for(user)).apply(policy_rule!)
           end
 
           # @return [Class, nil] the model's policy, in the action's policy namespace
@@ -152,7 +152,7 @@ module Saltbox
         # @raise [ActionPolicy::Unauthorized]
         def authorize(record, rule = nil, **)
           @_authorization_performed = true
-          authorize!(record, to: rule || self.class.policy_query!, **)
+          authorize!(record, to: rule || self.class.policy_rule!, **)
           record
         end
 

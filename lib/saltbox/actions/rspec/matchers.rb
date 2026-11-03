@@ -114,7 +114,7 @@ module Saltbox
           def initialize(schema) = @schema = schema
 
           def matches?(result)
-            raise ArgumentError, "the action declares no output schema: add returns" unless @schema
+            raise ArgumentError, "the action declares no output schema: add output_schema" unless @schema
             body = result.respond_to?(:body) ? result.body : result
             @failures = JSONSchemer.schema(@schema).validate(body.as_json).map { it["error"] }
             @failures.empty?
@@ -239,7 +239,7 @@ module Saltbox
         #   expect(capacity: "lots").to be_invalid_against_schema(as: as_screen(manager))
         def be_invalid_against_schema(action = described_class, as: nil) = BeInvalidAgainstSchema.new(action, as)
 
-        # Passes when the result's body matches the schema the action declares with `returns`.
+        # Passes when the result's body matches the schema the action declares with `output_schema`.
         # For an agent's result from a list with a summary, pass described_class.summary_output_schema.
         #
         # @example

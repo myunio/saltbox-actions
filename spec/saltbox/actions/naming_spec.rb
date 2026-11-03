@@ -1,10 +1,10 @@
 RSpec.describe Saltbox::Actions::Naming do
   it "works out each action's name, CLI command, kind, id and policy rule from its class name" do
     expect(Events::UpdateAction).to have_attributes(action_name: "update_event", cli_command: %w[events update],
-      kind: :change, takes_id?: true, policy_query: :update?, model: Event, area: "events", idempotent?: true)
-    expect(Events::ListAction).to have_attributes(action_name: "list_events", kind: :read, takes_id?: false, policy_query: :index?)
-    expect(Events::DeleteAction).to have_attributes(action_name: "delete_event", kind: :destructive, policy_query: :destroy?)
-    expect(Events::ShowNotesAction).to have_attributes(action_name: "show_event_notes", policy_query: :view_notes?)
+      kind: :change, takes_id?: true, policy_rule: :update?, model: Event, area: "events", idempotent?: true)
+    expect(Events::ListAction).to have_attributes(action_name: "list_events", kind: :read, takes_id?: false, policy_rule: :index?)
+    expect(Events::DeleteAction).to have_attributes(action_name: "delete_event", kind: :destructive, policy_rule: :destroy?)
+    expect(Events::ShowNotesAction).to have_attributes(action_name: "show_event_notes", policy_rule: :view_notes?)
     expect(WhoamiAction).to have_attributes(action_name: "whoami", model: nil, kind: :read, cli_command: ["whoami"])
   end
 
@@ -32,7 +32,7 @@ RSpec.describe Saltbox::Actions::Naming do
 
   it "names an action in a module its model is not in with that module, as a back office's controllers are" do
     expect(action("Admin::Events::ListAction")).to have_attributes(outer_namespace: ["admin"], action_name: "list_admin_events",
-      cli_command: %w[admin-events list], title: "List admin events", policy_query: :index?, model: Event)
+      cli_command: %w[admin-events list], title: "List admin events", policy_rule: :index?, model: Event)
     expect(action("Admin::Events::ShowNotesAction")).to have_attributes(action_name: "show_admin_event_notes")
     expect(action("Admin::Billing::Invoices::ListAction") { model Billing::Invoice }).to have_attributes(outer_namespace: ["admin"], action_name: "list_admin_billing_invoices")
     expect(action("Billing::Invoices::ListAction")).to have_attributes(outer_namespace: [], action_name: "list_billing_invoices")
@@ -92,7 +92,7 @@ RSpec.describe Saltbox::Actions::Naming do
       define_verb :import, kind: :change
     end
     expect(action("Events::ArchiveAction", base:)).to have_attributes(kind: :change, takes_id?: true, idempotent?: true, agents: :allowed)
-    expect(action("Events::VoidAction", base:)).to have_attributes(kind: :destructive, agents: :never, policy_query: :void?)
+    expect(action("Events::VoidAction", base:)).to have_attributes(kind: :destructive, agents: :never, policy_rule: :void?)
     expect(action("Events::ImportAction", base:)).to have_attributes(kind: :change, takes_id?: false, idempotent?: false)
     expect(action("Events::ArchiveAction")).to have_attributes(kind: nil)
     expect(action("Events::DeleteAction", base:) { idempotent false }.idempotent?).to be(false)

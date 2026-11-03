@@ -5,7 +5,7 @@ RSpec.describe Events::ShowAction do
   let(:arguments) { {id: event.id.to_s} }
 
   before do
-    described_class.returns(type: "object", required: %w[data], properties: {
+    described_class.output_schema(type: "object", required: %w[data], properties: {
       data: {type: "object", required: %w[event], properties: {event: {type: "object", required: %w[id title]}}}
     })
   end

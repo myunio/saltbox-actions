@@ -80,8 +80,8 @@ module Saltbox
           # @api private
           # @return [Symbol] the policy rule the action asks
           # @raise [ArgumentError] for an action with a declared name and no policy_rule, naming the fix
-          def policy_query!
-            policy_query || raise(ArgumentError, "#{name}: #{missing_rule}")
+          def policy_rule!
+            policy_rule || raise(ArgumentError, "#{name}: #{missing_rule}")
           end
 
           # @api private
@@ -123,15 +123,15 @@ module Saltbox
           def authorization_problems
             return [] unless model
             problems = []
-            if declared_name && declared_query.nil?
+            if declared_name && declared_rule.nil?
               return [missing_rule]
-            elsif more_than_verb? && declared_query.nil? && !declared_name
+            elsif more_than_verb? && declared_rule.nil? && !declared_name
               problems << "#{action_words.join(" ")} says more than #{verb}: name the policy rule, policy_rule :#{verb}? or another"
             end
             if policy_class.nil?
               problems << missing_policy_problem
-            elsif !policy_rule?(policy_query)
-              problems << "#{policy_class}##{policy_query} is missing: add it, or name another with policy_rule"
+            elsif !policy_rule?(policy_rule)
+              problems << "#{policy_class}##{policy_rule} is missing: add it, or name another with policy_rule"
             end
             if accepted_fields.any? && supplies_fields?
               problems << "#{policy_class}#permitted_attributes says which fields a person may set: remove accepts, so the policy is the one list"

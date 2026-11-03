@@ -97,7 +97,7 @@ RSpec.describe Saltbox::Actions::Base do
         idempotent
       end
       child = Class.new(parent) { define_singleton_method(:name) { "Events::CancelAction" } }
-      expect(child).to have_attributes(agents: :never, permissions: ["events.manage"], declared_query: :update?, featured?: true, idempotent?: true)
+      expect(child).to have_attributes(agents: :never, permissions: ["events.manage"], declared_rule: :update?, featured?: true, idempotent?: true)
       child.agents :confirm
       expect([child.agents, parent.agents]).to eq(%i[confirm never])
     end
@@ -155,7 +155,7 @@ RSpec.describe Saltbox::Actions::Base do
     it "declares page and page_size as attributes, bounded by their validations" do
       listed = action("Events::ExportAction") do
         policy_rule :index?
-        paginated per_page: 2, max_per_page: 3
+        paginated page_size: 2, max_page_size: 3
 
         def perform
           authorize Event

@@ -40,7 +40,7 @@ module Saltbox
       PLURAL_VERBS = %w[list export].freeze
       # The policy query each verb asks. A verb not listed asks the query of
       # its own name: cancel asks cancel?.
-      VERB_QUERIES = {"list" => :index?, "show" => :show?, "create" => :create?, "update" => :update?, "delete" => :destroy?}.freeze
+      VERB_RULES = {"list" => :index?, "show" => :show?, "create" => :create?, "update" => :update?, "delete" => :destroy?}.freeze
       KINDS = %i[read change destructive].freeze
       ON = %i[member collection].freeze
 
@@ -190,10 +190,10 @@ module Saltbox
         #   or `attribute :id`
         def takes_id? = verb_rule&.fetch(:member) == true || declares_id?
 
-        # @return [Symbol] the policy rule the action checks: the one declared with `policy_rule`,
-        #   otherwise the verb's from VERB_QUERIES (destroy? for delete), otherwise "<verb>?"
-        #   (an action with a declared name has only the declared one)
-        def policy_query = declared_query || (declared_name ? nil : VERB_QUERIES.fetch(verb) { :"#{verb}?" })
+        # @api private
+        # @return [Symbol, nil] the verb's policy rule: from VERB_RULES (destroy? for delete),
+        #   otherwise "<verb>?"; nil for an action with a declared name
+        def verb_policy_rule = (VERB_RULES.fetch(verb) { :"#{verb}?" } unless declared_name)
 
         # @return [String, nil] the area its model belongs to, from Configuration#area_for
         def area = model && Actions.config.area_for.call(model)

@@ -555,11 +555,11 @@ required in the schema, since the default fills it after the schema check;
 its validations still run on the default.
 
 `paginated` declares the paging inputs a list takes, as attributes: `page`,
-from 1, and `page_size`, from 1 to `max_per_page`. Page the records with
+from 1, and `page_size`, from 1 to `max_page_size`. Page the records with
 your own paging library:
 
 ```ruby
-paginated per_page: 50, max_per_page: 200
+paginated page_size: 50, max_page_size: 200
 ```
 
 Before the schema check, form values are read the way Active Record reads
@@ -966,7 +966,7 @@ give them.
 | `featured` | Lists it as an MCP tool of its own (see MCP). The catalog marks it `"featured": true`. |
 | `feature "key"` | A feature flag. While it is off, callers get `not_found`. |
 | `permission "events.manage"` | Permission keys the person must hold. `any_of("a", "b")` takes one of several. `permission :everyone` lets every signed-in person in. |
-| `returns(schema)` | The JSON Schema of the body it renders. |
+| `output_schema(schema)` | The JSON Schema of the body it renders. |
 | `title "..."`, `description "..."` | Text for agents (see Titles and descriptions). |
 | `model Customer` | The model, when the namespace does not give it. `Admin::Reports::ExportAction` with `model Customer` is named `export_admin_reports_customers` and asks `Admin::Reports::CustomerPolicy`. |
 | `policy_namespace :staff` | The namespace its policy is looked up in, when the module it is in is not the right one. `policy_namespace false` asks the model's own policy. It holds for subclasses in its modules and below them (see Authorization). |
@@ -1454,7 +1454,7 @@ rules need; the rest keep the allow-everything defaults.
 
 | Method | Where | Answers |
 |---|---|---|
-| `authorize(record, rule = nil)` | action | Raises unless the person may; `rule` defaults to the action's (`self.class.policy_query`, such as `:update?`). Returns the record. |
+| `authorize(record, rule = nil)` | action | Raises unless the person may; `rule` defaults to the action's (`self.class.policy_rule`, such as `:update?`). Returns the record. |
 | `policy_scope(scope)` | action | The records the person may see. |
 | `skip_authorization`, `skip_policy_scope` | action | Marks the check done, for an action that needs none. |
 | `verify_authorized`, `verify_policy_scoped` | action | Raise when `perform` skipped the check. Run after `perform`. |
@@ -1486,7 +1486,7 @@ module ApplicationAction::ModelAuthorization
 
   def authorize(record, rule = nil)
     @authorized = true
-    raise NotAllowed unless current_user.can?(rule || self.class.policy_query, record)
+    raise NotAllowed unless current_user.can?(rule || self.class.policy_rule, record)
     record
   end
 
@@ -1626,7 +1626,7 @@ Some check a value and run nothing:
 - `be_invalid_against_schema` takes raw input and checks it against the
   input schema, as a client would send it;
 - `match_output_schema` takes a result, or a body, and checks it against
-  the schema from `returns`.
+  the schema from `output_schema`.
 
 ```ruby
 expect({id: event.id, capacity: "lots"}).to be_invalid_against_schema
@@ -1737,7 +1737,7 @@ A call to `run` with no caller still runs the Minitest test itself.
 The helper also has these checks:
 
 - `assert_invalid_against_schema(arguments)` checks raw input.
-- `assert_matches_output_schema(result)` checks the schema from `returns`.
+- `assert_matches_output_schema(result)` checks the schema from `output_schema`.
 - `assert_runnable_by(caller)` and `assert_listed_for(caller)` check access.
 - `assert_announces_changes(event => :update) { run(...) }` checks change events.
   It needs change tracking (`include Saltbox::Actions::ChangeTracking` in
@@ -1842,8 +1842,8 @@ with `confirm` (see Agents), `error_format` and `result_format`. See `lib/saltbo
 
 - The unknown-action message always names `/api/v1/actions`, even if you
   mount the controller somewhere else.
-- `returns` is in the catalog and in specs, but is not yet sent to MCP
-  clients as the tool's output schema. On a list with a summary, `returns`
+- `output_schema` is in the catalog and in specs, but is not yet sent to MCP
+  clients as the tool's output schema. On a list with a summary, `output_schema`
   describes the view screens get; check an agent's result with
   `match_output_schema(described_class.summary_output_schema)`.
 - A literal `%` in a default error message must be written `%%`.
