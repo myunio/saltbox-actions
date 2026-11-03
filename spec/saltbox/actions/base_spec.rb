@@ -90,16 +90,16 @@ RSpec.describe Saltbox::Actions::Base do
   describe "inherited declarations" do
     it "carry who may run an action, and how, to its subclasses until they declare their own" do
       parent = action("Events::CancelAction") do
-        connections :never
+        agents :never
         permission "events.manage"
         policy_rule :update?
         featured
         idempotent
       end
       child = Class.new(parent) { define_singleton_method(:name) { "Events::CancelAction" } }
-      expect(child).to have_attributes(connections: :never, permissions: ["events.manage"], declared_query: :update?, featured?: true, idempotent?: true)
-      child.connections :confirm
-      expect([child.connections, parent.connections]).to eq(%i[confirm never])
+      expect(child).to have_attributes(agents: :never, permissions: ["events.manage"], declared_query: :update?, featured?: true, idempotent?: true)
+      child.agents :confirm
+      expect([child.agents, parent.agents]).to eq(%i[confirm never])
     end
 
     it "carry attribute :id and accepts" do
@@ -118,7 +118,7 @@ RSpec.describe Saltbox::Actions::Base do
       action("Events::RescheduleAction") do
         kind :change
         attribute :id
-        connections :confirm
+        agents :confirm
         policy_rule :update?
         attribute :starts_on, :date
         validate { errors.add(:starts_on, "must be in the future") if starts_on && starts_on < Date.new(2026, 1, 1) }

@@ -7,7 +7,7 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
     Class.new(ApplicationAction) do
       def self.name = "Events::SplitAction"
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :update?
 
       def perform
@@ -56,7 +56,7 @@ RSpec.describe Saltbox::Actions::ChangeTracking do
     failing = Class.new(ApplicationAction) do
       def self.name = "Events::BreakAction"
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :update?
 
       def perform

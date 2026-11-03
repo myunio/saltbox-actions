@@ -54,12 +54,12 @@ RSpec.describe "Declared names" do
       kind :read
     end
     expect(problems.call(read)).to be_empty
-    expect(read.connections).to eq(:allowed)
+    expect(read.agents).to eq(:allowed)
 
     tally = named("Events::TallyAction") do
       action_name "tally"
       kind :read
-      connections :allowed
+      agents :allowed
       model Event
     end
     expect(problems.call(tally)).to eq(["Event is its model: name the policy rule, policy_rule :show? or another"])
@@ -84,7 +84,7 @@ RSpec.describe "Declared names" do
     open_to_all = named("Reports::OpenAction") do
       action_name "open_report"
       kind :read
-      connections :allowed
+      agents :allowed
       permission :everyone
     end
     allow(open_to_all).to receive(:permitted?).and_return(false)

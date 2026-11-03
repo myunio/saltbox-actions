@@ -19,7 +19,7 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
 
   let(:show) do
     action("Events::ShowAction") do
-      connections :allowed
+      agents :allowed
       def perform
         @event = policy_scope(Event).find(params[:id])
         authorize @event
@@ -30,7 +30,7 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
 
   let(:update) do
     action("Events::UpdateAction") do
-      connections :allowed
+      agents :allowed
       def perform
         @event = policy_scope(Event).find(params[:id])
         authorize @event
@@ -71,12 +71,12 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
 
   it "fails an action that never calls authorize or policy_scope" do
     unchecked = action("Events::ExportAction") do
-      connections :allowed
+      agents :allowed
       def perform = render(json: {})
     end
     expect { invoke.call(unchecked, {}, as_screen(manager)) }.to raise_error(Saltbox::Actions::AuthorizationNotPerformedError)
     unscoped = action("Events::ExportAction") do
-      connections :allowed
+      agents :allowed
       def perform
         authorize Event
         render(json: {})
@@ -88,7 +88,7 @@ RSpec.describe Saltbox::Actions::Authorization::ActionPolicy do
   it "passes the same registry checks, through the adapter" do
     missing = action("Events::ArchiveAction") do
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :archive?
     end
     expect(Saltbox::Actions::Registry.problems(missing)).to eq([])

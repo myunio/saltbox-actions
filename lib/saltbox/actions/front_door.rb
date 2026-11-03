@@ -173,7 +173,7 @@ module Saltbox
       def self.entry(action, caller)
         runnable = action.runnable_for?(caller)
         {name: action.action_name, title: action.title, run_with: runnable ? RUN.fetch(action.kind) : nil,
-         confirm_first: action.connections == :confirm, message: ("Only a person can do this, in #{app}" unless runnable)}
+         confirm_first: action.agents == :confirm, message: ("Only a person can do this, in #{app}" unless runnable)}
           .reject { |key, value| key == :message && value.nil? }
       end
 

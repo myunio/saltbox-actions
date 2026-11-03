@@ -7,7 +7,7 @@
     "kind": "change",
     "idempotent": false,
     "scope": "api:write",
-    "connections": "confirm",
+    "agents": "confirm",
     "featured": false,
     "cli": {
       "command": [
@@ -51,7 +51,7 @@
     "kind": "read",
     "idempotent": true,
     "scope": "api:read",
-    "connections": "allowed",
+    "agents": "allowed",
     "permissions": [
       "events.view"
     ],
@@ -121,7 +121,7 @@
     "kind": "change",
     "idempotent": false,
     "scope": "api:write",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": false,
     "cli": {
       "command": [
@@ -211,7 +211,7 @@
     "kind": "destructive",
     "idempotent": true,
     "scope": "api:write",
-    "connections": "confirm",
+    "agents": "confirm",
     "featured": false,
     "cli": {
       "command": [
@@ -252,7 +252,7 @@
     "kind": "read",
     "idempotent": true,
     "scope": "api:read",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": false,
     "cli": {
       "command": [
@@ -336,7 +336,7 @@
     "kind": "read",
     "idempotent": true,
     "scope": "api:read",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": false,
     "cli": {
       "command": [
@@ -360,7 +360,7 @@
     "kind": "read",
     "idempotent": true,
     "scope": "api:read",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": false,
     "cli": {
       "command": [
@@ -466,7 +466,7 @@
     "kind": "change",
     "idempotent": true,
     "scope": "api:write",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": false,
     "cli": {
       "command": [
@@ -518,7 +518,7 @@
     "kind": "read",
     "idempotent": true,
     "scope": "api:read",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": true,
     "cli": {
       "command": [
@@ -560,7 +560,7 @@
     "kind": "read",
     "idempotent": true,
     "scope": "api:read",
-    "connections": "never",
+    "agents": "never",
     "featured": false,
     "cli": {
       "command": [
@@ -602,7 +602,7 @@
     "kind": "change",
     "idempotent": true,
     "scope": "api:write",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": false,
     "cli": {
       "command": [
@@ -701,7 +701,7 @@
     "kind": "read",
     "idempotent": true,
     "scope": "api:read",
-    "connections": "allowed",
+    "agents": "allowed",
     "featured": true,
     "cli": {
       "command": [

@@ -258,7 +258,7 @@ module Saltbox
         #   expect { run(arguments, as: as_screen(manager)) }.to announce_changes(event => :update)
         def announce_changes(expected = {}) = AnnounceChanges.new(expected)
 
-        # Passes when the caller may run the action: listed for them, and not barred by `connections`.
+        # Passes when the caller may run the action: listed for them, and not barred by `agents`.
         #
         # @example
         #   expect(described_class).not_to be_runnable_by(as_assistant(manager))

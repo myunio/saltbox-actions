@@ -1,5 +1,5 @@
 class Events::CancelAction < ApplicationAction
-  connections :confirm
+  agents :confirm
   attribute :reason, :string
 
   def perform

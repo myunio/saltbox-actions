@@ -85,14 +85,14 @@ RSpec.describe Saltbox::Actions::Naming do
     expect(plain.field_description("title")).to eq("The new name")
   end
 
-  it "adds an app's own verbs, each with its kind, member or collection, idempotence and connections rule" do
+  it "adds an app's own verbs, each with its kind, member or collection, idempotence and agents rule" do
     base = Class.new(ApplicationAction) do
       define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
-      define_verb :void, kind: :destructive, on: :member, connections: :never
+      define_verb :void, kind: :destructive, on: :member, agents: :never
       define_verb :import, kind: :change
     end
-    expect(action("Events::ArchiveAction", base:)).to have_attributes(kind: :change, takes_id?: true, idempotent?: true, connections: :allowed)
-    expect(action("Events::VoidAction", base:)).to have_attributes(kind: :destructive, connections: :never, policy_query: :void?)
+    expect(action("Events::ArchiveAction", base:)).to have_attributes(kind: :change, takes_id?: true, idempotent?: true, agents: :allowed)
+    expect(action("Events::VoidAction", base:)).to have_attributes(kind: :destructive, agents: :never, policy_query: :void?)
     expect(action("Events::ImportAction", base:)).to have_attributes(kind: :change, takes_id?: false, idempotent?: false)
     expect(action("Events::ArchiveAction")).to have_attributes(kind: nil)
     expect(action("Events::DeleteAction", base:) { idempotent false }.idempotent?).to be(false)

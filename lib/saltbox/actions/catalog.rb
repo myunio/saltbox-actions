@@ -35,7 +35,7 @@ module Saltbox
         end
 
         # Whether this caller may also run it. A listed action can still be
-        # closed to an agent by its `connections` declaration (see
+        # closed to an agent by its `agents` declaration (see
         # Caller#agent_allowed?).
         #
         # @param caller [Caller]
@@ -50,7 +50,7 @@ module Saltbox
         # @return [Hash] the action's entry in the actions list and in config/actions.json
         def definition(caller = nil, input: input(caller))
           {"name" => action_name, "title" => title, "description" => description, "area" => area,
-           "kind" => kind.to_s, "idempotent" => idempotent?, "scope" => scope, "connections" => connections.to_s,
+           "kind" => kind.to_s, "idempotent" => idempotent?, "scope" => scope, "agents" => agents.to_s,
            "permissions" => permissions&.grep(String), "permissions_any_of" => permissions&.grep(Array)&.presence,
            "featured" => featured?, "cli" => {"command" => cli_command, "aliases" => declared_cli&.fetch(:aliases)&.presence, "args" => cli_args}.compact,
            "summary" => summary&.names, "input_schema" => input.schema,

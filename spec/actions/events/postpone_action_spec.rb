@@ -16,7 +16,7 @@ RSpec.describe Events::PostponeAction do
   end
 
   it "takes its kind, its member record and its defaults from the verb the app defines" do
-    expect(described_class).to have_attributes(kind: :change, takes_id?: true, idempotent?: true, connections: :allowed, policy_query: :postpone?)
+    expect(described_class).to have_attributes(kind: :change, takes_id?: true, idempotent?: true, agents: :allowed, policy_query: :postpone?)
   end
 
   it "needs the new day, as its schema says, and refuses a reason its validation does not allow, by field" do

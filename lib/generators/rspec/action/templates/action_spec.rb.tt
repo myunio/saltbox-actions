@@ -14,7 +14,7 @@ RSpec.describe <%= action_class_name %> do
     expect(result.status).to be < 300
   end
 
-  # Each agent surface is refused or let through as `connections` says, and
+  # Each agent surface is refused or let through as `agents` says, and
   # a read-only token cannot change. When some people may not run the action
   # at all, define `unpermitted_account` too, and this refuses them.
   it_behaves_like "refuses callers the action does not allow"

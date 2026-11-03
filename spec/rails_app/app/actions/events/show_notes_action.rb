@@ -1,5 +1,5 @@
 class Events::ShowNotesAction < ApplicationAction
-  connections :never
+  agents :never
   policy_rule :view_notes?
 
   def perform

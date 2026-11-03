@@ -25,7 +25,7 @@ RSpec.describe "Caller.system" do
   it "runs what the policy allows the app, including an action closed to agents" do
     result = Events::UpdateAction.perform_now(caller: system, id: event.id, title: "Renamed")
     expect(result.body.dig("data", "event", "title")).to eq("Renamed")
-    expect(Events::ShowNotesAction.connections).to eq(:never)
+    expect(Events::ShowNotesAction.agents).to eq(:never)
     expect(Events::ShowNotesAction.perform_now(caller: system, id: event.id).status).to eq(200)
     expect { Events::ShowNotesAction.perform_now(caller: as_mcp(manager), id: event.id) }.to be_refused.with(:human_required)
   end

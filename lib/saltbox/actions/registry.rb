@@ -177,7 +177,7 @@ module Saltbox
         elsif action.declared_kind.nil?
           problems << "#{verb} is not a verb in the table: declare kind :read, :change or :destructive, or add it with define_verb"
         end
-        problems.concat(connection_problems(action))
+        problems.concat(agents_problems(action))
         # Its name comes from its model, so these are boot checks too.
         singular = singular_namespace(action)
         return problems << singular if singular
@@ -190,9 +190,9 @@ module Saltbox
       end
 
       # @param action [Class]
-      # @return [Array<String>] what is wrong with its connections declaration
-      def self.connection_problems(action)
-        return ["a destructive action is never connections :allowed: use :confirm, or :never"] if action.kind == :destructive && action.connections == :allowed
+      # @return [Array<String>] what is wrong with its agents declaration
+      def self.agents_problems(action)
+        return ["a destructive action is never agents :allowed: use :confirm, or :never"] if action.kind == :destructive && action.agents == :allowed
         []
       end
 
@@ -248,7 +248,7 @@ module Saltbox
       def self.named_problems(action, declared_only: false)
         problems = []
         problems << "declare kind :read, :change or :destructive" unless action.declared_kind
-        problems.concat(connection_problems(action))
+        problems.concat(agents_problems(action))
         problems.concat(input_problems(action))
         return problems if declared_only
         problems.concat(model_problems(action)) if action.model

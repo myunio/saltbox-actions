@@ -3,7 +3,7 @@ module Saltbox
     # The settings an action declares at the top of its class, for what its
     # class name and its verb cannot give. Naming reads everything else from
     # the name; Inputs declares its input.
-    # - `connections`: whether agents and scripts may run it, when its verb's
+    # - `agents`: whether agents and scripts may run it, when its verb's
     #   default is not right.
     # - `action_name`, `title`, `description` (Naming): for an app whose names are already public.
     # - `kind`: read, change or destructive, for a verb not in the verb table.
@@ -17,7 +17,7 @@ module Saltbox
     # - `cli`: the CLI's whole command.
     # - `returns`: the JSON Schema of the body it renders.
     #
-    # What decides who may run an action (connections, policy_rule,
+    # What decides who may run an action (agents, policy_rule,
     # permission, feature) and how agents treat it (idempotent, featured) is
     # inherited, as class_attribute is: a subclass runs under its parent's
     # rules until it declares its own. What names it (action_name, title,
@@ -25,10 +25,10 @@ module Saltbox
     module Declarations
       extend ActiveSupport::Concern
 
-      CONNECTIONS = %i[allowed confirm never].freeze
+      AGENT_RULES = %i[allowed confirm never].freeze
 
       included do
-        class_attribute :_connections, :_declared_query, :_idempotent, :_featured, :_feature, :_permissions,
+        class_attribute :_agents, :_declared_query, :_idempotent, :_featured, :_feature, :_permissions,
           instance_accessor: false, instance_predicate: false
       end
 
@@ -47,18 +47,18 @@ module Saltbox
         #
         # @param rule [Symbol, nil] :allowed, :confirm or :never
         # @return [Symbol, nil] nil only for an action whose kind is unknown
-        def connections(rule = nil)
+        def agents(rule = nil)
           unless rule
-            return _connections if _connections
-            return verb_rule[:connections] if verb_rule&.key?(:connections)
+            return _agents if _agents
+            return verb_rule[:agents] if verb_rule&.key?(:agents)
             return kind && ((kind == :destructive) ? :confirm : :allowed)
           end
-          raise ArgumentError, "connections is :allowed, :confirm or :never, not #{rule.inspect}" unless CONNECTIONS.include?(rule)
-          self._connections = rule
+          raise ArgumentError, "agents is :allowed, :confirm or :never, not #{rule.inspect}" unless AGENT_RULES.include?(rule)
+          self._agents = rule
         end
 
-        # @return [Symbol, nil] the rule declared with `connections`, in this class or a parent
-        def declared_connections = _connections
+        # @return [Symbol, nil] the rule declared with `agents`, in this class or a parent
+        def declared_agents = _agents
 
         # Declares the kind of an action whose verb is not in the verb table.
         #

@@ -43,9 +43,9 @@ RSpec.describe Saltbox::Actions::Registry do
     expect(problems(action("Events::ArchiveAction") { policy_rule :update? })).to include(/declare kind .* or add it with define_verb/)
   end
 
-  it "takes the connections rule from the verb, and refuses a destructive action agents may run without asking" do
+  it "takes the agents rule from the verb, and refuses a destructive action agents may run without asking" do
     expect(problems(action("Events::ShowAction"))).to be_empty
-    expect(problems(action("Events::DeleteAction") { connections :allowed })).to include(/never connections :allowed/)
+    expect(problems(action("Events::DeleteAction") { agents :allowed })).to include(/never agents :allowed/)
   end
 
   it "refuses an action inside its model's namespace, naming the plural one" do
@@ -170,7 +170,7 @@ RSpec.describe Saltbox::Actions::Registry do
   it "lists each action for a caller with whether they may run it" do
     entries = described_class.catalog(as_mcp(manager))
     expect(entries.find { it["name"] == "show_event_notes" }).to be_nil
-    expect(entries.find { it["name"] == "delete_event" }).to include("runnable" => true, "connections" => "confirm", "kind" => "destructive")
+    expect(entries.find { it["name"] == "delete_event" }).to include("runnable" => true, "agents" => "confirm", "kind" => "destructive")
     expect(described_class.catalog(as_read_only(manager)).pluck("kind").uniq).to eq(["read"])
   end
 end

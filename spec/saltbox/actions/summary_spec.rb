@@ -14,7 +14,7 @@ RSpec.describe Saltbox::Actions::Summary do
     end
     Class.new(base) do
       define_singleton_method(:name) { name }
-      connections :allowed
+      agents :allowed
       class_eval(&block) if block
       define_method(:perform, &perform)
     end

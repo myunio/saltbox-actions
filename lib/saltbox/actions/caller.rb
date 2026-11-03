@@ -52,7 +52,7 @@ module Saltbox
       SYSTEM = "system"
 
       # The app itself, in a job, a rake task or the console. It is not an
-      # agent: its `connections` never bar it, it holds every scope, and no
+      # agent: its `agents` never bar it, it holds every scope, and no
       # one is asked to confirm. Its account still goes through the action's
       # authorization like a person's, so the policy decides what the app may
       # do, and a policy that has no answer for it refuses.
@@ -89,7 +89,7 @@ module Saltbox
       # an agent or script acting for them may do.
       # - A person on a screen, or the app itself (Caller.system), may run
       #   anything the policy allows.
-      # - Every other caller follows the action's `connections` declaration.
+      # - Every other caller follows the action's `agents` declaration.
       # - The chat assistant never runs a :confirm action. Any other agent may,
       #   unless Configuration#enforce_confirm is on: then Invocation also asks
       #   the app's Configuration#confirm hook.
@@ -100,7 +100,7 @@ module Saltbox
       def agent_allowed?(action)
         return true unless agent?
         return false if action.kind == :destructive && surface == "webmcp"
-        case action.connections
+        case action.agents
         when :allowed then true
         when :confirm then surface != "assistant"
         else false
@@ -117,7 +117,7 @@ module Saltbox
       #
       # @param action [Class]
       # @return [void]
-      # @raise [Error::HumanRequired] when its `connections` declaration bars this caller
+      # @raise [Error::HumanRequired] when its `agents` declaration bars this caller
       # @raise [Error::ConfirmationRequired] when it is :confirm, Configuration#enforce_confirm
       #   is on, and the app's Configuration#confirm hook does not approve it
       # @raise [ArgumentError] outside a running action

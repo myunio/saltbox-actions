@@ -6,7 +6,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect { invoke.call("fly_event", {}, as_screen(manager)) }.to be_refused.with(:unknown_action)
   end
 
-  it "refuses in a fixed order: feature, connections, access, scope, then the person's rights" do
+  it "refuses in a fixed order: feature, agents, access, scope, then the person's rights" do
     allow(Events::ShowNotesAction).to receive(:enabled_for?).and_return(false)
     expect { invoke.call("show_event_notes", {id: event.id.to_s}, as_mcp(stranger)) }.to be_refused.with(:not_found)
     allow(Events::ShowNotesAction).to receive(:enabled_for?).and_call_original
@@ -67,7 +67,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::LockAction"
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :update?
       define_method(:perform) { raise domain_error }
     end
@@ -86,7 +86,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::PeekAction"
       kind :read
-      connections :allowed
+      agents :allowed
       policy_rule :show?
       def perform = render(json: {})
     end
@@ -96,7 +96,7 @@ RSpec.describe Saltbox::Actions::Invocation do
   it "takes policy_scope as a list action's authorization, but still needs it" do
     listed = Class.new(ApplicationAction) do
       def self.name = "Events::ListAction"
-      connections :allowed
+      agents :allowed
       def perform
         @events = policy_scope(Event)
         render :index
@@ -105,7 +105,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect(described_class.call(name: listed, caller: as_screen(manager)).status).to eq(200)
     unscoped = Class.new(ApplicationAction) do
       def self.name = "Events::ListAction"
-      connections :allowed
+      agents :allowed
       def perform
         @events = Event.all
         render :index
@@ -118,7 +118,7 @@ RSpec.describe Saltbox::Actions::Invocation do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::PeekAction"
       kind :read
-      connections :allowed
+      agents :allowed
       policy_rule :show?
       def perform = params[:colour]
     end

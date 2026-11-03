@@ -96,7 +96,7 @@ RSpec.describe "Confirming a :confirm action" do
       Class.new(ApplicationAction) do
         def self.name = "Events::RescheduleAction"
         kind :change
-        connections :allowed
+        agents :allowed
         policy_rule :update?
         attribute :id
         attribute :cancel, :boolean
@@ -129,7 +129,7 @@ RSpec.describe "Confirming a :confirm action" do
       expect(event.reload.status).to eq("cancelled")
     end
 
-    it "refuses a caller the named action's connections bar" do
+    it "refuses a caller the named action's agents bar" do
       expect { reschedule.call(as_assistant(manager)) }.to be_refused.with(:human_required)
     end
 

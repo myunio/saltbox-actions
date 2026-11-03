@@ -10,7 +10,7 @@ require "json_schemer"
 #   person whose role does not allow it.
 #
 # Checked: the person without rights, when defined, is refused; each agent surface is
-# refused or let through as the action's `connections` says; a read-only
+# refused or let through as the action's `agents` says; a read-only
 # token cannot change; a browser assistant never runs a destructive action.
 # With Configuration#enforce_confirm on, an agent's :confirm call is refused
 # until the app's confirm hook approves it.
@@ -31,14 +31,14 @@ RSpec.shared_examples "refuses callers the action does not allow" do
   end
 
   {mcp: :as_mcp, api: :as_api, assistant: :as_assistant, webmcp: :as_webmcp}.each do |surface, helper|
-    it "answers #{surface} as its connections declaration says" do
-      allowed = case described_class.connections
+    it "answers #{surface} as its agents declaration says" do
+      allowed = case described_class.agents
       when :allowed then !(surface == :webmcp && described_class.kind == :destructive)
       when :confirm then surface != :assistant && !(surface == :webmcp && described_class.kind == :destructive)
       else false
       end
       caller = public_send(helper, permitted_account)
-      if allowed && described_class.connections == :confirm && Saltbox::Actions.config.enforce_confirm
+      if allowed && described_class.agents == :confirm && Saltbox::Actions.config.enforce_confirm
         allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { false })
         expect { run(arguments, as: caller) }.to be_refused.with(:confirmation_required)
         allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
@@ -49,7 +49,7 @@ RSpec.shared_examples "refuses callers the action does not allow" do
   end
 
   # A read runs on a read-only token, and agents never run a :never action.
-  if described_class.kind != :read && described_class.connections != :never
+  if described_class.kind != :read && described_class.agents != :never
     it "needs a token that may change" do
       expect { run(arguments, as: as_read_only(permitted_account)) }.to be_refused.with(:insufficient_scope)
     end

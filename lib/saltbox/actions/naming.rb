@@ -58,24 +58,24 @@ module Saltbox
         # @param kind [Symbol] :read, :change or :destructive
         # @param on [Symbol] :member for a verb that works on one record named by an id, or :collection
         # @param idempotent [Boolean] whether running it again with the same input changes nothing more
-        # @param connections [Symbol, nil] the verb's connections rule (see Declarations#connections);
+        # @param agents [Symbol, nil] the verb's agents rule (see Declarations#agents);
         #   left out, its kind's
         # @return [void]
-        # @raise [ArgumentError] for an unknown kind, on: or connections rule, or a Rails spelling
+        # @raise [ArgumentError] for an unknown kind, on: or agents rule, or a Rails spelling
         #
         # @example In ApplicationAction
         #   define_verb :archive, kind: :change, on: :member, idempotent: true
-        #   define_verb :void, kind: :destructive, on: :member, connections: :never
-        def define_verb(*names, kind:, on: :collection, idempotent: false, connections: nil)
+        #   define_verb :void, kind: :destructive, on: :member, agents: :never
+        def define_verb(*names, kind:, on: :collection, idempotent: false, agents: nil)
           raise ArgumentError, "define_verb #{names.join(", ")}: kind is :read, :change or :destructive, not #{kind.inspect}" unless KINDS.include?(kind)
           raise ArgumentError, "define_verb #{names.join(", ")}: on is :member or :collection, not #{on.inspect}" unless ON.include?(on)
-          if connections && !Declarations::CONNECTIONS.include?(connections)
-            raise ArgumentError, "define_verb #{names.join(", ")}: connections is :allowed, :confirm or :never, not #{connections.inspect}"
+          if agents && !Declarations::AGENT_RULES.include?(agents)
+            raise ArgumentError, "define_verb #{names.join(", ")}: agents is :allowed, :confirm or :never, not #{agents.inspect}"
           end
           names = names.map(&:to_s)
           spelled = names.select { RAILS_SPELLINGS.key?(it) }
           raise ArgumentError, "#{spelled.map { "#{it} is spelled #{RAILS_SPELLINGS[it]}" }.join(", ")} in actions" if spelled.any?
-          rule = {kind:, member: on == :member, idempotent:, connections:}.compact.freeze
+          rule = {kind:, member: on == :member, idempotent:, agents:}.compact.freeze
           self.verbs = verbs.merge(names.to_h { [it, rule] }).freeze
         end
 

@@ -315,9 +315,9 @@ AccessToken.issue(User.find_by!(email: "ada@example.com"), name: "Claude Code")
 This token can do anything Ada can, changes included: a caller built
 without `scopes:` holds every scope. For a read-only connection, store
 scopes on the token and pass them: `scopes: ["api:read"]`. A delete action
-is `:confirm`, which only tells the agent to ask first (see Connections).
+is `:confirm`, which only tells the agent to ask first (see Agents).
 Until your app has a way for people to approve, keep deletes on screens
-with `connections :never`.
+with `agents :never`.
 
 **8. Check it.** With `bin/rails server` running, list the person's tasks
 as an agent would:
@@ -641,7 +641,7 @@ nested. If everyone `AttendeePolicy` allows may run it, declare
 `Events::AttendeePolicy`. The name stays `list_events_attendees`.
 
 "Agents: confirm" tells the agent to ask the person first. The server
-checks it only when `enforce_confirm` is on (see Connections).
+checks it only when `enforce_confirm` is on (see Agents).
 
 The **kind** decides what a token needs. A read needs the `api:read` scope.
 A change or a destructive action needs `api:write`.
@@ -655,12 +655,12 @@ class ApplicationAction < Saltbox::Actions::Base
   include Saltbox::Actions::Authorization::Pundit
 
   define_verb :archive, :restore, kind: :change, on: :member, idempotent: true
-  define_verb :void, kind: :destructive, on: :member, connections: :never
+  define_verb :void, kind: :destructive, on: :member, agents: :never
 end
 ```
 
 `on: :member` is the routes' word for a verb that works on one record.
-`connections:` is the verb's own rule for agents; left out, it follows the
+`agents:` is the verb's own rule for agents; left out, it follows the
 kind.
 
 A verb used by one action can declare its kind there instead, and
@@ -714,7 +714,7 @@ Events::UpdateAction.perform_now(caller: ApplicationAction::Caller.system, id: 1
 ApplicationAction::Caller.system(agent: "Nightly cleanup")   # named in audit and change notes
 ```
 
-The system caller is not an agent. An action's `connections` never bar it,
+The system caller is not an agent. An action's `agents` never bar it,
 even `:never`; it holds every scope, and it is never asked to confirm.
 
 It is not a way around authorization. Its account is
@@ -820,9 +820,9 @@ Authorization) before you generate a create or update action. The generator
 builds a record to read its fields, which needs a tenant. In specs, create
 records inside `ActsAsTenant.with_tenant`, or set the tenant in a `before`.
 
-### Connections
+### Agents
 
-An action's `connections` rule says whether anything other than the
+An action's `agents` rule says whether anything other than the
 person's own click may run it:
 
 - `:allowed`: agents, scripts and assistants may run it.
@@ -836,7 +836,7 @@ an action departs from that:
 
 ```ruby
 class Events::CancelAction < ApplicationAction
-  connections :confirm
+  agents :confirm
 end
 ```
 
@@ -872,7 +872,7 @@ publish, say. Check the stricter rule inside `perform`:
 actor.confirm!(Events::PublishAction) if status == "published"
 ```
 
-`confirm!` refuses with `human_required` when that action's `connections`
+`confirm!` refuses with `human_required` when that action's `agents`
 bar the caller, and with `confirmation_required` when it is `:confirm` and
 not approved. Call it before the action writes anything: a refusal rolls
 back the change, including anything the hook wrote.
@@ -883,7 +883,7 @@ Every surface runs an action through `Saltbox::Actions::Invocation`. It
 refuses in the same order every time, so the same call gets the same answer:
 
 1. The action's feature flag is off: `not_found`.
-2. Its `connections` rule bars this caller: `human_required`.
+2. Its `agents` rule bars this caller: `human_required`.
 3. The caller's access does not reach the action.
 4. The token lacks the scope: `insufficient_scope`.
 5. The person's role or permissions do not allow it: `forbidden`.
@@ -958,7 +958,7 @@ give them.
 | `validates :reason, presence: true` | A check on an attribute. The ones that always run shape the schema. |
 | `accepts :title, :starts_on` | The model fields it takes, when no authorization adapter supplies them. |
 | `paginated` | The paging inputs `page` and `page_size`, as attributes. |
-| `connections :confirm` | Who besides the person may run it, when the verb's rule is not right. |
+| `agents :confirm` | Who besides the person may run it, when the verb's rule is not right. |
 | `kind :read` | The kind, for a verb outside the table. `:read`, `:change` or `:destructive`. |
 | `policy_rule :archive?` | The policy rule, when it is not the verb's own. |
 | `idempotent` | Running it twice with the same input changes nothing more, when the verb does not say so. `idempotent false` says it does. |
@@ -1034,7 +1034,7 @@ Form values work as they are (see Input). Other refusals, such as
 `not_found` or `forbidden`, are best answered once, with `rescue_from
 Saltbox::Actions::Error` in `ApplicationController`.
 
-A subclass of an action keeps its parent's `connections`, `policy_rule`,
+A subclass of an action keeps its parent's `agents`, `policy_rule`,
 `permission`, `feature`, `featured`, `idempotent`, `attribute :id` and
 `accepts`, as `class_attribute` does, until it declares its own. Its name,
 title, description and `cli` are its own.
@@ -1238,7 +1238,7 @@ Agents see a short list of tools, not one per action:
   what `find_action` found.
 
 `find_action` marks each action `confirm_first` when it is declared
-`connections :confirm`. The change tool tells the agent to ask before those
+`agents :confirm`. The change tool tells the agent to ask before those
 and to go ahead with the rest, saying what it is changing. The remove tool
 always asks first.
 
@@ -1295,7 +1295,7 @@ What it does not do:
 - stop a model that follows the planted text anyway. How much the mark
   helps depends on the model, and it is not measured here. The control
   that holds is the server's:
-  `connections :confirm` with `enforce_confirm` (see Connections), so an
+  `agents :confirm` with `enforce_confirm` (see Agents), so an
   agent cannot run a risky action without the person's yes;
 - mark text the agent reads anywhere else, such as a page or a file;
 - cover your own `featured` tools' descriptions. Those are your words, not
@@ -1832,7 +1832,7 @@ end
 
 Other settings include `scopes` (default `api:read` and `api:write`),
 `action_paths` (the folders actions load from), `catalog_path`, `enforce_confirm`
-with `confirm` (see Connections), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
+with `confirm` (see Agents), `error_format` and `result_format`. See `lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits
 

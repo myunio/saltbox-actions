@@ -112,7 +112,7 @@ module Saltbox
       # @return [void]
       # @raise [Error::ConfirmationRequired, Error]
       def confirm!(action)
-        return unless Actions.config.enforce_confirm && @caller.agent? && action.connections == :confirm
+        return unless Actions.config.enforce_confirm && @caller.agent? && action.agents == :confirm
         return if @confirmed.include?(action)
         approved = Actions.config.confirm.call(self, action)
         raise Error::ConfirmationRequired.new(details: {"action" => action.action_name}) unless approved == true
@@ -123,7 +123,7 @@ module Saltbox
 
       # Refuses in this order, so the first check that fails gives the error:
       # - the action's feature is off for the caller: not_found;
-      # - the action's `connections` declaration bars this caller: human_required;
+      # - the action's `agents` declaration bars this caller: human_required;
       # - the connection's access does not reach it: Configuration#on_access_refused's error;
       # - the token lacks the scope: insufficient_scope;
       # - the person's role is not allowed the action, or they lack a permission

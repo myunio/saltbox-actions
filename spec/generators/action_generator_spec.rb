@@ -66,11 +66,11 @@ RSpec.describe Saltbox::Actions::Generators::ActionGenerator do
     expect(destination.join("app/actions/admin/events/update_action.rb").read).to include("class Admin::Events::UpdateAction", "event.update!")
   end
 
-  it "declares no connections, leaving them to the verb" do
+  it "declares no agents, leaving them to the verb" do
     generate("Events::Delete")
     action = destination.join("app/actions/events/delete_action.rb").read
     expect(action).to include("event.destroy!", "head :no_content")
-    expect(action).not_to include("connections")
+    expect(action).not_to include("agents")
   end
 
   it "lists through the policy scope alone" do

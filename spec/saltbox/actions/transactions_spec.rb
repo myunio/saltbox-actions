@@ -61,7 +61,7 @@ RSpec.describe "Changes and transactions" do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::BookAction"
       kind :change
-      connections :allowed
+      agents :allowed
       policy_rule :update?
 
       def perform
@@ -94,7 +94,7 @@ RSpec.describe "Changes and transactions" do
       Class.new(ApplicationAction) do
         def self.name = "Entry::AddAction"
         kind :change
-        connections :allowed
+        agents :allowed
         policy_rule :update?
 
         def perform
@@ -109,7 +109,7 @@ RSpec.describe "Changes and transactions" do
       action = Class.new(ApplicationAction) do
         def self.name = "Events::ArchiveAction"
         kind :change
-        connections :allowed
+        agents :allowed
         policy_rule :update?
 
         def perform
