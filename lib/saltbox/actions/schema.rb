@@ -280,7 +280,7 @@ module Saltbox
           association = belongs_to_for(key)
           required = !column.null && column.default.nil? && column.default_function.nil?
           type = model.type_for_attribute(key)
-          if association&.belongs_to?
+          if association
             return [association.name.to_s, Field.new(key:, schema: column.null ? Schema.nullable(ID) : ID, required:, reference: association.klass, type:)]
           end
           schema = if (values = model.defined_enums[key])
