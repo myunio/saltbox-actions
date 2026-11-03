@@ -19,8 +19,13 @@ ActiveRecord::Schema.define(version: 1) do
     t.timestamps
   end
 
-  # As `rails g actions:approvals` writes it.
-  create_table :action_approvals, force: true do |t|
+  create_table :orgs, force: true do |t|
+    t.timestamps
+  end
+
+  # As `rails g actions:approvals` writes it, with a tenant.
+  create_table :saltbox_action_approvals, force: true do |t|
+    t.integer :tenant_id, null: false
     t.integer :user_id, null: false
     t.integer :connection_id
     t.string :surface, null: false

@@ -24,5 +24,11 @@ Saltbox::Actions.configure do |config|
     Saltbox::Actions::Adapters::Audit::PaperTrail.request(invocation, agent: invocation.caller.agent_name,
       surface: invocation.caller.surface, invocation_id: invocation.invocation_id) { run.call }
   end
+  # Approvals are kept per org; the caller's org is the tenant.
+  config.approvals = {user: "User", tenant: "Org", current_tenant: -> { DummyCurrent.org }}
+  config.around_invocation do |caller, run|
+    org = caller.user.respond_to?(:org_id) ? Org.find_or_create_by!(id: caller.user.org_id) : nil
+    DummyCurrent.set(org:) { run.call(caller) }
+  end
   config.on_changes { |changes, invocation| Dummy::ANNOUNCED << {action: invocation.action.action_name, changes:} }
 end

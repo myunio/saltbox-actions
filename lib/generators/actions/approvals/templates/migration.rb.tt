@@ -1,13 +1,17 @@
-# A person's approvals of their agents' calls to actions that ask first
-# (agents :confirm). See Saltbox::Actions::Adapters::Confirmation::Approvals.
-class CreateActionApprovals < ActiveRecord::Migration<%= migration_version %>
+# saltbox-actions' approvals of agents' calls to actions that ask first
+# (agents :confirm). See Saltbox::Actions::Approval.
+class CreateSaltboxActionApprovals < ActiveRecord::Migration<%= migration_version %>
   def change
-    create_table :action_approvals<%= primary_key_type %> do |t|
-<% if tenant -%>
-      t.references :<%= tenant %>, null: false, foreign_key: true<%= foreign_key_type %>
+    create_table :saltbox_action_approvals<%= primary_key_type %> do |t|
+<% if tenant_table -%>
+      t.references :tenant, null: false<%= foreign_key_type %>, foreign_key: {to_table: :<%= tenant_table %>}
 <% end -%>
-      t.references :<%= approver %>, null: false, foreign_key: true<%= foreign_key_type %>
-      t.references :connection<%= foreign_key_type %><%= connection_foreign_key %>
+      t.references :user, null: false<%= foreign_key_type %>, foreign_key: {to_table: :<%= user_table %>}
+<% if connection_table -%>
+      t.references :connection<%= foreign_key_type %>, foreign_key: {to_table: :<%= connection_table %>, on_delete: :cascade}
+<% else -%>
+      t.references :connection<%= foreign_key_type %>
+<% end -%>
       t.string :surface, null: false
       t.string :agent_name
       t.string :action_name, null: false
@@ -19,6 +23,6 @@ class CreateActionApprovals < ActiveRecord::Migration<%= migration_version %>
       t.datetime :expires_at, null: false
       t.timestamps
     end
-    add_index :action_approvals, %i[<%= approver %>_id action_name confirms arguments_digest], name: "index_action_approvals_on_call"
+    add_index :saltbox_action_approvals, %i[user_id action_name confirms arguments_digest], name: "index_saltbox_action_approvals_on_call"
   end
 end

@@ -20,7 +20,7 @@ loads only when your app switches it on:
 | Tools for an in-app RubyLLM chat | `ruby_llm` | `:ruby_llm_tool` in `config.adapters` |
 | Running an action later (`perform_later`) | none (Active Job) | `:invocation_job` in `config.adapters` |
 | PaperTrail versions as changes | `paper_trail` | `:paper_trail` in `config.adapters` |
-| Approvals of agents' `:confirm` calls, in a table | none (Active Record) | `:approvals` in `config.adapters`, then `bin/rails g actions:approvals` |
+| Approvals of agents' `:confirm` calls, in the gem's table | none (Active Record) | `:approvals` in `config.adapters`, then `bin/rails g actions:approvals` |
 | RSpec helpers and matchers | `rspec-rails` | `require "saltbox/actions/adapters/testing/rspec"` in `spec/rails_helper.rb` |
 | Minitest helpers | none | `require "saltbox/actions/adapters/testing/minitest"` in `test/test_helper.rb` |
 
@@ -1709,56 +1709,57 @@ richer agent stamp (the machine, the connection) goes there, with a column on
 ### Approvals
 
 The `:approvals` adapter keeps each agent's call to a `:confirm` action as a
-request in the app's own `action_approvals` table. The first call is refused
-with `confirmation_required` and saved as a request. The person approves it
-on one of your screens. The same call, with the same arguments, from the same
-connection and surface, then runs once. A request waits an hour; an approval
-waits fifteen minutes for the agent to call again.
+request in the gem's own table, `saltbox_action_approvals`, the way Active
+Storage keeps its blobs. The model is the gem's, `Saltbox::Actions::Approval`.
+The first call is refused with `confirmation_required` and saved as a
+request. The person approves it on one of your screens. The same call, with
+the same arguments, from the same connection and surface, then runs once. A
+request waits an hour; an approval waits fifteen minutes for the agent to
+call again.
 
-```sh
-bin/rails g actions:approvals                     # people are users
-bin/rails g actions:approvals --approver=account --tenant=org --connections=oauth_connections
-bin/rails db:migrate
-```
-
-It writes the migration and `app/models/action_approval.rb`. `--approver`
-names the association that holds the person; `--tenant` adds the tenant's
-column, a foreign key and, when the app has acts_as_tenant, `acts_as_tenant`,
-so an approval stays in its tenant; `--connections` names the
-table the caller's `connection` lives in, for a foreign key that removes a
-connection's approvals with it. The key type follows your
-`config.generators` (`primary_key_type: :uuid`), or `--primary-key-type`.
+Name your classes, then write the table's migration:
 
 ```ruby
 # config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
   config.adapters = [:pundit, :approvals]
-  config.confirm { |invocation, action| ActionApproval.redeem!(invocation, action) }
+  config.approvals = {user: "User", tenant: "Org", connection: "Oauth::Connection"}
 end
 ```
 
-```ruby
-# app/models/action_approval.rb
-class ActionApproval < ApplicationRecord
-  include Saltbox::Actions::Adapters::Confirmation::Approvals
-  belongs_to :user
-
-  # What the agent is told until the person approves.
-  def refusal_message = "#{user.name} must approve this under Settings, Connections first. Then call it again with the same arguments."
-end
+```sh
+bin/rails g actions:approvals
+bin/rails db:migrate
 ```
+
+- `user` is the caller's user's class, the person who approves.
+- `tenant`, optional, keeps every approval in one tenant: it is saved with
+  the current tenant, and a call or a screen in another tenant never sees or
+  redeems it. The current tenant is acts_as_tenant's, or give
+  `current_tenant: -> { Current.org }`. With a tenant and none set, the call
+  is refused with an error, never saved without one.
+- `connection`, optional, is the class of the caller's `connection`. The
+  migration then gives it a foreign key that removes a connection's
+  approvals with it.
+- `message`, optional, takes the request and returns what the agent is told
+  until the person approves:
+  `message: ->(approval) { "Approve it under Settings, Connections, then call it again." }`.
+
+The migration's foreign keys point at each class's table; the key type
+follows your `config.generators` (`primary_key_type: :uuid`), or
+`--primary-key-type`. With `:approvals` declared, `Approval.redeem!` is the
+`confirm` hook unless you set your own.
 
 A request refused inside a change, by `current_caller.confirm!`, is saved
 after the change rolls back, so the person still has it to approve.
 
-The screen stays yours: list the person's requests with
-`ActionApproval.pending.where(user: current_user)`, show each one's `title`,
-`agent_name` and `arguments`, and approve one with `approve!` or decline it
-with `destroy!`. `approve!` raises `ActiveRecord::RecordNotFound` for a
-request that has expired or was already answered; it writes with `update_all`,
-so callbacks, locking and PaperTrail do not run. Without acts_as_tenant, scope the
-model to the tenant as your other models are (a `default_scope` on the current tenant, say). `request_lifetime` and `approval_lifetime` are class attributes
-to change.
+The screen stays yours. `Saltbox::Actions::Approval.waiting_for(current_user)`
+lists the person's requests in the current tenant, newest first; show each
+one's `title`, `agent_name` and `arguments`, and approve one with `approve!`
+or decline it with `destroy!`. `approve!` raises `ActiveRecord::RecordNotFound`
+for a request that has expired or was already answered; it writes with
+`update_all`, so callbacks, locking and PaperTrail do not run.
+`Approval.request_lifetime` and `Approval.approval_lifetime` can be changed.
 
 ## Testing with RSpec
 
@@ -1959,7 +1960,7 @@ details. A missing refusal, wrong code or missing field fails the test.
 
 ```sh
 bin/rails g actions:install                        # write config/initializers/saltbox_actions.rb
-bin/rails g actions:approvals                      # the approvals table and model (Approvals)
+bin/rails g actions:approvals                      # the migration for saltbox_action_approvals (Approvals)
 bin/rails g action Events::Update                  # a verb from the table
 bin/rails g action Events::Archive --kind change   # any other verb, on one record
 bin/rails g action Events::Import --kind change --no-member   # one that works on no one record

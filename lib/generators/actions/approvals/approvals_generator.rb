@@ -5,35 +5,24 @@ require "saltbox/actions"
 module Saltbox
   module Actions
     module Generators
-      # `rails g actions:approvals` writes the action_approvals migration and
-      # the ActionApproval model, which includes
-      # Adapters::Confirmation::Approvals, as Devise's generator writes its
-      # users migration. The app then declares :approvals, points its
-      # confirm hook at the model, and adds the screen where a person
-      # approves their agents' requests.
+      # `rails g actions:approvals` writes the migration for the gem's
+      # saltbox_action_approvals table, as `rails active_storage:install`
+      # does for Active Storage's. The model, Saltbox::Actions::Approval, is
+      # the gem's. Its foreign keys follow Configuration#approvals: the
+      # user's table, the tenant's, and the connection's.
       class ApprovalsGenerator < ::Rails::Generators::Base
         include ::ActiveRecord::Generators::Migration
 
         namespace "actions:approvals"
         source_root File.expand_path("templates", __dir__)
 
-        desc "Write the action_approvals migration and the ActionApproval model, for agents' calls to :confirm actions"
+        desc "Write the migration for saltbox_action_approvals, the :approvals adapter's table"
 
-        class_option :approver, type: :string, default: "user",
-          desc: "The association that holds the person who approves: the caller's user (account in an app of accounts)"
-        class_option :connections, type: :string,
-          desc: "The table the caller's connection lives in (oauth_connections), for a foreign key; none when left out"
-        class_option :tenant, type: :string,
-          desc: "The tenant each approval belongs to (org): a column, a foreign key and acts_as_tenant when the app has it"
         class_option :primary_key_type, type: :string,
           desc: "The primary key type (uuid); the app's generator setting when left out"
 
         def write_migration
-          migration_template "migration.rb.tt", File.join(db_migrate_path, "create_action_approvals.rb")
-        end
-
-        def write_model
-          template "model.rb.tt", "app/models/action_approval.rb"
+          migration_template "migration.rb.tt", File.join(db_migrate_path, "create_saltbox_action_approvals.rb")
         end
 
         def say_next_steps
@@ -42,24 +31,33 @@ module Saltbox
             Next, in config/initializers/saltbox_actions.rb:
 
               config.adapters = [..., :approvals]
-              config.confirm { |invocation, action| ActionApproval.redeem!(invocation, action) }
+              config.approvals = {user: "#{settings.fetch(:user)}"#{", tenant: \"#{settings[:tenant]}\"" if settings[:tenant]}}
 
-            Then give the person a screen of their requests, ActionApproval.pending
-            where #{approver} is them, that approves one (approve!) or declines it (destroy!).
+            Then give the person a screen of their requests,
+            Saltbox::Actions::Approval.waiting_for(person), that approves one
+            (approve!) or declines it (destroy!).
           TEXT
         end
 
         private
 
-        # @return [String] the approver association's name
-        def approver = options[:approver].underscore
+        # @return [Hash] the app's config.approvals
+        def settings = Actions.config.approvals
 
-        # @return [String, nil] the tenant association's name
-        def tenant = options[:tenant]&.underscore
+        # @param class_name [String, nil]
+        # @return [String, nil] the class's table: its own when it loads, else the conventional one
+        def table_for(class_name)
+          return unless class_name
+          class_name.constantize.table_name
+        rescue NameError
+          class_name.underscore.tr("/", "_").pluralize
+        end
 
-        # @return [Boolean] whether the app has acts_as_tenant, which scopes
-        #   the model to the current tenant
-        def acts_as_tenant? = defined?(::ActsAsTenant) ? true : false
+        def user_table = table_for(settings.fetch(:user))
+
+        def tenant_table = table_for(settings[:tenant])
+
+        def connection_table = table_for(settings[:connection])
 
         # @return [String, nil] the key type, from the option or the app's
         #   `config.generators` (`g.orm :active_record, primary_key_type: :uuid`)
@@ -70,11 +68,6 @@ module Saltbox
         def primary_key_type = key_type && ", id: :#{key_type}"
 
         def foreign_key_type = key_type && ", type: :#{key_type}"
-
-        # A connection's approval goes with it.
-        def connection_foreign_key
-          options[:connections] && ", foreign_key: {to_table: :#{options[:connections]}, on_delete: :cascade}"
-        end
 
         # @return [String] jsonb on PostgreSQL, json elsewhere
         def json_type

@@ -53,13 +53,13 @@ module Saltbox
         Adapter.new(:paper_trail, :audit, "PaperTrail", "paper_trail",
           "hears of every record a change versions with PaperTrail, for on_changes", nil),
         Adapter.new(:approvals, :confirmation, "Approvals", nil,
-          "keeps each agent's :confirm call for the person to approve, in a table of the app's (rails g actions:approvals)", nil)
+          "keeps each agent's :confirm call for the person to approve, in saltbox_action_approvals (rails g actions:approvals)", :active_record)
       ].index_by(&:name).freeze
 
       # For each load hook an adapter may wait for, the framework's file and
       # the class whose loading runs the hook.
       # @api private
-      FRAMEWORKS = {active_job: ["active_job", "ActiveJob::Base"]}.freeze
+      FRAMEWORKS = {active_job: ["active_job", "ActiveJob::Base"], active_record: ["active_record", "ActiveRecord::Base"]}.freeze
 
       # The test helpers, each required from the app's own helper file.
       TESTING = {
@@ -150,6 +150,7 @@ module Saltbox
         # @api private
         def install!
           Audit::PaperTrail.install! if declared?(:paper_trail)
+          Confirmation::Approvals.install! if declared?(:approvals)
         end
 
         # A group module's const_missing: loads a declared adapter that

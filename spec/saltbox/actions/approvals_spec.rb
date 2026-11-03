@@ -1,6 +1,6 @@
 # The :approvals adapter: an agent's :confirm call waits as a request until
 # the person approves it, then the same call runs once.
-RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
+RSpec.describe Saltbox::Actions::Approval do
   include ActiveSupport::Testing::TimeHelpers
 
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
@@ -10,22 +10,18 @@ RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
     ->(caller = agent, reason: "Snow") { Saltbox::Actions::Invocation.call(action: "cancel_event", caller:, arguments: {id: event.id.to_s, reason:}) }
   end
 
-  around do |example|
-    original = Saltbox::Actions.config.confirm
-    Saltbox::Actions.config.confirm { |invocation, action| ActionApproval.redeem!(invocation, action) }
-    example.run
-  ensure
-    Saltbox::Actions.config.confirm(&original)
-    ActionApproval.delete_all
-  end
+  let(:approvals) { Saltbox::Actions::Approval }
+  let(:ours) { Org.find_or_create_by!(id: manager.org_id) }
+
+  after { approvals.delete_all }
 
   it "refuses an agent's first call and leaves the person a request for that exact call" do
     expect { cancel.call }.to be_refused.with(:confirmation_required)
-    request = ActionApproval.sole
-    expect(request).to have_attributes(user_id: manager.id, connection_id: 7, surface: "mcp", agent_name: "Claude",
+    request = approvals.sole
+    expect(request).to have_attributes(tenant_id: manager.org_id, user_id: manager.id, connection_id: 7, surface: "mcp", agent_name: "Claude",
       action_name: "cancel_event", confirms: "cancel_event", arguments: {"id" => event.id.to_s, "reason" => "Snow"},
       approved_at: nil, title: Events::CancelAction.title)
-    expect(ActionApproval.pending).to eq([request])
+    expect(DummyCurrent.set(org: ours) { approvals.waiting_for(manager).to_a }).to eq([request])
     expect(event.reload.status).to eq("draft")
   end
 
@@ -38,22 +34,22 @@ RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
 
   it "keeps one request while the agent calls again before the person answers" do
     2.times { expect { cancel.call }.to be_refused.with(:confirmation_required) }
-    expect(ActionApproval.count).to eq(1)
+    expect(approvals.count).to eq(1)
   end
 
   it "runs the same call once after the person approves, then asks again" do
     expect { cancel.call }.to be_refused
-    ActionApproval.sole.approve!
+    approvals.sole.approve!
     cancel.call
     expect(event.reload.status).to eq("cancelled")
-    expect(ActionApproval.approved).to be_empty
+    expect(approvals.approved).to be_empty
     expect { cancel.call }.to be_refused.with(:confirmation_required)
   end
 
   it "approves only a request still waiting" do
     expect { cancel.call }.to be_refused
-    request = ActionApproval.sole
-    travel(ActionApproval.request_lifetime + 1.minute) do
+    request = approvals.sole
+    travel(approvals.request_lifetime + 1.minute) do
       expect { request.approve! }.to raise_error(ActiveRecord::RecordNotFound)
     end
     expect(request.reload.approved_at).to be_nil
@@ -69,13 +65,13 @@ RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
         super("Approve it first")
       end
     end
-    request = ActionApproval.new
+    request = Object.new
     expect(subclass.new(request).request).to equal(request)
     expect(Saltbox::Actions::Error::ConfirmationRequired.new.request).to be_nil
   end
 
   it "matches the arguments whatever their order" do
-    expect(ActionApproval.digest({"a" => 1, "b" => {"d" => 2, "c" => [3]}})).to eq(ActionApproval.digest({"b" => {"c" => [3], "d" => 2}, "a" => 1}))
+    expect(approvals.digest({"a" => 1, "b" => {"d" => 2, "c" => [3]}})).to eq(approvals.digest({"b" => {"c" => [3], "d" => 2}, "a" => 1}))
   end
 
   {
@@ -86,7 +82,7 @@ RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
   }.each do |difference, call|
     it "never lets an approval cover a call with #{difference}" do
       expect { cancel.call }.to be_refused
-      ActionApproval.sole.approve!
+      approvals.sole.approve!
       expect { instance_exec(&call) }.to be_refused.with(:confirmation_required)
       expect(event.reload.status).to eq("draft")
     end
@@ -94,10 +90,10 @@ RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
 
   it "lets an approval lapse after approval_lifetime, and a request after request_lifetime" do
     expect { cancel.call }.to be_refused
-    request = ActionApproval.sole
-    travel(ActionApproval.request_lifetime + 1.minute) { expect(ActionApproval.pending).to be_empty }
+    request = approvals.sole
+    travel(approvals.request_lifetime + 1.minute) { expect(approvals.pending).to be_empty }
     request.approve!
-    travel(ActionApproval.approval_lifetime + 1.minute) do
+    travel(approvals.approval_lifetime + 1.minute) do
       expect { cancel.call }.to be_refused.with(:confirmation_required)
       expect(event.reload.status).to eq("draft")
     end
@@ -122,14 +118,65 @@ RSpec.describe Saltbox::Actions::Adapters::Confirmation::Approvals do
 
     expect { run.call }.to be_refused.with(:confirmation_required)
     expect(event.reload.title).to eq("AGM")
-    expect(ActionApproval.sole).to have_attributes(action_name: "reschedule_event", confirms: "cancel_event")
-    ActionApproval.sole.approve!
+    expect(approvals.sole).to have_attributes(action_name: "reschedule_event", confirms: "cancel_event")
+    approvals.sole.approve!
     run.call
     expect(event.reload).to have_attributes(title: "Moved", status: "cancelled")
   end
 
+  it "is the confirm hook once :approvals is declared, unless the app sets its own" do
+    expect(Saltbox::Actions.config.instance_variable_get(:@confirm)).to be_nil
+    expect { cancel.call }.to be_refused.with(:confirmation_required)
+    expect(approvals.count).to eq(1)
+  end
+
+  it "keeps each approval in its tenant: another org neither sees it nor redeems it" do
+    theirs = Org.create!(id: ours.id + 1)
+    expect { cancel.call }.to be_refused
+    approvals.sole.approve!
+    expect(DummyCurrent.set(org: theirs) { approvals.waiting_for(manager).to_a + approvals.approved.in_tenant.to_a }).to be_empty
+    elsewhere = Saltbox::Actions::Invocation.new(Events::CancelAction, agent)
+    DummyCurrent.set(org: theirs) do
+      expect { approvals.redeem!(elsewhere.tap { it.instance_variable_set(:@arguments, {"id" => event.id.to_s, "reason" => "Snow"}) }, Events::CancelAction) }
+        .to raise_error(Saltbox::Actions::Error::ConfirmationRequired)
+    end
+    expect(approvals.approved.where(tenant_id: ours.id).count).to eq(1)
+  end
+
+  it "takes the tenant from acts_as_tenant when config.approvals gives no current_tenant" do
+    require "acts_as_tenant"
+    approvals.install!(user: "User", tenant: "Org")
+    theirs = Org.create!(id: ours.id + 1)
+    ActsAsTenant.with_tenant(ours) { approvals.create!(user_id: 1, surface: "mcp", action_name: "a", confirms: "a", arguments: {}, arguments_digest: "d", expires_at: 1.hour.from_now) }
+    expect(approvals.sole.tenant_id).to eq(ours.id)
+    expect(ActsAsTenant.with_tenant(theirs) { approvals.in_tenant.count }).to eq(0)
+    expect(ActsAsTenant.with_tenant(ours) { approvals.in_tenant.count }).to eq(1)
+  ensure
+    approvals.install!(Saltbox::Actions.config.approvals)
+  end
+
+  it "refuses to keep or find an approval with no tenant set" do
+    expect { approvals.in_tenant }.to raise_error(ArgumentError, /no tenant is set/)
+    expect { approvals.create!(user_id: 1, surface: "mcp", action_name: "a", confirms: "a", arguments: {}, arguments_digest: "d", expires_at: 1.hour.from_now) }
+      .to raise_error(ArgumentError, /no tenant is set/)
+  end
+
+  it "tells the agent the app's message" do
+    approvals.install!(Saltbox::Actions.config.approvals.merge(message: ->(approval) { "Ask user #{approval.user_id} under Settings." }))
+    expect { cancel.call }.to raise_error(Saltbox::Actions::Error::ConfirmationRequired, "Ask user 1 under Settings.")
+  ensure
+    approvals.install!(Saltbox::Actions.config.approvals)
+  end
+
+  it "takes only the settings it knows, and needs the person's class" do
+    config = Saltbox::Actions::Configuration.new
+    expect { config.approvals = {user: "Account", tenants: "Org"} }.to raise_error(ArgumentError, /not tenants/)
+    expect { config.approvals = {tenant: "Org"} }.to raise_error(ArgumentError, /user:/)
+    expect(config.approvals).to eq(user: "User")
+  end
+
   it "never asks a person on a screen" do
     cancel.call(as_screen(manager))
-    expect(ActionApproval.count).to eq(0)
+    expect(approvals.count).to eq(0)
   end
 end
