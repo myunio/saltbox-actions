@@ -1757,7 +1757,7 @@ The screen stays yours: list the person's requests with
 with `destroy!`. `approve!` raises `ActiveRecord::RecordNotFound` for a
 request that has expired or was already answered; it writes with `update_all`,
 so callbacks, locking and PaperTrail do not run. Without acts_as_tenant, scope the
-model to the tenant as your other models are (`acts_as_tenant :org`, say). `request_lifetime` and `approval_lifetime` are class attributes
+model to the tenant as your other models are (a `default_scope` on the current tenant, say). `request_lifetime` and `approval_lifetime` are class attributes
 to change.
 
 ## Testing with RSpec
