@@ -100,6 +100,19 @@ RSpec.describe Saltbox::Actions::Invocation do
       })
       expect { create.input_schema }.to raise_error(ArgumentError, /parent_id is part of host's composite foreign key/)
     end
+
+    it "refuses a belongs_to that names another primary key, whose value the id sent is not" do
+      stub_const("Venue", Class.new(ApplicationRecord) {
+        self.table_name = "events"
+        belongs_to :host, class_name: "Event", foreign_key: :parent_id, primary_key: :capacity, optional: true
+      })
+      visible = Event.create!(org_id: 1, title: "Hall", capacity: 99)
+      hidden = Event.create!(org_id: 2, title: "Elsewhere", capacity: visible.id)
+      expect { create.input_schema }.to raise_error(ArgumentError, /parent_id is the foreign key of host, which points at Event#capacity, not its primary key/)
+      expect(Saltbox::Actions::Registry.problems(create)).to include(/points at Event#capacity, not its primary key/)
+      expect { described_class.call(action: create, caller: as_screen(manager), arguments: {title: "Hall", host: visible.id}) }.to raise_error(ArgumentError)
+      expect(Venue.where.not(parent_id: nil).map(&:host)).not_to include(hidden)
+    end
   end
 
   it "answers no content when an action renders nothing" do
