@@ -50,11 +50,13 @@ RSpec.describe "The actions API", type: :request do
     expect(response).to have_http_status(:no_content)
   end
 
-  it "refuses a :confirm action the app has not approved, by default" do
+  it "refuses a :confirm action the person has not approved, and keeps the request (the dummy app declares :approvals)" do
     post "/api/v1/actions/cancel_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
     expect(response).to have_http_status(:forbidden)
     expect(response.parsed_body).to eq("error" => {"code" => "confirmation_required",
-                                                   "message" => "The person must approve this in Dummy before it runs.", "details" => {"action" => "cancel_event"}})
+                                                   "message" => "The person must approve this in Dummy before it runs. Then call it again with the same arguments.",
+                                                   "details" => {"action" => "cancel_event"}})
+    expect(Saltbox::Actions::Approval.where(confirms: "cancel_event").count).to eq(1)
     expect(event.reload.status).to eq("draft")
   end
 

@@ -97,6 +97,11 @@ module Saltbox
             confirm!(@action)
             run(action)
           end
+        rescue Error::ConfirmationRequired => error
+          # Saved once the change's writes have rolled back, still inside the
+          # app's set-up for the caller, so the person's request is kept.
+          error.request.save! if error.request&.new_record?
+          raise
         end
       rescue Error
         raise

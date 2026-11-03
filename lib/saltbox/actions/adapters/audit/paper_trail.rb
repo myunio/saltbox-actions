@@ -13,7 +13,7 @@ module Saltbox
         # request stays the app's, since what each version records depends on
         # its versions table.
         #
-        # @example config/initializers/actions.rb
+        # @example config/initializers/saltbox_actions.rb
         #   Saltbox::Actions.configure do |config|
         #     config.adapters = [:pundit, :paper_trail]
         #     config.around_perform do |invocation, run|

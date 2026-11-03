@@ -16,3 +16,4 @@ gem "mcp", "~> 1.8"
 gem "ruby_llm", "~> 2.1"
 gem "paper_trail", ">= 16"
 gem "generator_spec", require: false
+gem "acts_as_tenant", require: false # Approval takes its tenant from acts_as_tenant

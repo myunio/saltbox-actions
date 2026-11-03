@@ -2,7 +2,7 @@ require "generators/actions/install/install_generator"
 
 RSpec.describe Saltbox::Actions::Generators::InstallGenerator do
   let(:destination) { Pathname(Dir.mktmpdir("install-generator")) }
-  let(:initializer) { destination.join("config/initializers/actions.rb") }
+  let(:initializer) { destination.join("config/initializers/saltbox_actions.rb") }
 
   after { FileUtils.remove_entry(destination) }
 

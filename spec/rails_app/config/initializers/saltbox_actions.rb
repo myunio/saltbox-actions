@@ -9,7 +9,7 @@ end
 authorization = ENV.fetch("SALTBOX_ACTIONS_AUTHORIZATION", "pundit")
 Saltbox::Actions.configure do |config|
   config.adapters = [*((authorization == "none") ? [] : [authorization.to_sym]),
-    :controller, :mcp, :ruby_llm_tool, :invocation_job, :paper_trail]
+    :controller, :mcp, :ruby_llm_tool, :invocation_job, :paper_trail, :approvals]
   config.app_name = "Dummy"
   config.instructions = "Dummy keeps events. Call find_action for anything not listed."
   config.max_array_items = 50
@@ -23,6 +23,12 @@ Saltbox::Actions.configure do |config|
   config.around_perform do |invocation, run|
     Saltbox::Actions::Adapters::Audit::PaperTrail.request(invocation, agent: invocation.caller.agent_name,
       surface: invocation.caller.surface, invocation_id: invocation.invocation_id) { run.call }
+  end
+  # Approvals are kept per org; the caller's org is the tenant.
+  config.approvals = {user: "User", tenant: "Org", current_tenant: -> { DummyCurrent.org }}
+  config.around_invocation do |caller, run|
+    org = caller.user.respond_to?(:org_id) ? Org.find_or_create_by!(id: caller.user.org_id) : nil
+    DummyCurrent.set(org:) { run.call(caller) }
   end
   config.on_changes { |changes, invocation| Dummy::ANNOUNCED << {action: invocation.action.action_name, changes:} }
 end

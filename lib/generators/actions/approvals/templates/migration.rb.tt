@@ -1,0 +1,28 @@
+# saltbox-actions' approvals of agents' calls to actions that ask first
+# (agents :confirm). See Saltbox::Actions::Approval.
+class CreateSaltboxActionApprovals < ActiveRecord::Migration<%= migration_version %>
+  def change
+    create_table :saltbox_action_approvals<%= primary_key_type %> do |t|
+<% if tenant_table -%>
+      t.references :tenant, null: false<%= foreign_key_type %>, foreign_key: {to_table: :<%= tenant_table %>}
+<% end -%>
+      t.references :user, null: false<%= foreign_key_type %>, foreign_key: {to_table: :<%= user_table %>}
+<% if connection_table -%>
+      t.references :connection<%= foreign_key_type %>, foreign_key: {to_table: :<%= connection_table %>, on_delete: :cascade}
+<% else -%>
+      t.references :connection<%= foreign_key_type %>
+<% end -%>
+      t.string :surface, null: false
+      t.string :agent_name
+      t.string :action_name, null: false
+      t.string :confirms, null: false
+      t.<%= json_type %> :arguments, null: false
+      t.string :arguments_digest, null: false
+      t.datetime :approved_at
+      t.datetime :used_at
+      t.datetime :expires_at, null: false
+      t.timestamps
+    end
+    add_index :saltbox_action_approvals, %i[user_id action_name confirms arguments_digest], name: "index_saltbox_action_approvals_on_call"
+  end
+end

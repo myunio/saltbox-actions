@@ -1,6 +1,6 @@
 module Saltbox
   module Actions
-    # What the app decides, set once in config/initializers/actions.rb. Every
+    # What the app decides, set once in config/initializers/saltbox_actions.rb. Every
     # setting has a default that works for a plain Rails app, so an app sets
     # only what differs.
     #
@@ -91,7 +91,8 @@ module Saltbox
         @around_perform = ->(_invocation, run) { run.call }
         @on_changes = ->(_changes, _invocation) {}
         @after_change_commit = ->(_invocation, _result) {}
-        @confirm = ->(_invocation, _action) { false }
+        @confirm = nil
+        @approvals = {user: "User"}
         @on_access_refused = ->(_caller, _action) { Error::InsufficientScope.new }
         @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.for_fields(fields) }
         @feature_enabled = ->(_key, _caller) { true }
@@ -196,7 +197,36 @@ module Saltbox
       # @yieldparam action [Class] the :confirm action to approve; the
       #   invocation's own, or the one Caller#confirm! names
       # @yieldreturn [Boolean]
-      def confirm(&block) = block ? @confirm = block : @confirm
+      #
+      # With :approvals declared and no hook set, it is Approval.redeem!.
+      def confirm(&block)
+        return @confirm = block if block
+        @confirm || (Adapters.declared?(:approvals) ? Adapters::Confirmation::Approvals.confirm : ->(_invocation, _action) { false })
+      end
+
+      # The app's classes the :approvals adapter's Approval belongs to, by
+      # name: the person (user, the caller's user), and optionally the tenant
+      # each approval is kept in and the connection the caller came through.
+      # With a tenant, the current one is current_tenant's, or acts_as_tenant's.
+      # message, given the request, is what the agent is told until the
+      # person approves.
+      #
+      # @return [Hash{Symbol=>String, Proc}]
+      #
+      # @example
+      #   config.approvals = {user: "Account", tenant: "Org", connection: "Oauth::Connection",
+      #     message: ->(approval) { "Approve it under Settings, Connections, then call it again." }}
+      attr_reader :approvals
+
+      # @param settings [Hash]
+      # @raise [ArgumentError] for an unknown key, or no user
+      def approvals=(settings)
+        settings = settings.to_h.symbolize_keys
+        unknown = settings.keys - %i[user tenant connection current_tenant message]
+        raise ArgumentError, "config.approvals takes user, tenant, connection, current_tenant and message, not #{unknown.join(", ")}" if unknown.any?
+        raise ArgumentError, "config.approvals names the person's class as user:" unless settings[:user]
+        @approvals = settings.freeze
+      end
 
       # Whether a feature flag an action declares is on for this caller.
       #
