@@ -19,6 +19,11 @@ ActiveRecord::Schema.define(version: 1) do
     t.timestamps
   end
 
+  # A lookup list: event kinds are picked by id or by name.
+  create_table :event_kinds, force: true do |t|
+    t.string :name, null: false
+  end
+
   create_table :orgs, force: true do |t|
     t.timestamps
   end

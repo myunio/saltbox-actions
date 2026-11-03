@@ -11,7 +11,8 @@ module Saltbox
     #   Saltbox::Actions.configure do |config|
     #     config.app_name = "Acme"
     #     config.adapters = [:pundit, :controller, :mcp, :paper_trail]
-    #     config.around_invocation { |caller, run| Context.within(caller) { |fresh| run.(fresh) } }
+    #     config.refresh_caller { |caller| caller.with(user: User.active.find(caller.user.id)) }
+    #     config.around_invocation { |caller, run| caller.user.org.with_tenant { run.(caller) } }
     #     config.around_perform { |invocation, run| ::PaperTrail.request(whodunnit: invocation.caller.user.id) { run.() } }
     #     config.on_changes { |changes, invocation| publish(changes, invocation) }
     #     config.map_error(MyApp::DomainError) { |error| Saltbox::Actions::Error::ValidationFailed.new(error.message) }
@@ -43,6 +44,16 @@ module Saltbox
       # @return [Array<String>] the areas find_action lists first, in this order;
       #   the rest follow alphabetically, then actions with no area
       attr_accessor :area_order
+      # @return [Array<String>] the models that are lookup lists: short lists
+      #   anyone who can pick from them may name by id or by name, such as
+      #   event types; a reference to one skips the policy scope (see Base#resolve_reference)
+      attr_reader :lookup_lists
+      # @return [Integer] page_size when a paginated list's caller leaves it out
+      attr_accessor :page_size
+      # @return [Integer] the largest page_size a paginated list's caller may ask for
+      attr_accessor :max_page_size
+      # @return [Object, nil] what lists page and tables query with (see #list_adapter=)
+      attr_reader :list_adapter
       # @return [Integer, #call] the most items an array attribute takes
       attr_writer :max_array_items
       # @return [Boolean] whether Invocation refuses a person who lacks an action's
@@ -97,7 +108,14 @@ module Saltbox
         @on_forbidden_fields = ->(_caller, _action, fields) { Error::Forbidden.for_fields(fields) }
         @feature_enabled = ->(_key, _caller) { true }
         @validate_feature = ->(_key) {}
-        @area_for = ->(_model) {}
+        @area_for = nil
+        @areas = {}.freeze
+        @lookup_lists = [].freeze
+        @page_size = 25
+        @max_page_size = 100
+        @list_adapter = nil
+        @refresh_caller = ->(caller) { caller }
+        @check_caller = ->(_caller) {}
         @schema_user = nil
         @error_mappings = []
         @action_checks = []
@@ -132,11 +150,11 @@ module Saltbox
       def max_array_items = @max_array_items.respond_to?(:call) ? @max_array_items.call : @max_array_items
 
       # The set-up each invocation, catalog listing and search runs inside:
-      # tenant, time zone, a fresh copy of the caller from the database.
-      # The block calls run with the caller it refreshed.
+      # the tenant, time zone and Current of the caller, once #refresh_caller
+      # has refreshed it. The block calls run with the caller.
       #
-      # @yieldparam caller [Caller]
-      # @yieldparam run [Proc] takes the fresh caller
+      # @yieldparam caller [Caller] the refreshed caller
+      # @yieldparam run [Proc] takes the caller
       def around_invocation(&block) = block ? @around_invocation = block : @around_invocation
 
       # Wraps each action's work, inside the invocation's set-up and outside
@@ -246,11 +264,84 @@ module Saltbox
       # @yieldparam key [String]
       def validate_feature(&block) = block ? @validate_feature = block : @validate_feature
 
-      # The area an action's model belongs to, such as "events".
+      # The area an action's model belongs to, such as "events". With #areas
+      # given, the area whose models name it (Areas.area_for).
       #
       # @yieldparam model [Class]
       # @yieldreturn [String, nil]
-      def area_for(&block) = block ? @area_for = block : @area_for
+      def area_for(&block)
+        return @area_for = block if block
+        @area_for || ->(model) { Areas.area_for(model.name) }
+      end
+
+      # Each area and its models, by name, in the order the app lists its
+      # areas (see Areas): every model an action changes belongs to exactly
+      # one. An area's rule may also name its metadata_models, the models
+      # whose record, person and agent everyone who may read the area may
+      # see in a change announcement, and its read_action, the read action
+      # that admits a person to the area.
+      #
+      # @return [Hash{String=>Hash}]
+      #
+      # @example
+      #   config.areas = {
+      #     "events" => {models: %w[Event Event::Type], metadata_models: %w[Event], read_action: "list_events"},
+      #     "documents" => {models: %w[Document]}
+      #   }
+      attr_reader :areas
+
+      # @param areas [Hash{String, Symbol=>Hash}]
+      # @raise [ArgumentError] for a rule key other than models, metadata_models and read_action
+      def areas=(areas)
+        @areas = areas.to_h do |area, rule|
+          rule = rule.to_h.symbolize_keys
+          unknown = rule.keys - %i[models metadata_models read_action]
+          raise ArgumentError, "config.areas[#{area.to_s.inspect}] takes models, metadata_models and read_action, not #{unknown.join(", ")}" if unknown.any?
+          [area.to_s, {models: Array(rule[:models]).map(&:to_s).freeze, metadata_models: Array(rule[:metadata_models]).map(&:to_s).freeze,
+                       read_action: rule[:read_action]&.to_s}.freeze]
+        end.freeze
+      end
+
+      # @param names [Array<String, Class>] the lookup list models, by name
+      def lookup_lists=(names)
+        @lookup_lists = Array(names).map(&:to_s).freeze
+      end
+
+      # What lists page with, and what a `table` action's search, sort and
+      # filters come from: the app's own paging and table libraries. An
+      # object (or its class name) that answers:
+      # - paginate(collection, page:, page_size:): the page's records and
+      #   the pagination the view renders;
+      # - filters(table): each filter's input name and JSON schema, as a Hash;
+      # - search?(table): whether the table takes a search;
+      # - query(table, user:, params:): the person's records, searched, sorted and filtered;
+      # - metadata(table, user:, params:): what the view sends about the table.
+      #
+      # @param adapter [Object, String]
+      attr_writer :list_adapter
+
+      # @return [Object] the list adapter
+      # @raise [ArgumentError] when the app has none
+      # @api private
+      def list_adapter!
+        adapter = @list_adapter or raise ArgumentError, "Paging a list needs config.list_adapter: what the app pages and queries tables with"
+        adapter.is_a?(String) ? adapter.constantize : adapter
+      end
+
+      # The caller as it stands now, before each invocation, catalog listing
+      # and find_action search: a revoked token or ended access stops the
+      # next call. Return a new caller; a caller cannot change.
+      #
+      # @yieldparam caller [Caller]
+      # @yieldreturn [Caller]
+      def refresh_caller(&block) = block ? @refresh_caller = block : @refresh_caller
+
+      # Refuses a caller inside the app's set-up (#around_invocation), once
+      # its tenant is set: the place for a rule on a whole surface, such as
+      # a permission the in-app chat needs. Raise an Error to refuse.
+      #
+      # @yieldparam caller [Caller] the refreshed caller
+      def check_caller(&block) = block ? @check_caller = block : @check_caller
 
       # Who a create or update's input schema is built for where there is
       # no caller: the committed catalog (config/actions.json),
@@ -302,9 +393,9 @@ module Saltbox
       # @return [void]
       def check_registry(&block) = @registry_checks << block
 
-      # @return [Array<Proc>]
+      # @return [Array<Proc>] the app's checks, and Areas.validate! when #areas are given
       # @api private
-      attr_reader :registry_checks
+      def registry_checks = areas.any? ? [->(_actions) { Areas.validate! }, *@registry_checks] : @registry_checks
 
       # @return [String] the scope an action of this kind needs
       def scope_for(kind) = (kind == :read) ? scopes.fetch(:read) : scopes.fetch(:write)

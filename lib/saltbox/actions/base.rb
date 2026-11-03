@@ -35,6 +35,7 @@ module Saltbox
       include Schema
       include Rendering
       include Permitting
+      include Lists
       include Authorization::None
 
       Caller = Actions::Caller
@@ -44,6 +45,7 @@ module Saltbox
       Arguments = Actions::Arguments
       Invocation = Actions::Invocation
       Registry = Actions::Registry
+      Areas = Actions::Areas
       AgentTools = Actions::AgentTools
       Finder = Actions::Finder
       Naming = Actions::Naming

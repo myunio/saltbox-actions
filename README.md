@@ -478,7 +478,7 @@ class Events::ListAction < ApplicationAction
   paginated
 
   def perform
-    @events = policy_scope(Event).order(:starts_on).offset((page - 1) * page_size).limit(page_size)
+    @events = paginate(policy_scope(Event).order(:starts_on))
     render :index   # app/views/events/index.json.jbuilder
   end
 end
@@ -568,6 +568,19 @@ record's id, fails `rails actions:check`: take that record in an attribute
 instead. `perform` reads them with `permitted_attributes(record)`.
 With no authorization adapter, list them with `accepts` (see below).
 
+A **lookup list** is a short list anyone who may pick from it sees in
+full, such as event types or payment methods. Name its models in
+`config.lookup_lists`, and a field that picks one takes its id or its
+name, ignoring case and the spaces around it, and skips the policy scope:
+
+```ruby
+config.lookup_lists = %w[Event::Type PaymentMethod]
+```
+
+An unknown name is refused with the names that would work, and a name two
+entries share with both. An attribute that names a record looks it up
+the same way, with `resolve_reference(PaymentMethod, payment_method, field: "payment_method")`.
+
 **Attributes.** Any other input is an Active Model attribute. `perform`
 reads it as a method: `reason`, not `params[:reason]`. A typo is a
 `NoMethodError` in your spec, not a `nil` in production.
@@ -620,8 +633,10 @@ required in the schema, since the default fills it after the schema check;
 its validations still run on the default.
 
 `paginated` declares the paging inputs a list takes, as attributes: `page`,
-from 1, and `page_size`, from 1 to `max_page_size`. Page the records with
-your own paging library:
+from 1, and `page_size`, from 1 to `max_page_size`. The defaults are
+`config.page_size` (25) and `config.max_page_size` (100). `paginate(records)`
+pages them with your own paging library, through `config.list_adapter`
+(see Lists from a table), and sets `@pagination` for the view:
 
 ```ruby
 paginated page_size: 50, max_page_size: 200
@@ -832,6 +847,23 @@ request's credential.
 In a multi-tenant app, each call runs inside one tenant. Set it, and your
 `Current` attributes, in `around_invocation`, from the caller. Every way in
 runs through it: screens, the API, MCP, jobs and the console.
+
+`Saltbox::Actions.within(caller)` runs the set-up, and every invocation,
+catalog listing and `find_action` search runs inside it, in three steps:
+
+1. `refresh_caller` returns the caller as it stands now, so a revoked token
+   or a person whose access ended stops at the next call. It runs before
+   any tenant is set.
+2. `around_invocation` sets the tenant and `Current` for the refreshed caller.
+3. `check_caller` runs inside the set-up, the place for a rule on a whole
+   surface, such as a permission your chat needs. Raise an `Error` to refuse.
+
+```ruby
+config.refresh_caller { |caller| caller.with(user: User.active.find(caller.user.id)) }
+config.check_caller do |caller|
+  raise Saltbox::Actions::Error::Forbidden if caller.surface == "assistant" && !caller.user.can_chat?
+end
+```
 
 Here each token belongs to one organization, and the MCP endpoint and
 `current_caller` pass the token as the caller's `connection`. A screen's
@@ -1188,6 +1220,53 @@ columns, on every action of the model. For a list, its `output_schema`
 describes the summaries agents get, and `find_action` tells agents which
 fields a list returns.
 
+### Lists from a table
+
+Your screens may list records through a table library of your own: one
+definition of a list's search, sort, filters and columns. A list action can
+use the same table, so agents search and filter the way the screen does.
+`config.list_adapter` connects the gem to your table and paging libraries.
+It answers five methods:
+
+```ruby
+# app/actions/list_adapter.rb
+module ListAdapter
+  # The page's records, and the pagination the view renders.
+  def self.paginate(collection, page:, page_size:)
+    [collection.offset((page - 1) * page_size).limit(page_size), {page:, page_size:, count: collection.count}]
+  end
+
+  # Each filter's input name and JSON schema.
+  def self.filters(table) = table.filters.to_h { [it.key, it.json_schema] }
+
+  def self.search?(table) = table.searchable?
+
+  # The person's records, searched, sorted and filtered.
+  def self.query(table, user:, params:) = table.new(user:, params:).records
+
+  # What the view sends about the table, such as its columns.
+  def self.metadata(table, user:, params:) = table.new(user:, params:).metadata
+end
+
+# config/initializers/saltbox_actions.rb
+config.list_adapter = "ListAdapter"
+```
+
+`table` declares the paging inputs, `sort`, `search` when the table takes
+one, and one input per filter, checked against the filter's schema.
+`table_index` runs the table, which does its own scoping, and pages it:
+
+```ruby
+class Events::ListAction < ApplicationAction
+  table EventsTable
+
+  def perform
+    @events, @table, @pagination = table_index
+    render :index
+  end
+end
+```
+
 ### Titles and descriptions
 
 Agents choose tools by their descriptions, so write one for every action.
@@ -1352,9 +1431,40 @@ tools take the values as `arguments`.
 and to go ahead with the rest, saying what it is changing. The remove tool
 always asks first.
 
-If your app sorts actions into areas (`config.area_for`), the list is sorted
-by area, then name. Set `config.area_order = %w[events billing]` to put
-those areas first.
+If your app sorts actions into areas (see Areas), the list is sorted by
+area, then name. Set `config.area_order = %w[events billing]` to put those
+areas first.
+
+### Areas
+
+An **area** is a part of your app a connection is granted and a change is
+announced to, such as events or billing. Name each area's models in
+`config.areas`, in the order your settings list them:
+
+```ruby
+config.areas = {
+  "events" => {models: %w[Event Event::Type], metadata_models: %w[Event], read_action: "list_events"},
+  "billing" => {models: %w[Billing::Invoice Billing::Payment]}
+}
+config.require_area = true
+```
+
+- `models`: each model an action changes belongs to exactly one area, so
+  every change can be announced. With `require_area`, an action whose model
+  has none fails `rails actions:check`.
+- `metadata_models`: the models whose record, person and agent everyone
+  who may read the area may see in a change announcement.
+- `read_action`: the read action that admits a person to the area.
+
+`rails actions:check` runs `Saltbox::Actions::Areas.validate!`: no model in
+two areas, metadata models among the area's models, and every tracked model
+an area's models destroy with them (`dependent: :destroy`, at any depth)
+mapped too. `Areas` also answers `names`, `area_for(type)`,
+`for_model!(type)`, `metadata?(area, type)` and, inside
+`Saltbox::Actions.within`, `readable?(area, caller)`.
+
+`config.area_for { |model| ... }` takes the place of `areas` when an app
+works out an action's area its own way.
 
 ### In-app assistant
 
@@ -2014,8 +2124,16 @@ Saltbox::Actions.configure do |config|
   # Sent to MCP agents after the gem's sentence on record data.
   config.instructions = "Events keeps a team's events. Use find_action for anything not listed."
 
-  # Run each call inside your own context: tenant, time zone, a fresh user (see The tenant).
+  # Run each call inside your own context: tenant, time zone, Current (see The tenant).
+  config.refresh_caller { |caller| caller.with(user: User.active.find(caller.user.id)) }
   config.around_invocation { |caller, run| Current.set(user: caller.user) { run.call(caller) } }
+
+  # Each area's models (see Areas), and the lookup lists a field may name by name (see Input).
+  config.areas = {"events" => {models: %w[Event]}}
+  config.lookup_lists = %w[Event::Type]
+
+  # What lists page and tables query with (see Lists from a table).
+  config.list_adapter = "ListAdapter"
 
   # Hear about every changed record, inside the transaction (see Change tracking).
   config.on_changes { |changes, invocation| EventLog.record(changes, invocation.caller) }
