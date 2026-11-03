@@ -1907,7 +1907,7 @@ your app's fixtures or records. No factory gem or role names are required.
 A singular name, `Event::Update`, writes the same files.
 
 First it checks the action the way `rails actions:check` will: the model, the
-policy and its rule (when the base class has an adapter), and the fields. On
+policy and its rule (when an authorization adapter is declared), and the fields. On
 a problem it writes nothing, prints the fix and exits 1. If the catalog
 step fails after that, it puts back every file it wrote or changed.
 

@@ -95,6 +95,41 @@ RSpec.describe Saltbox::Actions::Adapters do
     end
   end
 
+  it "includes :action_policy the same way" do
+    output, status = ruby(<<~RUBY)
+      require "saltbox/actions"
+      Saltbox::Actions.configure { it.adapters = [:action_policy] }
+      class ApplicationAction < Saltbox::Actions::Base; end
+      puts ApplicationAction.include?(Saltbox::Actions::Adapters::Authorization::ActionPolicy)
+    RUBY
+    expect(status).to be_success, output
+    expect(output.strip).to eq("true")
+  end
+
+  it "refuses to boot when the base class was defined before the declaration" do
+    output, = ruby(<<~RUBY)
+      require "saltbox/actions"
+      class ApplicationAction < Saltbox::Actions::Base; end
+      Saltbox::Actions.configure { it.adapters = [:pundit] }
+      begin
+        Saltbox::Actions::Registry.actions
+      rescue ArgumentError => error
+        puts error.message
+      end
+    RUBY
+    expect(output).to include("ApplicationAction does not include Saltbox::Actions::Adapters::Authorization::Pundit, " \
+      "which config.adapters declares: it was defined before config.adapters was set")
+  end
+
+  it "is what `rails g actions:install` finds, with nothing required first" do
+    output, status = ruby(<<~RUBY)
+      require "rails/generators"
+      puts Rails::Generators.find_by_namespace("actions:install")
+    RUBY
+    expect(status).to be_success, output
+    expect(output.strip).to eq("Saltbox::Actions::Generators::InstallGenerator")
+  end
+
   it "loads :invocation_job with Active Job, not before" do
     output, status = ruby(<<~RUBY)
       require "saltbox/actions"

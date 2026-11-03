@@ -14,6 +14,7 @@ module Saltbox
       # @return [Array<Class>] every action, sorted by name
       def self.actions
         @actions ||= begin
+          Adapters.check_base!
           entries = descendants
           validate!(entries)
           entries.each(&:define_record_reader)

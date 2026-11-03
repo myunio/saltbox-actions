@@ -105,6 +105,21 @@ module Saltbox
           adapter && constant(adapter)
         end
 
+        # The base class includes the declared authorization adapter as it
+        # is defined; one defined before config.adapters was set never did,
+        # and would allow every action. A boot check, with the registry's.
+        #
+        # @return [void]
+        # @raise [ArgumentError] naming the fix
+        # @api private
+        def check_base!
+          adapter = authorization
+          base = Actions.config.base
+          return if adapter.nil? || base.include?(adapter)
+          raise ArgumentError, "#{base.name} does not include #{adapter.name}, which config.adapters declares: " \
+            "it was defined before config.adapters was set. Set it in config/initializers/actions.rb"
+        end
+
         # What a declared adapter does once the app has loaded: PaperTrail
         # starts noting versions. Run by the Railtie after initialization.
         #
