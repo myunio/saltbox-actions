@@ -270,9 +270,9 @@ module Saltbox
         end
 
         def column_field(key)
-          association = model.reflect_on_association(key.delete_suffix("_id")) if key.end_with?("_id")
           column = model.columns_hash[key]
           return unless column
+          association = belongs_to_for(key)
           required = !column.null && column.default.nil? && column.default_function.nil?
           type = model.type_for_attribute(key)
           if association&.belongs_to?
@@ -285,6 +285,25 @@ module Saltbox
           end
           schema["maxLength"] = column.limit if column.type == :string && column.limit
           [key, Field.new(key:, schema: column.null ? Schema.nullable(schema) : schema, required:, reference: nil, type:)]
+        end
+
+        # The belongs_to whose foreign key the column is, as Active Record
+        # reflects it: account for organization_id, under
+        # `belongs_to :account, foreign_key: :organization_id`. A foreign key
+        # whose record no one scope can check is refused, so it never passes
+        # as a plain value.
+        #
+        # @return [ActiveRecord::Reflection::BelongsToReflection, nil]
+        # @raise [ArgumentError] for a key two associations share, a polymorphic one or part of a composite one
+        def belongs_to_for(key)
+          matches = model.reflect_on_all_associations(:belongs_to).select { Array(it.foreign_key).map(&:to_s).include?(key) }
+          return if matches.empty?
+          fix = "a reference field cannot check the record sent, so leave #{key} out of #{fields_source} and take the record in an attribute"
+          raise ArgumentError, "#{model.name}##{key} is the foreign key of #{matches.map(&:name).to_sentence}: #{fix}" if matches.size > 1
+          association = matches.first
+          raise ArgumentError, "#{model.name}##{key} is the foreign key of #{association.name}, which is polymorphic: #{fix}" if association.polymorphic?
+          raise ArgumentError, "#{model.name}##{key} is part of #{association.name}'s composite foreign key: #{fix}" if association.foreign_key.is_a?(Array)
+          association
         end
       end
     end

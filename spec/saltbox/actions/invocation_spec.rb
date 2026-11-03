@@ -57,6 +57,50 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect(Event.find(result.body.dig("data", "event", "id")).parent).to eq(event)
   end
 
+  context "with a belongs_to whose foreign key is not named after it" do
+    before do
+      stub_const("Venue", Class.new(ApplicationRecord) {
+        self.table_name = "events"
+        belongs_to :host, class_name: "Event", foreign_key: :parent_id, optional: true
+      })
+      stub_const("VenuePolicy", Class.new(EventPolicy) { def permitted_attributes = %i[title parent_id] })
+    end
+
+    let(:create) do
+      Class.new(ApplicationAction) do
+        def self.name = "Venues::CreateAction"
+        def perform
+          venue = authorize(policy_scope(Venue).new(org_id: 1, **permitted_attributes(Venue)))
+          render json: {id: venue.tap(&:save!).id}
+        end
+      end
+    end
+
+    it "takes it under the association's name and refuses a record the person cannot see" do
+      expect(create.input_schema["properties"].keys).to eq(%w[title host])
+      hidden = Event.create!(org_id: 2, title: "Elsewhere")
+      expect { described_class.call(action: create, caller: as_screen(manager), arguments: {title: "Hall", host: hidden.id}) }.to have_field_errors(:host)
+      expect { described_class.call(action: create, caller: as_screen(manager), arguments: {title: "Hall", parent_id: hidden.id}) }.to have_field_errors(:parent_id)
+      id = described_class.call(action: create, caller: as_screen(manager), arguments: {title: "Hall", host: event.id}).body["id"]
+      expect(Venue.find(id).host).to eq(event)
+    end
+
+    it "refuses a foreign key it cannot look up: a polymorphic or composite one, or one two associations share" do
+      Venue.belongs_to :subject, polymorphic: true, foreign_key: :parent_id, optional: true
+      expect { create.input_schema }.to raise_error(ArgumentError, /parent_id is the foreign key of host and subject/)
+      stub_const("Venue", Class.new(ApplicationRecord) {
+        self.table_name = "events"
+        belongs_to :subject, polymorphic: true, foreign_key: :parent_id, optional: true
+      })
+      expect { create.input_schema }.to raise_error(ArgumentError, /parent_id is the foreign key of subject, which is polymorphic/)
+      stub_const("Venue", Class.new(ApplicationRecord) {
+        self.table_name = "events"
+        belongs_to :host, class_name: "Event", foreign_key: %i[org_id parent_id], primary_key: %i[org_id id], optional: true
+      })
+      expect { create.input_schema }.to raise_error(ArgumentError, /parent_id is part of host's composite foreign key/)
+    end
+  end
+
   it "answers no content when an action renders nothing" do
     expect(invoke.call("delete_event", {id: event.id.to_s}, as_screen(manager))).to eq(Saltbox::Actions::Result.no_content)
   end

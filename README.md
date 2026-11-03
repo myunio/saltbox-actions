@@ -514,7 +514,11 @@ An action's input has two parts.
 permits the person, typed from the model's columns (see
 [Authorization](#authorization)). A `belongs_to` is sent under its
 association's name (`parent`, not `parent_id`) and is looked up through the
-person's scope. `perform` reads them with `permitted_attributes(record)`.
+person's scope. The association is found by its foreign key, so
+`belongs_to :account, foreign_key: :organization_id` takes `account`. A
+foreign key that no one scope can check (polymorphic, part of a composite
+key, or shared by two associations) fails `rails actions:check`: take that
+record in an attribute instead. `perform` reads them with `permitted_attributes(record)`.
 With no authorization adapter, list them with `accepts` (see below).
 
 **Attributes.** Any other input is an Active Model attribute. `perform`
