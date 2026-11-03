@@ -13,7 +13,7 @@ module Saltbox
     # - authorize(record, rule = nil): rule defaults to the action's own;
     # - policy_scope(scope), skip_authorization, skip_policy_scope;
     # - verify_authorized and verify_policy_scoped, run after #perform (a
-    #   list action runs only verify_policy_scoped);
+    #   list action on a model runs only verify_policy_scoped);
     # - permitted_attribute_names(record): the fields the person may set;
     # - scoped_records(model): the records the person may pick, for a reference;
     # and, on the class:

@@ -156,15 +156,16 @@ module Saltbox
       # Loads a member action's record, runs #perform, then checks that it
       # called authorize and policy_scope, as Pundit's verify_authorized and
       # verify_policy_scoped do after every controller action. A list action
-      # needs only policy_scope, as a controller's index does: whether the
-      # person may list at all was asked before #perform (see
-      # Catalog#permitted?).
+      # on a model needs only policy_scope, as a controller's index does:
+      # whether the person may list at all was asked of the model's policy
+      # before #perform (see Catalog#permitted?). A list action with no model
+      # had no policy to ask, so it calls authorize too.
       #
       # @return [Result] the response #perform rendered, or a 204 when it rendered nothing
       def perform_now
         member_record if self.class.record_name
         perform
-        verify_authorized unless self.class.verb == "list"
+        verify_authorized unless self.class.verb == "list" && self.class.model
         verify_policy_scoped
         result
       end

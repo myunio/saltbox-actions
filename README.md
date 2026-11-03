@@ -457,9 +457,12 @@ default_url_options host: "events.example.com", protocol: "https"
 ```
 
 `perform` must call `authorize` and `policy_scope`, or the action fails, as
-Pundit's `verify_authorized` would. A list action needs only `policy_scope`,
-as a controller's `index` does. Whether the person may list at all
-(`index?`) is asked before `perform` runs.
+Pundit's `verify_authorized` would. A list action on a model needs only
+`policy_scope`, as a controller's `index` does: whether the person may list
+at all (`index?`) is asked of the model's policy before `perform` runs. A
+list action with no model has no policy to ask first, so it calls
+`authorize` too (`authorize Event, :index?`), or `skip_authorization` when
+anyone may run it.
 
 ### The record
 

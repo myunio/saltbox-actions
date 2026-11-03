@@ -126,6 +126,25 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect { described_class.call(action: unscoped, caller: as_screen(manager)) }.to raise_error(Pundit::PolicyScopingNotPerformedError)
   end
 
+  it "needs authorize in a list action with no model, whose role was never asked" do
+    Event.create!(org_id: 1, title: "AGM")
+    unasked = Class.new(ApplicationAction) do
+      def self.name = "ListEventsAction"
+      agents :allowed
+      def perform = render(json: {titles: policy_scope(Event).pluck(:title)})
+    end
+    expect { described_class.call(action: unasked, caller: as_screen(stranger)) }.to raise_error(Pundit::AuthorizationNotPerformedError)
+    asked = Class.new(unasked) do
+      def self.name = "ListEventsAction"
+      def perform
+        authorize Event, :index?
+        super
+      end
+    end
+    expect { described_class.call(action: asked, caller: as_screen(stranger)) }.to be_refused.with(:forbidden)
+    expect(described_class.call(action: asked, caller: as_screen(manager)).status).to eq(200)
+  end
+
   it "refuses a read of an input the action does not declare" do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::PeekAction"
