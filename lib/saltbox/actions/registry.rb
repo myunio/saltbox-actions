@@ -1,0 +1,382 @@
+module Saltbox
+  module Actions
+    # Loads every action under the actions folder and checks it, in two
+    # steps. Each error names the action and the fix.
+    # - When an eager-loading app boots (production, CI), what each action
+    #   declares: a setting the class name cannot give, and the class does
+    #   not declare, stops the boot instead of being guessed. These checks
+    #   never touch the database.
+    # - `rails actions:check` (.check!), run in CI and by the registry spec,
+    #   checks the rest against the models, policies and database: the
+    #   policy rules, the fields each schema takes, the summaries, and the
+    #   app's own checks.
+    module Registry
+      # @return [Array<Class>] every action, sorted by name
+      def self.actions
+        @actions ||= begin
+          entries = Actions.config.strict_action_paths ? action_files.map { |path| action_at(path) } : descendants
+          validate!(entries)
+          entries.each(&:define_record_reader)
+          warn_outside(entries)
+          entries.sort_by(&:action_name).freeze
+        end
+      end
+
+      # @return [void] forgets the loaded actions, so the next call loads them again
+      # @api private
+      def self.reset! = @actions = @version = nil
+
+      # @return [Array<Pathname>] the folders actions load from (see Configuration#action_paths),
+      #   each once however it was spelled
+      # @api private
+      def self.roots = Actions.config.action_paths.map(&:root).uniq
+
+      # The files in the action folders, without the base class's own file
+      # and folder (application_action.rb and application_action/), which hold
+      # shared code. An engine's own base class, such as
+      # billing/application_action.rb, is shared code too.
+      #
+      # @return [Array<String>] action file paths
+      # @raise [ArgumentError] for a file in an action folder that is not an action
+      # @api private
+      def self.action_files
+        support = "/#{Actions.config.base_class.underscore}/"
+        files = roots.flat_map do |root|
+          Dir[root.join("**/*.rb").to_s].reject do |path|
+            "/#{Pathname(path).relative_path_from(root).to_s.delete_suffix(".rb")}/".include?(support)
+          end
+        end
+        # A folder inside another lists its files twice: each counts once.
+        files = files.uniq
+        misnamed = files.reject { it.end_with?("_action.rb") }
+        raise ArgumentError, "Every file in #{Actions.config.action_paths} ends _action.rb: rename or move #{misnamed.map { relative(it) }.join(", ")}" if misnamed.any?
+        files
+      end
+
+      # For an app whose action folders hold other files too
+      # (Configuration#strict_action_paths off): the base class's named
+      # subclasses defined in those folders, once they are loaded.
+      #
+      # @return [Array<Class>]
+      # @api private
+      def self.descendants
+        roots.select(&:directory?).each { Rails.autoloaders.main.eager_load_dir(it.to_s) }
+        paths = Actions.config.action_paths
+        named = named_descendants
+        named.select { |action| paths.for(source(action)) }.reject { |action| named.any? { it < action } }
+      end
+
+      # The base class's subclasses that hold a name now: not anonymous
+      # classes, nor ones a code reload replaced.
+      #
+      # @return [Array<Class>]
+      def self.named_descendants
+        Actions.config.base.descendants.select { |action| action.name&.safe_constantize.equal?(action) }
+      end
+
+      # Warns about the base class's subclasses that are loaded but outside
+      # every action folder, such as an engine's actions before the engine
+      # adds its folder: they would be missing from the API and MCP with no
+      # other sign. A class other actions inherit from is a base, not an action.
+      #
+      # @param entries [Array<Class>]
+      # @return [void]
+      def self.warn_outside(entries)
+        paths = Actions.config.action_paths
+        named = named_descendants
+        strays = (named - entries).reject { |action| named.any? { it < action } || paths.for(source(action)) }
+        return if strays.empty?
+        one = strays.size == 1
+        warn "saltbox-actions: #{strays.map(&:name).sort.join(", ")} #{one ? "inherits" : "inherit"} from " \
+          "#{Actions.config.base_class} but #{one ? "is" : "are"} outside the action folders (#{paths}), so no caller " \
+          "can run #{one ? "it" : "them"}. Move #{one ? "it" : "them"}, or add the folder in an initializer: " \
+          "Saltbox::Actions.config.action_paths.add(root.join(\"app/actions\"))"
+      end
+
+      # @param action [Class]
+      # @return [String, nil] the file that defines it
+      # @api private
+      def self.source(action) = Object.const_source_location(action.name)&.first
+
+      # The action class a file defines, found by the constant Zeitwerk
+      # expects at its path. It must be defined in that file: a model whose
+      # name ends in Action, loaded first from app/models/, would otherwise
+      # take the action's place.
+      #
+      # @param path [String]
+      # @return [Class]
+      # @raise [ArgumentError] when the file does not define the action class its path names
+      # @api private
+      def self.action_at(path)
+        name = Rails.autoloaders.main.cpath_expected_at(path)
+        constant = name.safe_constantize
+        base = Actions.config.base_class
+        unless constant.is_a?(Class) && constant < base.constantize && Object.const_source_location(name)&.first == path
+          raise ArgumentError, "#{relative(path)} must define #{name} < #{base}; " \
+            "#{constant ? "#{name} is defined in #{Object.const_source_location(name)&.first&.then { relative(it) }}" : "it defines nothing of that name"}"
+        end
+        constant
+      end
+
+      # The boot checks: what each action declares, and that names are
+      # unique. Nothing here touches the database.
+      #
+      # @param entries [Array<Class>]
+      # @return [void]
+      # @raise [ArgumentError] naming every problem with each action
+      # @api private
+      def self.validate!(entries)
+        # Each action's own checks come first: a name the others need, such
+        # as a model's, may be the problem.
+        problems = entries.flat_map { |action| problems(action, declared_only: true).map { "#{action.name}: #{it}" } }
+        raise ArgumentError, problems.join("\n") if problems.any?
+        unique!(entries, "Action names", "declare action_name on one, or give one engine's action path a namespace") { [it.action_name] }
+        unique!(entries, "CLI commands", "declare cli on one, or give one engine's action path a namespace") do |action|
+          [action.cli_command, *action.declared_cli&.fetch(:aliases)].map { it.join(" ") }
+        end
+      end
+
+      # Every check, as `rails actions:check` runs it: the boot checks, then
+      # each action's model, policy, fields and summary, and the app's own
+      # checks (Configuration#action_checks and #registry_checks). It reads
+      # the models' columns, so it needs the database; a write action's
+      # schema is built for Configuration#schema_user.
+      #
+      # @return [Array<Class>] every action, once all pass
+      # @raise [ArgumentError] naming every problem with each action
+      def self.check!
+        entries = actions
+        problems = entries.flat_map { |action| problems(action).map { "#{action.name}: #{it}" } }
+        raise ArgumentError, problems.join("\n") if problems.any?
+        Actions.config.registry_checks.each { it.call(entries) }
+        entries
+      end
+
+      # @param entries [Array<Class>]
+      # @param what [String] what must be unique, for the message
+      # @param fix [String]
+      # @yieldparam action [Class]
+      # @yieldreturn [Array<String>] the names the action answers to
+      # @raise [ArgumentError] naming each name more than one action answers to, and those actions
+      def self.unique!(entries, what, fix)
+        owners = entries.flat_map { |action| yield(action).uniq.map { [it, action] } }.group_by(&:first)
+        clashes = owners.filter_map { |name, pairs| "#{name} (#{pairs.map { it.last.name }.sort.join(", ")})" if pairs.size > 1 }
+        raise ArgumentError, "#{what} must be unique: #{clashes.join("; ")}. To fix: #{fix}" if clashes.any?
+      end
+
+      # @param action [Class]
+      # @param declared_only [Boolean] only the boot checks of what the class declares
+      # @return [Array<String>] what is wrong with the action, and the fix
+      # @api private
+      def self.problems(action, declared_only: false)
+        return named_problems(action, declared_only:) if action.declared_name
+        verb = action.verb
+        problems = []
+        if (spelling = Naming::RAILS_SPELLINGS[verb])
+          renamed = action.name.sub(/#{verb.camelize}(?=[A-Z]|Action\z)/, spelling.camelize)
+          return ["#{verb} is spelled #{spelling} in actions: rename it #{renamed}"]
+        end
+        if action.table_verb?
+          rule = action.verb_rule
+          problems << "#{verb} is a verb in the table, so its kind is #{rule[:kind]}: remove kind" if action.declared_kind
+          if action.declares_id?
+            problems << (rule[:member] ? "#{verb} already takes an id: remove attribute :id" : "#{verb} takes no id: name the record in another attribute")
+          end
+        elsif action.declared_kind.nil?
+          problems << "#{verb} is not a verb in the table: declare kind :read, :change or :destructive, or add it with define_verb"
+        end
+        problems.concat(agents_problems(action))
+        # Its name comes from its model, so these are boot checks too.
+        singular = singular_namespace(action)
+        return problems << singular if singular
+        unmodelled = not_a_model(action)
+        problems << unmodelled if unmodelled
+        problems.concat(input_problems(action)) unless unmodelled
+        return problems if declared_only
+        problems.concat(model_problems(action)) unless unmodelled
+        problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
+      end
+
+      # @param action [Class]
+      # @return [Array<String>] what is wrong with its agents declaration
+      # @api private
+      def self.agents_problems(action)
+        return ["a destructive action is never agents :allowed: use :confirm, or :never"] if action.kind == :destructive && action.agents == :allowed
+        []
+      end
+
+      # Actions are named like controllers, in their resource's plural
+      # namespace, not inside the model's own constant.
+      #
+      # @param action [Class]
+      # @return [String, nil] the fix, for an action inside a model's namespace
+      # @api private
+      def self.singular_namespace(action)
+        parent = action.name.deconstantize.presence&.safe_constantize
+        return unless parent.is_a?(Class) && parent < ActiveRecord::Base
+        plural = "#{parent.name.pluralize}::#{action.name.demodulize}"
+        "#{parent.name} is a model: name its actions like controllers, in the plural namespace: #{plural} in #{plural.underscore}.rb"
+      end
+
+      # @param action [Class]
+      # @return [Array<String>] what is wrong with the action's attributes and the fields it accepts
+      # @api private
+      def self.input_problems(action)
+        problems = []
+        reader = action.record_name
+        if reader && action.declared_attributes.key?(reader)
+          problems << "attribute #{reader} has the name of the reader for the #{action.model.model_name.human.downcase} it works on: rename the attribute"
+        end
+        conflict = action.record_reader_conflict
+        if reader && conflict && !action.declared_attributes.key?(reader)
+          problems << "#{conflict.name || conflict.inspect}##{reader} is a method every action has, so the #{action.model.model_name.human.downcase} it works on gets no reader: name the action's model another way, or declare its kind and attribute :id without a verb that works on one record"
+        end
+        checked = action.validators.select { it.respond_to?(:attributes) }.flat_map(&:attributes).map(&:to_s).uniq
+        (checked - action.declared_attributes.keys).each do |name|
+          problems << "validates #{name}, which is not an attribute: the model's own validations check its fields, or declare it with attribute"
+        end
+        action.declared_attributes.each do |name, attribute|
+          action.validators_on(name).each do |validator|
+            if validator.kind == :inclusion && validator.options[:in].is_a?(Array) && validator.options[:in].any?(Symbol) && attribute[:type] == :string
+              problems << "#{name} is a string, and its inclusion lists symbols, so every value is refused: list strings"
+            elsif validator.kind == :presence && attribute[:type] == :boolean
+              problems << "#{name} is a boolean, and presence refuses false: validate inclusion: {in: [true, false]}"
+            end
+          end
+        end
+        if action.accepted_fields.any? && !action.writes_fields?
+          problems << "accepts names fields of the action's model, and it has none: declare model, or remove accepts"
+        end
+        problems
+      end
+
+      # An action with a declared name answers to no verb table: it declares
+      # its kind, and its model is checked only when it declares one.
+      #
+      # @param action [Class]
+      # @param declared_only [Boolean]
+      # @return [Array<String>]
+      # @api private
+      def self.named_problems(action, declared_only: false)
+        problems = []
+        problems << "declare kind :read, :change or :destructive" unless action.declared_kind
+        problems.concat(agents_problems(action))
+        problems.concat(input_problems(action))
+        return problems if declared_only
+        problems.concat(model_problems(action)) if action.model
+        problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
+      end
+
+      # @param action [Class]
+      # @return [String, nil] for an action under a namespace that is not a model, and no model declared, the fix
+      # @api private
+      def self.not_a_model(action)
+        model = action.model
+        return if (action.name.deconstantize.empty? && model.nil?) || (model.is_a?(Class) && model < ActiveRecord::Base)
+        "#{action.name.deconstantize} names no model (#{action.name.deconstantize.classify} is not one): declare model, or move the action"
+      end
+
+      # @param action [Class]
+      # @return [Array<String>] what is wrong with the action's model, its
+      #   authorization (see Authorization#authorization_problems) and fields, and the fix
+      # @api private
+      def self.model_problems(action)
+        return [] if action.name.deconstantize.empty? && action.model.nil?
+        model = action.model
+        return ["#{action.name.deconstantize} names no model (#{action.name.deconstantize.classify} is not one): declare model, or move the action"] unless model.is_a?(Class) && model < ActiveRecord::Base
+        problems = []
+        problems << "no area maps #{model.name}: add it to the app's areas" if Actions.config.require_area && !action.area
+        authorization = action.authorization_problems
+        problems.concat(authorization)
+        # The fields and summary are read from the table, which a database
+        # not yet migrated lacks: that is the one fix to name.
+        return problems << "#{model.name}'s table #{model.table_name} does not exist: run bin/rails db:prepare first" unless model.table_exists?
+        if authorization.empty?
+          schema = schema_problems(action)
+          problems.concat(schema)
+          problems.concat(action.reference_problems) if schema.empty?
+        end
+        problems.concat(summary_problems(action))
+      end
+
+      # Builds the catalog's input schema, which asks the policy's
+      # permitted_attributes of the schema user.
+      #
+      # @param action [Class] an action with a model
+      # @return [Array<String>] what stops its schema being built, and the fix
+      # @api private
+      def self.schema_problems(action)
+        action.input_schema
+        []
+      rescue ArgumentError => error
+        [error.message]
+      rescue ActiveRecord::ConnectionNotEstablished, ActiveRecord::NoDatabaseError
+        raise
+      rescue => error
+        ["building its input schema asked #{action.policy_class ? "#{action.policy_class}#permitted_attributes" : "permitted_attribute_names_for"}, which raised #{error.class}: #{error.message}. " \
+          "If the policy needs a person or a tenant, set config.schema_user, which actions:check and the catalog build schemas for"]
+      end
+
+      # @param action [Class] an action with a model
+      # @return [Array<String>] what is wrong with its summary, and the fix
+      # @api private
+      def self.summary_problems(action)
+        summary = action.summary
+        return [] unless summary
+        model = action.model
+        problems = summary.fields.filter_map do |name, computed|
+          "#{model.name} has no #{name} for its summary: name an attribute or method, or compute it" unless computed || model.attribute_names.include?(name) || model.method_defined?(name)
+        end
+        problems << "its summary leaves out id, which agents need to call show: add :id" if action.summarizes_list? && !summary.names.include?("id")
+        problems
+      end
+
+      # @param name [String]
+      # @return [Class, nil]
+      def self.find(name) = actions.find { |action| action.action_name == name.to_s }
+
+      # @param name [String]
+      # @return [Class]
+      # @raise [Error::UnknownAction]
+      def self.fetch(name) = find(name) || raise(Error::UnknownAction, name)
+
+      # @param caller [Caller]
+      # @return [Array<Hash>] visible definitions, each marked runnable or not
+      #   for this caller, from one fresh check of the caller
+      # @api private
+      def self.catalog(caller)
+        Actions.within(caller) do |fresh|
+          actions.select { |action| action.listed_for?(fresh) }
+            .map { |action| action.definition(fresh).merge("runnable" => fresh.agent_allowed?(action)) }
+        end
+      end
+
+      # @return [Array<Hash>] every action's definition, as written to the catalog file:
+      #   a create or update lists the fields the policy permits Configuration#schema_user
+      # @api private
+      def self.definitions = actions.map(&:definition)
+
+      # The version of the actions' code, for the API's meta and the MCP
+      # server: a hash of every definition without the policy's fields, so
+      # no caller is needed. A caller's own fields change their catalog's
+      # ETag instead.
+      #
+      # @return [String]
+      # @api private
+      def self.version
+        @version ||= Digest::SHA256.hexdigest(JSON.generate(actions.map { it.definition(input: it.declared_input) }))[0, 16]
+      end
+
+      # @return [Pathname] the committed catalog, which a spec checks matches the code
+      # @api private
+      def self.catalog_path = Rails.root.join(Actions.config.catalog_path)
+
+      # @return [String] the catalog file's contents for the code as it stands
+      # @api private
+      def self.catalog_json = "#{JSON.pretty_generate(definitions)}\n"
+
+      def self.relative(path) = Pathname(path).relative_path_from(Rails.root).to_s
+      private_class_method :relative, :named_descendants, :warn_outside, :unique!
+    end
+  end
+end
