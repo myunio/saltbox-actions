@@ -143,9 +143,9 @@ module Saltbox
 
         # Checks a caller's input before the action runs, and fills in each
         # attribute's default. Override it in the app's base class to check
-        # input another way; an override that does not call super fills in
-        # the defaults itself, since the action takes its attributes only
-        # from what this returns.
+        # input another way, and call super: the action takes its attributes
+        # only from what this returns, so an override that skips super and
+        # leaves a default out is refused with an ArgumentError when it runs.
         #
         # @param arguments [Hash, nil]
         # @param caller [Caller]

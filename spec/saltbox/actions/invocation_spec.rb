@@ -243,6 +243,12 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect { invoke.call("show_event", {id: "0"}, as_screen(manager)) }.to raise_error(ActiveRecord::RecordNotFound)
   end
 
+  it "refuses a validate_arguments override that never calls super, which would leave each default unset" do
+    allow(Events::ListAction).to receive(:validate_arguments) { |arguments, _caller| arguments.to_h.stringify_keys }
+    expect { invoke.call("list_events", {}, as_screen(manager)) }
+      .to raise_error(ArgumentError, /Events::ListAction\.validate_arguments never called super, so page and page_size would have no default/)
+  end
+
   it "checks the input with the action's own validate_arguments" do
     allow(Events::ShowAction).to receive(:validate_arguments).and_wrap_original do |original, arguments, caller|
       original.call(arguments.merge("id" => event.id.to_s), caller)

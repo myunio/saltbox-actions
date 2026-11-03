@@ -75,6 +75,7 @@ module Saltbox
         out_of_range.each { (errors[it] ||= []) << "is out of range" }
         messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it}` is out of range" }
         raise Error::ValidationFailed.new(messages.join("; "), errors:) if errors.any?
+        Current.arguments_checked = true
         arguments
       end
 
