@@ -6,13 +6,14 @@ RSpec.describe Events::CancelAction do
 
   it_behaves_like "refuses callers the action does not allow"
 
-  context "with enforce_confirm on" do
-    around { |example| with_settings(enforce_confirm: true) { example.run } }
+  context "with enforce_confirm off" do
+    around { |example| with_settings(enforce_confirm: false) { example.run } }
 
     it_behaves_like "refuses callers the action does not allow"
   end
 
-  it "cancels the event and keeps the reason" do
+  it "cancels the event once the person approves, and keeps the reason" do
+    allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
     run_action(arguments, as: as_mcp(manager))
     expect(event.reload).to have_attributes(status: "cancelled", notes: "Snow")
   end

@@ -93,9 +93,9 @@ module Saltbox
       # - A person on a screen, or the app itself (Caller.system), may run
       #   anything the policy allows.
       # - Every other caller follows the action's `agents` declaration.
-      # - The chat assistant never runs a :confirm action. Any other agent may,
-      #   unless Configuration#enforce_confirm is on: then Invocation also asks
-      #   the app's Configuration#confirm hook.
+      # - The chat assistant never runs a :confirm action. Any other agent may
+      #   once the app's Configuration#confirm hook approves, which Invocation
+      #   asks while Configuration#enforce_confirm is on (the default).
       # - A browser assistant on the page (WebMCP) never runs a destructive action.
       #
       # @param action [Class]

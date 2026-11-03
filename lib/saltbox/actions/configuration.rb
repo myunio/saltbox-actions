@@ -46,8 +46,9 @@ module Saltbox
       #   declared permissions; when false they only decide the actions list
       attr_accessor :enforce_permissions
       # @return [Boolean] whether Invocation refuses an agent a :confirm action
-      #   unless the #confirm hook approves it; when false, agents on the API,
-      #   MCP and a browser page run :confirm actions with nothing checked
+      #   unless the #confirm hook approves it (true by default; with no hook,
+      #   every such call is refused); set false on purpose to let agents on
+      #   the API, MCP and a browser page run :confirm actions with nothing checked
       attr_accessor :enforce_confirm
       # @return [Boolean] whether every Ruby file under action_paths must define an action, in a
       #   file ending _action.rb (true by default); when false, the actions are the base class's
@@ -72,7 +73,7 @@ module Saltbox
         @area_order = []
         @max_array_items = 100
         @enforce_permissions = true
-        @enforce_confirm = false
+        @enforce_confirm = true
         @strict_action_paths = true
         @error_format = :code
         @result_format = :body
@@ -161,7 +162,7 @@ module Saltbox
       # @yieldreturn [Error::Forbidden]
       def on_forbidden_fields(&block) = block ? @on_forbidden_fields = block : @on_forbidden_fields
 
-      # Approves a :confirm action for an agent, when #enforce_confirm is on:
+      # Approves a :confirm action for an agent, while #enforce_confirm is on (the default):
       # the place to ask the person through the app's own channel. Return
       # true to run it; anything else refuses with confirmation_required.
       # Raise an Error to refuse in your own words. Called after every other

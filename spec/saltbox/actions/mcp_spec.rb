@@ -82,6 +82,7 @@ RSpec.describe Saltbox::Actions::MCP do
   end
 
   it "answers a delete's empty body as Done." do
+    allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
     _, _, body = rpc("tools/call", {name: "run_destructive_action", arguments: {name: "delete_event", arguments: {id: event.id.to_s}}})
     expect(body.dig("result", "content", 0, "text")).to eq("Done.")
   end

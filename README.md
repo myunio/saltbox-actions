@@ -643,8 +643,8 @@ nested. If everyone `AttendeePolicy` allows may run it, declare
 `policy_namespace false` to ask that policy; otherwise add
 `Events::AttendeePolicy`. The name stays `list_events_attendees`.
 
-"Agents: confirm" tells the agent to ask the person first. The server
-checks it only when `enforce_confirm` is on (see Agents).
+"Agents: confirm" tells the agent to ask the person first, and the server
+refuses it until your app approves (see Agents).
 
 The **kind** decides what a token needs. A read needs the `api:read` scope.
 A change or a destructive action needs `api:write`.
@@ -830,8 +830,8 @@ An action's `agents` rule says whether anything other than the
 person's own click may run it:
 
 - `:allowed`: agents, scripts and assistants may run it.
-- `:confirm`: agents are told to ask the person first. The chat assistant
-  never runs it.
+- `:confirm`: agents are told to ask the person first, and the server
+  refuses them until your app approves. The chat assistant never runs it.
 - `:never`: only the person, on a screen, or the app itself (`Caller.system`).
 
 The verb gives the rule: `:confirm` for a destructive action, `:allowed` for
@@ -848,26 +848,30 @@ A destructive action is never `:allowed`. A browser assistant (`webmcp`)
 never runs a destructive action. The committed catalog lists every
 action's rule, so a change to one shows up in review.
 
-By default, nothing on the server checks that an agent asked before a
-`:confirm` action. The agent is only told to. To make the server check, turn
-on `enforce_confirm` and say how a person approves:
+`enforce_confirm` is on by default: the server refuses a `:confirm` action
+to every agent until your app approves it. That includes a script on the API:
+every surface but the person's own screen and the app itself counts. With no
+`confirm` hook, every such call gets `confirmation_required`. Say how a person
+approves:
 
 ```ruby
 Saltbox::Actions.configure do |config|
-  config.enforce_confirm = true
   config.confirm do |invocation, action|
     Approval.granted?(invocation.caller.user, action.action_name, invocation.arguments)
   end
 end
 ```
 
-With it on, an agent on the API, MCP or a browser page gets
-`confirmation_required` for a `:confirm` action, until the hook returns
-`true`. The hook sees the caller, the action and the checked arguments, so it
-can ask the person in your app. It can also raise an error of its own, such as
+An agent on the API, MCP or a browser page gets `confirmation_required` for a
+`:confirm` action until the hook returns `true`. The hook sees the caller, the
+action and the checked arguments, so it can ask the person in your app. It can
+also raise an error of its own, such as
 `Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
-A person on a screen is never asked. Without a hook, every such call is
-refused.
+A person on a screen and the app itself (`Caller.system`) are never asked.
+
+To let agents run `:confirm` actions with nothing checked, on purpose, set
+`config.enforce_confirm = false`. Then the agent is only told to ask first;
+nothing on the server checks that it did.
 
 Some actions can reach what a stricter action guards: a create that can also
 publish, say. Check the stricter rule inside `perform`:
@@ -894,9 +898,10 @@ refuses in the same order every time, so the same call gets the same answer:
 
 Then the input is checked against the action's JSON Schema, then against
 its validations. A bad field gives `validation_failed`, with errors by field
-name. With `enforce_confirm` on, a `:confirm` action the app has not
-approved gives `confirmation_required` before it runs. Last, a record the
-person cannot see gives `not_found`, so its existence never shows.
+name. A `:confirm` action the app has not approved gives an agent
+`confirmation_required` before it runs (unless `enforce_confirm` is off).
+Last, a record the person cannot see gives `not_found`, so its existence
+never shows.
 
 A change runs in its own database transaction, on its model's database. If
 it fails, its writes on that database are undone. Writes to another
@@ -1320,7 +1325,7 @@ What it does not do:
 - stop a model that follows the planted text anyway. How much the mark
   helps depends on the model, and it is not measured here. The control
   that holds is the server's:
-  `agents :confirm` with `enforce_confirm` (see Agents), so an
+  `agents :confirm`, refused until the app approves (see Agents), so an
   agent cannot run a risky action without the person's yes;
 - mark text the agent reads anywhere else, such as a page or a file;
 - cover your own `featured` tools' descriptions. Those are your words, not

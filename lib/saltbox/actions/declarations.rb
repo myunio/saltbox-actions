@@ -41,8 +41,8 @@ module Saltbox
         # where it departs from that.
         # - :allowed: they may run it.
         # - :confirm: an agent is told to ask the person first. The chat
-        #   assistant never runs it. With Configuration#enforce_confirm on,
-        #   the server refuses it until the app's confirm hook approves.
+        #   assistant never runs it. While Configuration#enforce_confirm is
+        #   on (the default), the server refuses it until the app's confirm hook approves.
         # - :never: only the person, on a screen.
         #
         # @param rule [Symbol, nil] :allowed, :confirm or :never
