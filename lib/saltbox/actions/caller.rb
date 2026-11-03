@@ -131,10 +131,12 @@ module Saltbox
         invocation.confirm!(action)
       end
 
-      # The caller as it stands now, reloaded by the app's around_invocation
-      # hook so a revoked token or ended access stops the next call.
+      # The caller as it stands now, for the app's around_invocation hook,
+      # so a revoked token or ended access stops the next call. A caller
+      # cannot change: an app's subclass returns a new one, and the gem's
+      # returns itself.
       #
-      # @return [Caller]
+      # @return [Caller] a replacement, or self
       def refresh = self
 
       # Refuses a system caller at an entry point that serves requests: its

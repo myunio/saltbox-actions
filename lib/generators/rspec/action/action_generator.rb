@@ -38,7 +38,7 @@ module Rspec
 
       def model = Saltbox::Actions::Naming.model_for(resource_name)
 
-      # @return [String] "an event", "an user"
+      # @return [String] "an event", "an invoice"
       def a_record
         noun = model.model_name.human.downcase
         "#{noun.match?(/\A[aeiou]/) ? "an" : "a"} #{noun}"
