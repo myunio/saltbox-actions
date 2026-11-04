@@ -67,9 +67,9 @@ Rails uses for the same job:
   `ActionPolicy::Unauthorized`), so a refusal is `forbidden`.
 - `:acts_as_tenant` (new): every call runs in
   `ActsAsTenant.with_tenant(current_tenant)`. By default `current_tenant` is
-  the tenant the person's own model belongs to: the `belongs_to` that
-  `acts_as_tenant` declared on it, found by the foreign key acts_as_tenant
-  keeps on each model (`acts_as_tenant_foreign_key`,
+  the tenant the person's own model belongs to: the record of its
+  `belongs_to` reflection whose foreign key is the one acts_as_tenant keeps
+  on each model (`acts_as_tenant_foreign_key`,
   `acts_as_tenant-2.2.2/lib/acts_as_tenant/model_extensions.rb:206-207`), not
   by the global `ActsAsTenant.tenant_klass`, which names whichever model
   declared last. A caller with a person but no tenant is refused, never run
@@ -1090,6 +1090,9 @@ alternatives where there is a real choice:
   nil after the block, with or without a session before it. 1.2's two nested
   calls and the `ensure` restore it both ways, so section 5's `act_as_account`
   keeps 1.2's shape.
+- Pagy 43.8.1, in a script: `pagy(:offset, …, page: 3, limit: 7)` with an
+  empty request gives page 3 of 7 records, with `client_limit` unset and with
+  it set to 1,000, as the `:pagy` bullet says.
 - Every 1.3 file in sections 4 to 6 passes `ruby -c`, and the locale lines
   parse as YAML.
 - Not tested: everything that needs gem 1.3. None of the after-files has run,
