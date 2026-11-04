@@ -357,6 +357,13 @@ class AccessToken < ApplicationRecord
 
   def self.digest(secret) = OpenSSL::Digest::SHA256.hexdigest(secret)
 
+  # The caller as the token stands now. The gem asks it before every call
+  # of a caller this class built (issued_by), and refuses on nil.
+  def self.revalidate!(caller)
+    token = active.includes(:user).find_by(id: caller.credential_id)
+    caller.with(user: token.user) if token
+  end
+
   def revoke! = update!(revoked_at: Time.current)
 end
 ```
@@ -370,7 +377,8 @@ class McpEndpoint
     token = AccessToken.find_by_bearer(env["HTTP_AUTHORIZATION"])
     return [401, {"www-authenticate" => "Bearer"}, []] unless token
 
-    caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name)
+    caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name,
+      credential_id: token.id, issued_by: AccessToken)
     Saltbox::Actions::Adapters::EntryPoints::MCP.call(env, caller:, name: "tasks", allowed_hosts: ["tasks.example.com"])
   end
 end
@@ -812,8 +820,9 @@ end
 ### Callers
 
 A **caller** says who runs an action and from where. It holds the person
-(`user`), the **surface** they come from, the agent's name (`agent_name`), and
-the token's scopes. The surfaces are:
+(`user`), the **surface** they come from, the agent's name (`agent_name`),
+the token's scopes, and for a token's caller what built it (`issued_by`),
+which the gem asks before every call whether the token is still good. The surfaces are:
 
 - `screen`: a person on your app's own screens;
 - `webmcp`: a browser assistant on the person's page;
@@ -892,28 +901,28 @@ request's credential.
 
 | Callbacks | Run around | The place for |
 |---|---|---|
-| `before_invocation`, `around_invocation`, `after_invocation` | every call, actions list and `find_action` search | `Current`, the time zone, a rule on a whole surface |
+| `before_invocation`, `around_invocation`, `after_invocation` | every call, actions list and `find_action` search | a value of your own on `Current`, the locale, a rule on a whole surface |
 | `before_perform`, `around_perform`, `after_perform` | the action's own work, outside its transaction | an audit trail's request, a lock |
 | `after_commit` | nothing: it runs once a change has committed, never on rollback or for a read | mail, a broadcast, anything outside the database |
 
 ```ruby
 class ApplicationAction < Saltbox::Actions::Base
-  around_invocation :in_time_zone
+  around_invocation :in_their_locale
   before_invocation :require_chat, if: -> { current_caller.surface.assistant? }
   after_commit :tell_watchers
 
   private
 
-  def in_time_zone(&) = Time.use_zone(current_user.time_zone, &)
+  def in_their_locale(&) = I18n.with_locale(current_user.locale, &)
   def require_chat = current_user.can_chat? || raise(Error::Forbidden, "Chat is off for you.")
   def tell_watchers = WatchersMailer.changed(current_user, self.class.action_name).deliver_later
 end
 ```
 
 Raising in a callback refuses the call, and so does `throw :abort`, with
-`forbidden`. The gem's own callbacks run first: `refresh_caller`, then each
-declared adapter's, such as the tenant `:acts_as_tenant` sets. Yours run
-after them, in the order you declare them. An actions list or a search has
+`forbidden`. The gem's own callbacks run first (see
+[Around every call](#around-every-call)). Yours run after them, in the order
+you declare them. An actions list or a search has
 no action, so it runs the base class's invocation callbacks on an instance
 of the base class: an invocation callback reads the caller (`current_caller`,
 `current_user`, `current_tenant`), never the action's own declarations.
@@ -945,14 +954,62 @@ answer. An error no handler takes stays a 500.
 
 | Method | Default | Define it to |
 |---|---|---|
-| `refresh_caller` (private) | Reloads an Active Record person; refuses a caller holding a token | Check that a token is still good (see [The tenant](#the-tenant)) |
+| `refresh_caller` (private) | Finds the person again, and asks what built a token's caller whether the token is still good (see [Around every call](#around-every-call)) | Find the caller again some other way |
 | `current_tenant` | Under `:acts_as_tenant`, the tenant the person's model belongs to | Pick the tenant some other way |
 | `flipper_actors` (private) | Under `:flipper`, the tenant, else the person | Turn features on per person too |
-| `user_for_paper_trail`, `info_for_paper_trail` (private) | The person's id; nothing | Stamp more on each version (see [PaperTrail](#papertrail)) |
+| `user_for_paper_trail`, `info_for_paper_trail` (private) | The person's id; the agent, its stamp, the surface, the connection and the call's id, in the columns `versions` has | Stamp more on each version (see [PaperTrail](#papertrail)) |
 | `self.permissions_held(caller)` | `[]` | Name the permissions a caller holds, which `permission` declarations ask for |
 | `self.with_schema_user` | Yields `nil` | Name the person a schema is built for where there is no caller (see [Authorization](#authorization)) |
 
 `invocation_id` is the call's id, for a log line or an audit stamp.
+
+### Around every call
+
+The gem sets up each call, actions list and search before your callbacks
+run, with nothing for you to write when your app follows these conventions:
+
+1. **Fresh reads.** Every query of the call reads past Active Record's query
+   cache (`ActiveRecord::Base.uncached`), so a change another connection
+   made, such as a revoked token or a removed permission, is seen now.
+2. **The caller found again.** A revoked token or a person whose access
+   ended stops at the next call, as Devise asks a model
+   `active_for_authentication?` at every request:
+   - an Active Record person is found with their class's
+     `find_for_actions(id)` when it has one, and refused on nil; without it,
+     the person is reloaded, outside any tenant, and refused when gone;
+   - a caller built from a token names what built it (`issued_by:`), which
+     is asked `revalidate!(caller)` for the caller as the token stands now,
+     and refused on nil. A token's caller that names nothing is refused.
+
+   ```ruby
+   # app/models/user.rb
+   def self.find_for_actions(id) = active.find_by(id:)
+   ```
+3. **The tenant**, under `:acts_as_tenant` (see [The tenant](#the-tenant)),
+   held strictly: inside the call, a query on a tenant's model outside any
+   tenant raises `ActsAsTenant::Errors::NoTenantSet`, as acts_as_tenant's
+   `require_tenant` does, for that call's thread alone.
+   `ActsAsTenant.without_tenant` still reads every tenant.
+4. **Your `Current`**, the `ActiveSupport::CurrentAttributes` class named
+   `Current`. The call starts from a fresh one, every attribute at its
+   default, so nothing of the request around it, such as a browser session
+   or a cache, reaches it. Then each of these your `Current` declares is set
+   through its writer: the person under their model's name (`user` for a
+   `User`), the tenant under its model's name, `agent` (the agent's stamp,
+   `Caller#agent_stamp`), `surface`, `connection` and `invocation_id`. The
+   call runs in the tenant's `time_zone`, when it has one. Afterwards, error
+   or not, the attributes the call found are put back as they were, without
+   running a writer. A system caller keeps the `Current` around it.
+5. **The audit stamp**, under `:paper_trail` (see [PaperTrail](#papertrail)).
+
+A value of your own goes on `Current` in an `around_invocation`, inside the
+gem's:
+
+```ruby
+around_invocation :in_their_plan
+
+def in_their_plan(&) = Current.set(plan: current_tenant.plan, &)
+```
 
 ### The tenant
 
@@ -993,22 +1050,8 @@ def current_tenant = current_caller.connection&.organization || super
 caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name, connection: token)
 ```
 
-Before any tenant is set, the gem asks `refresh_caller` for the caller as
-they stand now, so a revoked token or a person whose access ended stops at
-the next call. The default reloads an Active Record person, outside any
-tenant, and refuses one who is gone. It refuses a caller holding a token
-(`credential_id` or `connection`), since only your app knows whether the
-token is still good. An app that serves tokens defines it:
-
-```ruby
-# app/actions/application_action.rb
-private
-
-def refresh_caller
-  token = AccessToken.active.find_by(id: current_caller.connection&.id) or raise Error::Unauthorized
-  current_caller.with(user: token.user, connection: token)
-end
-```
+Before any tenant is set, the caller is found again (see
+[Around every call](#around-every-call)).
 
 Without acts_as_tenant, set the tenant in an `around_invocation` callback,
 from what the caller carries: its token (`caller.connection`), or the person.
@@ -1363,16 +1406,41 @@ one, `include_filters`, and one input per filter, checked against the
 filter's schema. `table_index` runs the table, which does its own scoping,
 and pages it. A table's metadata can run to kilobytes, so a screen always
 gets it and an agent only when it sends `include_filters` as true.
-`list_meta` is what the list sends agents beside its summaries:
+`list_meta` is what the list sends agents beside its summaries. A list
+action with a table needs nothing more:
 
 ```ruby
 class Events::ListAction < ApplicationAction
   table EventsTable
+end
+```
 
-  def perform
-    @events, @table, @pagination = table_index
-    render :index, meta: list_meta
-  end
+It renders the table's page with the `index` template: `@events` holds the
+records, `@table_metadata` the table's metadata and `@pagination` the page.
+Declare the summary agents get, and the associations each page loads, once
+on the table, by extending your table base class with
+`Saltbox::Actions::Table`:
+
+```ruby
+# app/tables/application_table.rb
+class ApplicationTable
+  extend Saltbox::Actions::Table
+end
+
+# app/tables/events_table.rb
+class EventsTable < ApplicationTable
+  summary :id, :title, kind: ->(event) { event.kind&.name }
+  includes :kind
+end
+```
+
+An action's own `summary` wins over its table's. A list that does more
+defines `perform`, and runs the table with `table_index`:
+
+```ruby
+def perform
+  @events, @table_metadata, @pagination = table_index
+  render :index, meta: list_meta
 end
 ```
 
@@ -1930,15 +1998,23 @@ model's transaction: `transaction: Entry.current_transaction`.
 With `:paper_trail` declared, every version an action writes is also noted
 as a change, and each action runs inside a PaperTrail request, as a
 controller action does. Its `whodunnit` is `user_for_paper_trail`, the
-person's id, and its `controller_info` is `info_for_paper_trail`. To record
-the agent and the surface too, give `versions` a column for each and define
-the method:
+person's id, and its `controller_info` is `info_for_paper_trail`: each of
+these `versions` has a column for, by its name:
+
+| Column | Holds |
+|---|---|
+| `agent` | the agent's name (`Caller#agent_name`) |
+| `agent_via` | the agent's stamp (`Caller#agent_stamp`): its name, and for a connection the connection's `label` as `machine`, its id and its `approved_at` as `connected_at`. A snapshot, so it reads the same after the connection is gone |
+| `surface` | where the call came from |
+| `connection_id` | the connection behind a token |
+| `invocation_id` | the call's id |
 
 ```ruby
-# app/actions/application_action.rb
-private
-
-def info_for_paper_trail = {agent: current_caller.agent_name, surface: current_caller.surface.to_s, invocation_id:}
+# db/migrate/20261104120000_add_agent_to_versions.rb
+add_column :versions, :agent, :string
+add_column :versions, :agent_via, :jsonb
+add_column :versions, :surface, :string
+add_column :versions, :invocation_id, :string
 ```
 
 `Caller.system`'s user has no id, so a job's versions record no person

@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.4.0 (unreleased)
+
+The gem takes on what every app wrote around its actions. An app that
+follows the conventions writes none of it.
+
+### Around every call
+
+- Every query of a call, actions list and search reads past Active
+  Record's query cache, the caller's refresh included.
+- The default `refresh_caller` finds an Active Record person with their
+  class's `find_for_actions(id)` when it has one, and refuses them on nil.
+  A token's caller names what built it (`Caller#issued_by`), which is asked
+  `revalidate!(caller)`; one that names nothing is refused, as before.
+- Under `:acts_as_tenant`, a query on a tenant's model outside any tenant
+  raises `NoTenantSet` inside a call, for that thread alone, on top of the
+  app's own `require_tenant`.
+- The app's `Current` is set for the call from a fresh one: the person and
+  the tenant under their models' names, `agent` (the stamp), `surface`,
+  `connection` and `invocation_id`, each the app's `Current` declares. The
+  call runs in the tenant's `time_zone`. The attributes found are put back
+  afterwards, error or not, without running a writer. A system caller keeps
+  its `Current`.
+- `Caller#agent_stamp`: the agent's name, and for a connection its `label`,
+  id and `approved_at`.
+- The default `info_for_paper_trail` fills `agent`, `agent_via`, `surface`,
+  `connection_id` and `invocation_id`, each the versions table has.
+
+### Lists
+
+- A list action that declares a `table` and no `perform` renders the
+  table's page (`render_table`): `@<records>`, `@table_metadata`,
+  `@pagination`, the `index` template and `list_meta`.
+- `Saltbox::Actions::Table`, extended by the app's table base class,
+  declares a table's `summary` and the associations each page `includes`.
+  An action's own `summary` still wins.
+
 ## 1.3.0 (2026-11-04)
 
 An app shapes the gem in its base class, as it shapes a request in
