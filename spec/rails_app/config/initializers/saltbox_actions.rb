@@ -1,34 +1,25 @@
-# The dummy app's choices, as an app writes them. ANNOUNCED keeps each
-# change's records, so specs can see what on_changes received.
-module Dummy
-  ANNOUNCED = []
-end
-
+# The dummy app's settings, as an app writes them: values only.
+#
 # The suite runs once for each way an app authorizes (see the Rakefile):
 # with Pundit, ActionPolicy, or no adapter at all.
 authorization = ENV.fetch("SALTBOX_ACTIONS_AUTHORIZATION", "pundit")
 Saltbox::Actions.configure do |config|
   config.adapters = [*((authorization == "none") ? [] : [authorization.to_sym]),
-    :controller, :mcp, :ruby_llm_tool, :invocation_job, :paper_trail, :approvals]
+    :acts_as_tenant, :controller, :mcp, :ruby_llm_tool, :invocation_job, :paper_trail, :approvals]
   config.app_name = "Dummy"
   config.instructions = "Dummy keeps events. Call find_action for anything not listed."
   config.max_array_items = 50
   config.require_area = true
-  config.area_for { |model| {"Event" => "events", "Billing::Invoice" => "billing"}[model.name] }
-  config.permissions_held do |caller|
-    next [] if caller.system? || caller.user.permissions == :all
-    caller.user.permissions
-  end
-  config.schema_user { |run| run.call(User.new(id: 0, permissions: :all)) }
-  config.around_perform do |invocation, run|
-    Saltbox::Actions::Adapters::Audit::PaperTrail.request(invocation, agent: invocation.caller.agent_name,
-      surface: invocation.caller.surface, invocation_id: invocation.invocation_id) { run.call }
-  end
-  # Approvals are kept per org; the caller's org is the tenant.
-  config.approvals = {user: "User", tenant: "Org", current_tenant: -> { DummyCurrent.org }}
-  config.around_invocation do |caller, run|
-    org = caller.user.respond_to?(:org_id) ? Org.find_or_create_by!(id: caller.user.org_id) : nil
-    DummyCurrent.set(org:) { run.call(caller) }
-  end
-  config.on_changes { |changes, invocation| Dummy::ANNOUNCED << {action: invocation.action.action_name, changes:} }
+  config.areas = {"events" => {models: %w[Event]}, "billing" => {models: %w[Billing::Invoice]}}
+  # Approvals are kept per org, the tenant :acts_as_tenant sets.
+  config.approvals = {user: "User", tenant: "Org"}
+end
+
+# What each change changed, as an app hears of it: ANNOUNCED keeps each
+# change's records, so specs can see what the notification carried.
+module Dummy
+  ANNOUNCED = []
+end
+ActiveSupport::Notifications.subscribe("changes.saltbox_actions") do |event|
+  Dummy::ANNOUNCED << {action: event.payload.fetch(:action).action_name, changes: event.payload.fetch(:changes)}
 end

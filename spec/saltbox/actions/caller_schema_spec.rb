@@ -1,23 +1,14 @@
 # Every surface builds a write action's schema for its caller, inside the
-# caller's set-up. Here the schema user fails if used, and Event.new
-# fails outside around_invocation, as a tenant gem's require_tenant does.
+# caller's set-up. Here the schema user fails if used, and Event.new fails
+# outside a tenant, as acts_as_tenant's require_tenant does.
 RSpec.describe "Schemas for the caller, on every surface", type: :request do
   let(:note_keeper) { User.new(id: 9, permissions: %w[events.view events.manage events.notes]) }
   let!(:event) { Event.create!(org_id: 1, title: "AGM") }
 
-  def with_tenant
-    @tenant = true
-    yield
-  ensure
-    @tenant = false
-  end
-
   before do
-    config = Saltbox::Actions.config
-    allow(config).to receive(:schema_user).and_return(->(_run) { raise "the schema user was used at run time" })
-    allow(config).to receive(:around_invocation).and_return(->(caller, run) { with_tenant { run.call(caller) } })
+    allow(ApplicationAction).to receive(:with_schema_user).and_raise("the schema user was used at run time")
     allow(Event).to receive(:new).and_wrap_original do |original, *arguments, **options, &block|
-      raise "no tenant set" unless @tenant
+      raise "no tenant set" unless ActsAsTenant.current_tenant
       original.call(*arguments, **options, &block)
     end
     Saltbox::Actions::Registry.reset!

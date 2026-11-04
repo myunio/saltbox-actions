@@ -67,9 +67,10 @@ RSpec.describe Saltbox::Actions::AgentTools do
     end
 
     it "gives a plain list, by name, in an app with no areas" do
-      allow(Saltbox::Actions.config).to receive(:area_for).and_return(->(_model) {})
-      expect(listed(manager).pluck(:name)).to eq(%w[cancel_event count_events create_event delete_event list_events postpone_event show_event update_event whoami])
-      expect(listed(manager)).to all(satisfy { |entry| !entry.key?(:area) })
+      with_settings(areas: {}) do
+        expect(listed(manager).pluck(:name)).to eq(%w[cancel_event count_events create_event delete_event list_events postpone_event show_event update_event whoami])
+        expect(listed(manager)).to all(satisfy { |entry| !entry.key?(:area) })
+      end
     end
 
     it "puts the areas in config.area_order first" do
@@ -82,8 +83,7 @@ RSpec.describe Saltbox::Actions::AgentTools do
   it "names the caller's areas when nothing matches, and only when actions have areas" do
     hint = described_class.call("find_action", {"query" => "payroll"}, caller: as_mcp(manager))[:hint]
     expect(hint).to eq("Nothing matched. Try other words, or Dummy may not do this yet. You can reach events. Call find_action with no query to list everything you can run.")
-    allow(Saltbox::Actions.config).to receive(:area_for).and_return(->(_model) {})
-    hint = described_class.call("find_action", {"query" => "payroll"}, caller: as_mcp(manager))[:hint]
+    hint = with_settings(areas: {}) { described_class.call("find_action", {"query" => "payroll"}, caller: as_mcp(manager))[:hint] }
     expect(hint).to eq("Nothing matched. Try other words, or Dummy may not do this yet. Call find_action with no query to list everything you can run.")
   end
 

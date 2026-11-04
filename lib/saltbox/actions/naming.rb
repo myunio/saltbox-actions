@@ -215,9 +215,9 @@ module Saltbox
         #   otherwise "<verb>?"; nil for an action with a declared name
         def verb_policy_rule = (VERB_RULES.fetch(verb) { :"#{verb}?" } unless declared_name)
 
-        # @return [String, nil] the area its model belongs to, from Configuration#area_for
+        # @return [String, nil] the area its model belongs to, from Configuration#areas
         # @api public
-        def area = model && Actions.config.area_for.call(model)
+        def area = model && Areas.area_for(model.name)
 
         # @return [String] the action's key in config/locales/actions.en.yml: events/update for Events::UpdateAction
         # @api private

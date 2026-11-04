@@ -16,13 +16,10 @@ RSpec.describe Saltbox::Actions::Areas do
     expect { described_class.for_model!("Unmapped") }.to raise_error(ArgumentError, /No area maps Unmapped/)
   end
 
-  it "answers each action's area from them, unless the app sets area_for" do
-    with_fresh_config do |fresh|
-      fresh.areas = areas
-      expect(Events::UpdateAction.area).to eq("events")
-    end
+  it "answers each action's area from its model's" do
     expect(Events::UpdateAction.area).to eq("events")
-    expect(config.area_for.call(EventKind)).to be_nil
+    expect(Billing::Invoices::ListAction.area).to eq("billing")
+    with_settings(areas: {}) { expect(Events::UpdateAction.area).to be_nil }
   end
 
   it "lets an area's readers see the record of only its metadata models" do
@@ -45,7 +42,6 @@ RSpec.describe Saltbox::Actions::Areas do
   describe ".validate!, which rails actions:check runs" do
     it "passes the dummy app's areas" do
       expect { described_class.validate! }.not_to raise_error
-      expect(config.registry_checks.size).to eq(1)
     end
 
     it "refuses a model in two areas, and metadata models an area does not map" do

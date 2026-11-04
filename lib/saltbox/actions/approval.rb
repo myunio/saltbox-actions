@@ -5,8 +5,8 @@ module Saltbox
   module Actions
     # A person's approval of one agent call to a :confirm action, kept in the
     # gem's own table, saltbox_action_approvals, as Active Storage keeps its
-    # blobs. The :approvals adapter loads it and makes Approval.redeem! the
-    # confirm hook. An agent's first call is refused with
+    # blobs. The :approvals adapter loads it, and Invocation asks
+    # Approval.redeem! about each agent's :confirm call. An agent's first call is refused with
     # confirmation_required and left here as a request; the person approves
     # it on one of the app's screens; the same call, with the same arguments,
     # from the same connection and surface, then runs once.
@@ -14,11 +14,12 @@ module Saltbox
     # `rails g actions:approvals` writes the table's migration.
     # Configuration#approvals names the app's classes: the person (user), the
     # tenant, and the connection. With a tenant, every approval belongs to
-    # the current tenant, and none is seen or redeemed from another.
+    # acts_as_tenant's current tenant, which the :acts_as_tenant adapter sets
+    # for every call, and none is seen or redeemed from another.
     #
     # @example config/initializers/saltbox_actions.rb
     #   Saltbox::Actions.configure do |config|
-    #     config.adapters = [:pundit, :approvals]
+    #     config.adapters = [:pundit, :acts_as_tenant, :approvals]
     #     config.approvals = {user: "Account", tenant: "Org", connection: "Oauth::Connection"}
     #   end
     #
@@ -57,15 +58,14 @@ module Saltbox
         # @return [Boolean] whether approvals are kept per tenant
         def tenanted? = settings[:tenant].present?
 
-        # The tenant approvals are kept in now: Configuration#approvals'
-        # current_tenant, or acts_as_tenant's.
+        # The tenant approvals are kept in now: acts_as_tenant's.
         #
         # @return [Object] the tenant record
         # @raise [ArgumentError] when approvals are kept per tenant and none is set
         def current_tenant!
-          tenant = settings[:current_tenant] ? settings[:current_tenant].call : (::ActsAsTenant.current_tenant if defined?(::ActsAsTenant))
+          tenant = ::ActsAsTenant.current_tenant if defined?(::ActsAsTenant)
           tenant or raise ArgumentError, "Approvals are kept per tenant (config.approvals names #{settings[:tenant]}), but no tenant is set: " \
-            "set it in around_invocation, or give config.approvals a current_tenant"
+            "declare the :acts_as_tenant adapter, which sets it for every call"
         end
 
         # The current tenant's approvals, or every one when approvals are
@@ -80,7 +80,7 @@ module Saltbox
         # @return [ActiveRecord::Relation]
         def waiting_for(user) = in_tenant.pending.where(user_id: user.id).order(created_at: :desc)
 
-        # The confirm hook: lets the call run when the person approved this
+        # Lets an agent's :confirm call run when the person approved this
         # exact call, and uses the approval up; otherwise refuses it,
         # carrying the request to approve, which Invocation saves.
         #
@@ -94,7 +94,7 @@ module Saltbox
           return true if id && call.approved.where(id:).update_all(used_at: Time.current) == 1
           request = call.pending.first || call.new(agent_name: invocation.caller.agent_name,
             arguments: invocation.arguments.as_json, expires_at: request_lifetime.from_now)
-          raise Error::ConfirmationRequired.new(request.refusal_message, details: {"action" => request.confirms}, request:)
+          raise Error::ConfirmationRequired.new(request.refusal_message(invocation.caller.user), details: {"action" => request.confirms}, request:)
         end
 
         # @param invocation [Invocation]
@@ -146,13 +146,16 @@ module Saltbox
       # @return [String] the title of the action the person is asked to approve
       def title = Registry.fetch(confirms).title
 
-      # What the agent is told until the person approves:
-      # Configuration#approvals' message, given the request, or the gem's.
+      # What the agent is told until the person approves: the app's
+      # actions.errors.approval_needed, with %{user} (the person, by
+      # Configuration#approvals' name method), %{app} and %{url}.
       #
+      # @param person [Object] the person asked to approve; the request's user by default
       # @return [String]
-      def refusal_message
-        message = self.class.settings[:message]
-        message ? message.call(self) : "#{Error::ConfirmationRequired.new.message} Then call it again with the same arguments."
+      def refusal_message(person = user)
+        settings = self.class.settings
+        I18n.t("actions.errors.approval_needed", user: person&.public_send(settings.fetch(:name, :to_s)).to_s, app: Actions.config.app_name,
+          url: settings[:url].to_s, default: "#{Error::ConfirmationRequired.new.message} Then call it again with the same arguments.")
       end
 
       # Saved in the current tenant.

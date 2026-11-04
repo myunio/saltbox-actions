@@ -172,6 +172,26 @@ module Saltbox
           declared_attributes.key?(name) || (name == "id" && takes_id?) || model_field?(name)
         end
 
+        # Who a create or update's input schema is built for where there is
+        # no caller: the committed catalog (config/actions.json),
+        # `rails actions:check`, the registry spec or test, the generator's
+        # field list, and the schema matchers without `as:`. It yields the
+        # person the policy is asked about, inside whatever the policy needs,
+        # such as a tenant: by default nil, no person. The app's base class
+        # defines it to yield a person holding every permission, so the
+        # catalog lists every field. Callers never see that person: each
+        # gets the fields their own policy permits.
+        #
+        # @yieldparam user [Object, nil]
+        # @return [Object] the block's value
+        # @api public
+        #
+        # @example A policy that needs a person, in a multi-tenant app
+        #   def self.with_schema_user
+        #     ActsAsTenant.without_tenant { yield User.new(admin: true) }
+        #   end
+        def with_schema_user = yield(nil)
+
         # @param name [String]
         # @return [Boolean] whether the action could take it as a model field,
         #   for a caller whose policy permits it: one it accepts, or else a
@@ -191,8 +211,7 @@ module Saltbox
         def permitted_keys(caller)
           return accepted_keys if accepted_fields.any?
           return policy_keys(caller.user) if caller
-          schema_user = Actions.config.schema_user
-          schema_user ? schema_user.call(->(user) { policy_keys(user) }) : policy_keys(nil)
+          with_schema_user { |user| policy_keys(user) }
         end
 
         # The fields named with `accepts`, keyed as the model takes them: a

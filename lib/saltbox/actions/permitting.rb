@@ -13,13 +13,13 @@ module Saltbox
     #   string), so Active Record parses them itself, in the app's time zone.
     #
     # The app's base class may override #resolve_reference to say more. A
-    # refused field is answered by Configuration#on_forbidden_fields.
+    # refused field raises Error::ForbiddenFields, which the app may rescue.
     # @api private
     module Permitting
       # @param record [ActiveRecord::Base, Class] the record, or its model for a create
       # @return [ActiveSupport::HashWithIndifferentAccess] the fields sent, keyed as the policy names them
       # @raise [ArgumentError] in an action that takes no model fields
-      # @raise [Error::Forbidden] naming each field the person may not change
+      # @raise [Error::ForbiddenFields] naming each field the person may not change
       # @raise [Error::ValidationFailed] for a reference to a record the person cannot pick
       # @api public
       def permitted_attributes(record)
@@ -80,10 +80,8 @@ module Saltbox
       end
 
       # @param fields [Array<String>] the fields sent that the person may not change
-      # @raise [Error::Forbidden] the one Configuration#on_forbidden_fields returns
-      def refuse_forbidden_fields!(fields)
-        raise Actions.config.on_forbidden_fields.call(current_caller, self.class, fields)
-      end
+      # @raise [Error::ForbiddenFields]
+      def refuse_forbidden_fields!(fields) = raise(Error::ForbiddenFields.new(fields:))
     end
   end
 end

@@ -23,3 +23,22 @@ module Settings
 end
 
 RSpec.configure { |config| config.include Settings }
+
+# Adds a rescue_from to the dummy app's base class for one example, as the
+# app would declare it, then takes it away.
+module Rescues
+  def with_rescue_from(error, handler)
+    original = ApplicationAction.rescue_handlers
+    ApplicationAction.rescue_from(error, &handler)
+    yield
+  ensure
+    ApplicationAction.rescue_handlers = original
+  end
+
+  # The person's approval of the waiting request, as they give it on the app's screen.
+  def approve_waiting(user)
+    ActsAsTenant.with_tenant(Org.find_or_create_by!(id: user.org_id)) { Saltbox::Actions::Approval.waiting_for(user).sole.approve! }
+  end
+end
+
+RSpec.configure { |config| config.include Rescues }

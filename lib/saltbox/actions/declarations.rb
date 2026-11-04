@@ -45,7 +45,7 @@ module Saltbox
         # - :allowed: they may run it.
         # - :confirm: an agent is told to ask the person first. The chat
         #   assistant never runs it. While Configuration#enforce_confirm is
-        #   on (the default), the server refuses it until the app's confirm hook approves.
+        #   on (the default), the server refuses it until the person approves (the :approvals adapter).
         # - :never: only the person, on a screen.
         #
         # @param rule [Symbol, nil] :allowed, :confirm or :never
@@ -129,14 +129,14 @@ module Saltbox
 
         # The feature flag the action needs. While the flag is off for the
         # caller, every caller gets not_found and the actions list leaves the
-        # action out. Configuration#validate_feature checks the key.
+        # action out. With the :flipper adapter, Flipper says whether it is on
+        # (Base#flipper_actors); without it, every feature is on.
         #
         # @param key [String, nil]
         # @return [String, nil]
         # @api public
         def feature(key = nil)
           return _feature unless key
-          Actions.config.validate_feature.call(key)
           self._feature = key
         end
 

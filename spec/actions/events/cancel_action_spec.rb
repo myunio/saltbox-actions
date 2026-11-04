@@ -13,7 +13,8 @@ RSpec.describe Events::CancelAction do
   end
 
   it "cancels the event once the person approves, and keeps the reason" do
-    allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
+    expect { run_action(arguments, as: as_mcp(manager)) }.to be_refused.with(:confirmation_required)
+    ActsAsTenant.with_tenant(Org.find(manager.org_id)) { Saltbox::Actions::Approval.waiting_for(manager).sole.approve! }
     run_action(arguments, as: as_mcp(manager))
     expect(event.reload).to have_attributes(status: "cancelled", notes: "Snow")
   end

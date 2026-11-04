@@ -22,7 +22,8 @@ module Saltbox
     #   may set; when it does, it is the one list of a create's or update's
     #   fields, and an action may not also name them with `accepts`;
     # - permitted_attribute_names_for(user, record), for the input schema;
-    # - authorization_errors: the library's refusal, answered as forbidden.
+    # and, when it is included, a rescue_from for the library's refusal,
+    # answered as forbidden.
     #
     # Without an adapter, every action is allowed and rails actions:check asks
     # for no policy.
@@ -58,9 +59,6 @@ module Saltbox
 
           # @return [Array<String>]
           def permitted_attribute_names_for(_user, _record) = []
-
-          # @return [Array<Class<Exception>>]
-          def authorization_errors = []
         end
 
         def authorize(record, _rule = nil) = record

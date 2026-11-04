@@ -68,10 +68,36 @@ module Saltbox
       class Forbidden < Error
         self.default_status = :forbidden
         self.default_message = "You don't have permission to do this."
+      end
 
-        # @param fields [Array<String>] fields the person sent but may not change
-        # @return [Forbidden] naming each field
-        def self.for_fields(fields) = new("You can't change #{fields.to_sentence}.", errors: fields.index_with { ["you can't change this"] })
+      # The caller sent fields of the action's model they may not set,
+      # whether their input schema leaves them out or the policy refuses
+      # them for the record. It keeps Forbidden's code. The words are the
+      # app's actions.errors.forbidden_fields ("You can't change
+      # %{fields}.") and, for each field, actions.errors.forbidden_field
+      # ("you can't change this"). An app that words it from its own data
+      # rescues it and raises its own.
+      #
+      # @example Naming the person's roles
+      #   rescue_from Error::ForbiddenFields do |error|
+      #     raise Error::ForbiddenFields.new("Your role can't change #{error.fields.to_sentence}.", fields: error.fields)
+      #   end
+      class ForbiddenFields < Forbidden
+        # @return [String]
+        def self.code = Forbidden.code
+
+        # @return [Array<String>] each field sent that the caller may not set
+        attr_reader :fields
+
+        # @param message [String, nil] the refusal; actions.errors.forbidden_fields by default
+        # @param fields [Array<String>]
+        # @param options [Hash] as Error#initialize
+        def initialize(message = nil, fields:, **options)
+          @fields = fields
+          message ||= I18n.t("actions.errors.forbidden_fields", fields: fields.to_sentence, default: "You can't change %{fields}.")
+          field = I18n.t("actions.errors.forbidden_field", default: "you can't change this")
+          super(message, errors: fields.index_with { [field] }, **options)
+        end
       end
 
       # An agent asked for an action only a person may take.
@@ -81,7 +107,7 @@ module Saltbox
       end
 
       # An agent asked for a :confirm action, Configuration#enforce_confirm is
-      # on, and the app's Configuration#confirm hook did not approve it.
+      # on, and the person has not approved it (the :approvals adapter).
       #
       # It may carry the request the person is asked to approve, unsaved,
       # such as an Adapters::Confirmation::Approvals record: Invocation saves
@@ -107,6 +133,37 @@ module Saltbox
       class InsufficientScope < Error
         self.default_status = :forbidden
         self.default_message = "This connection can only read. Reconnect and allow changes to use this action."
+      end
+
+      # The connection's access (Caller#access) does not reach the action.
+      # It keeps InsufficientScope's code and status, and names the action,
+      # its area and the level it needs. An app that keeps the refusal, or
+      # asks the person, rescues it and raises its own.
+      #
+      # @example
+      #   rescue_from Error::OutsideAccess, with: :ask_for_access
+      class OutsideAccess < InsufficientScope
+        self.default_message = "This connection's access does not reach this action."
+
+        # @return [String]
+        def self.code = InsufficientScope.code
+
+        # @return [Class] the action refused
+        attr_reader :action
+
+        # @param action [Class]
+        # @param message [String, nil]
+        # @param options [Hash] as Error#initialize
+        def initialize(message = nil, action:, **options)
+          @action = action
+          super(message, details: {"area" => area, "needs" => needs}.compact, **options)
+        end
+
+        # @return [String, nil] the action's area
+        def area = action.area
+
+        # @return [String] the level of access it needs: read for a read, change for anything else
+        def needs = (action.kind == :read) ? "read" : "change"
       end
 
       # Also the answer for a record the person may not see, so its existence

@@ -13,7 +13,7 @@ require "json_schemer"
 # refused or let through as the action's `agents` says; a read-only
 # token cannot change; a browser assistant never runs a destructive action.
 # With Configuration#enforce_confirm on, an agent's :confirm call is refused
-# until the app's confirm hook approves it.
+# until the person approves it.
 #
 # @example
 #   it_behaves_like "refuses callers the action does not allow" do
@@ -39,9 +39,10 @@ RSpec.shared_examples "refuses callers the action does not allow" do
       end
       caller = public_send(helper, permitted_user)
       if allowed && described_class.agents == :confirm && Saltbox::Actions.config.enforce_confirm
-        allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { false })
         expect { run_action(arguments, as: caller) }.to be_refused.with(:confirmation_required)
-        allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
+        # Without the :approvals adapter no one can approve it, so an agent never runs it.
+        next unless Saltbox::Actions::Adapters.declared?(:approvals)
+        Saltbox::Actions.within(caller) { Saltbox::Actions::Approval.waiting_for(caller.user).first!.approve! }
       end
       outcome = expect { run_action(arguments, as: caller) }
       allowed ? outcome.not_to(be_refused) : outcome.to(be_refused.with(:human_required))

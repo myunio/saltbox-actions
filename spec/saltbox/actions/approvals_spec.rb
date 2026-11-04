@@ -21,7 +21,7 @@ RSpec.describe Saltbox::Actions::Approval do
     expect(request).to have_attributes(tenant_id: manager.org_id, user_id: manager.id, connection_id: 7, surface: "mcp", agent_name: "Claude",
       action_name: "cancel_event", confirms: "cancel_event", arguments: {"id" => event.id.to_s, "reason" => "Snow"},
       approved_at: nil, title: Events::CancelAction.title)
-    expect(DummyCurrent.set(org: ours) { approvals.waiting_for(manager).to_a }).to eq([request])
+    expect(ActsAsTenant.with_tenant(ours) { approvals.waiting_for(manager).to_a }).to eq([request])
     expect(event.reload.status).to eq("draft")
   end
 
@@ -112,8 +112,7 @@ RSpec.describe Saltbox::Actions::Approval do
     expect(event.reload).to have_attributes(title: "Moved", status: "cancelled")
   end
 
-  it "is the confirm hook once :approvals is declared, unless the app sets its own" do
-    expect(Saltbox::Actions.config.instance_variable_get(:@confirm)).to be_nil
+  it "asks the person about every agent's :confirm call once :approvals is declared" do
     expect { cancel.call }.to be_refused.with(:confirmation_required)
     expect(approvals.count).to eq(1)
   end
@@ -122,17 +121,16 @@ RSpec.describe Saltbox::Actions::Approval do
     theirs = Org.create!(id: ours.id + 1)
     expect { cancel.call }.to be_refused
     approvals.sole.approve!
-    expect(DummyCurrent.set(org: theirs) { approvals.waiting_for(manager).to_a + approvals.approved.in_tenant.to_a }).to be_empty
+    expect(ActsAsTenant.with_tenant(theirs) { approvals.waiting_for(manager).to_a + approvals.approved.in_tenant.to_a }).to be_empty
     elsewhere = Saltbox::Actions::Invocation.new(Events::CancelAction, agent)
-    DummyCurrent.set(org: theirs) do
+    ActsAsTenant.with_tenant(theirs) do
       expect { approvals.redeem!(elsewhere.tap { it.instance_variable_set(:@arguments, {"id" => event.id.to_s, "reason" => "Snow"}) }, Events::CancelAction) }
         .to raise_error(Saltbox::Actions::Error::ConfirmationRequired)
     end
     expect(approvals.approved.where(tenant_id: ours.id).count).to eq(1)
   end
 
-  it "takes the tenant from acts_as_tenant when config.approvals gives no current_tenant" do
-    require "acts_as_tenant"
+  it "keeps each approval in acts_as_tenant's current tenant" do
     approvals.install!(user: "User", tenant: "Org")
     theirs = Org.create!(id: ours.id + 1)
     ActsAsTenant.with_tenant(ours) { approvals.create!(user_id: 1, surface: "mcp", action_name: "a", confirms: "a", arguments: {}, arguments_digest: "d", expires_at: 1.hour.from_now) }
@@ -149,10 +147,12 @@ RSpec.describe Saltbox::Actions::Approval do
       .to raise_error(ArgumentError, /no tenant is set/)
   end
 
-  it "tells the agent the app's message" do
-    approvals.install!(Saltbox::Actions.config.approvals.merge(message: ->(approval) { "Ask user #{approval.user_id} under Settings." }))
-    expect { cancel.call }.to raise_error(Saltbox::Actions::Error::ConfirmationRequired, "Ask user 1 under Settings.")
+  it "tells the agent the app's words, naming the person, the app and where to approve" do
+    I18n.backend.store_translations(:en, actions: {errors: {approval_needed: "%{user} must approve this in %{app}, at %{url}."}})
+    approvals.install!(Saltbox::Actions.config.approvals.merge(name: :id, url: "https://dummy.test/approvals"))
+    expect { cancel.call }.to raise_error(Saltbox::Actions::Error::ConfirmationRequired, "1 must approve this in Dummy, at https://dummy.test/approvals.")
   ensure
+    I18n.reload!
     approvals.install!(Saltbox::Actions.config.approvals)
   end
 

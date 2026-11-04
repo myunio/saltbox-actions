@@ -10,7 +10,7 @@ RSpec.describe Saltbox::Actions::Authorization::None, authorization: :none do
       scope :visible_to, ->(user) { where(org_id: user.org_id) }
       def self.writable_attributes(_user) = %w[title capacity]
     })
-    stub_const("OpenAction", Class.new(Saltbox::Actions::Base))
+    stub_const("OpenAction", Class.new(Saltbox::Actions::Base) { include DummyBase })
   end
 
   def action(name, base: OpenAction, &body)
@@ -93,7 +93,10 @@ RSpec.describe Saltbox::Actions::Authorization::None, authorization: :none do
 
     before do
       TOPLEVEL_BINDING.eval(self.class.readme_adapter, "README.md")
-      stub_const("ModelAction", Class.new(Saltbox::Actions::Base) { include ApplicationAction::ModelAuthorization })
+      stub_const("ModelAction", Class.new(Saltbox::Actions::Base) {
+        include DummyBase
+        include ApplicationAction::ModelAuthorization
+      })
     end
 
     after { ApplicationAction.send(:remove_const, :ModelAuthorization) }

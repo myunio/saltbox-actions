@@ -155,10 +155,10 @@ module Saltbox
       end
 
       # Every check, as `rails actions:check` runs it: the boot checks, then
-      # each action's model, policy, fields and summary, and the app's own
-      # checks (Configuration#action_checks and #registry_checks). It reads
-      # the models' columns, so it needs the database; a write action's
-      # schema is built for Configuration#schema_user.
+      # each action's model, policy, fields and summary, then the areas'
+      # (Areas.validate!) when the app gives them. It reads the models'
+      # columns, so it needs the database; a write action's schema is built
+      # for the base class's with_schema_user.
       #
       # @return [Array<Class>] every action, once all pass
       # @raise [ArgumentError] naming every problem with each action
@@ -166,7 +166,7 @@ module Saltbox
         entries = actions
         problems = entries.flat_map { |action| problems(action).map { "#{action.name}: #{it}" } }
         raise ArgumentError, problems.join("\n") if problems.any?
-        Actions.config.registry_checks.each { it.call(entries) }
+        Areas.validate! if Actions.config.areas.any?
         entries
       end
 
@@ -213,7 +213,7 @@ module Saltbox
         problems.concat(input_problems(action)) unless unmodelled
         return problems if declared_only
         problems.concat(model_problems(action)) unless unmodelled
-        problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
+        problems
       end
 
       # Every action's name is a tool's on MCP and in the assistants: the
@@ -299,7 +299,7 @@ module Saltbox
         problems.concat(input_problems(action))
         return problems if declared_only
         problems.concat(model_problems(action)) if action.model
-        problems.concat(Actions.config.action_checks.flat_map { Array(it.call(action)) })
+        problems
       end
 
       # @param action [Class]
@@ -349,7 +349,7 @@ module Saltbox
         raise
       rescue => error
         ["building its input schema asked #{action.policy_class ? "#{action.policy_class}#permitted_attributes" : "permitted_attribute_names_for"}, which raised #{error.class}: #{error.message}. " \
-          "If the policy needs a person or a tenant, set config.schema_user, which actions:check and the catalog build schemas for"]
+          "If the policy needs a person or a tenant, define self.with_schema_user in the base class, which actions:check and the catalog build schemas for"]
       end
 
       # @param action [Class] an action with a model
@@ -387,7 +387,7 @@ module Saltbox
       end
 
       # @return [Array<Hash>] every action's definition, as written to the catalog file:
-      #   a create or update lists the fields the policy permits Configuration#schema_user
+      #   a create or update lists the fields the policy permits the base class's with_schema_user
       # @api private
       def self.definitions = actions.map(&:definition)
 
