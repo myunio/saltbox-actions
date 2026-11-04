@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.0 (unreleased)
+## 1.3.0 (2026-11-04)
 
 An app shapes the gem in its base class, as it shapes a request in
 `ApplicationController`. The initializer holds settings only: every one is a
