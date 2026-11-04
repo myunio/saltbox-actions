@@ -32,8 +32,9 @@ module Saltbox
 
       class_methods do
         # Declares the paging inputs, sort, search when the table takes one,
-        # METADATA_ARGUMENT, and one input per filter, each with the
-        # filter's JSON schema.
+        # METADATA_ARGUMENT (described by the app's
+        # actions.shared.fields.include_filters, if it has one), and one
+        # input per filter, each with the filter's JSON schema.
         #
         # @param table [Object] the app's table, as Configuration#list_adapter knows it
         # @return [void]
@@ -45,7 +46,8 @@ module Saltbox
           adapter = Actions.config.list_adapter!
           attribute :search, :string if adapter.search?(table)
           attribute :sort, :string
-          attribute METADATA_ARGUMENT, :boolean, description: "Send true to get the table's filters, with the values each takes, and its sorts"
+          attribute METADATA_ARGUMENT, :boolean, description: I18n.t("actions.shared.fields.#{METADATA_ARGUMENT}",
+            default: "Send true to get the table's filters, with the values each takes, and its sorts")
           adapter.filters(table).each do |key, schema|
             attribute key, FILTER_TYPES.fetch(schema["type"]), description: schema["description"]
             validates key, inclusion: {in: schema["enum"]}, allow_nil: true if schema["enum"]
