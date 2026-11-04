@@ -151,22 +151,24 @@ module Saltbox
 
         # Declares the paging inputs a list takes, as attributes the action
         # reads like any other: page, from 1, and page_size, up to
-        # max_page_size. The action pages its records itself, with the app's
-        # own paging library.
+        # max_page_size. Lists#paginate pages the records with the app's
+        # Configuration#list_adapter.
         #
-        # @param page_size [Integer] page_size when the caller leaves it out
-        # @param max_page_size [Integer] the largest page_size a caller may ask for
+        # @param page_size [Integer] page_size when the caller leaves it out;
+        #   Configuration#page_size by default
+        # @param max_page_size [Integer] the largest page_size a caller may ask for;
+        #   Configuration#max_page_size by default
         # @return [void]
         #
         # @example
         #   paginated page_size: 50
         #
         #   def perform
-        #     @events = policy_scope(Event).order(:starts_on).offset((page - 1) * page_size).limit(page_size)
+        #     @events = paginate(policy_scope(Event).order(:starts_on))
         #     render :index
         #   end
         # @api public
-        def paginated(page_size: 25, max_page_size: 100)
+        def paginated(page_size: Actions.config.page_size, max_page_size: Actions.config.max_page_size)
           attribute :page, :integer, default: 1
           attribute :page_size, :integer, default: page_size
           validates :page, numericality: {greater_than_or_equal_to: 1}

@@ -23,10 +23,12 @@ require "saltbox/actions/arguments"
 require "saltbox/actions/catalog"
 require "saltbox/actions/rendering"
 require "saltbox/actions/permitting"
+require "saltbox/actions/lists"
 require "saltbox/actions/authorization"
 require "saltbox/actions/invocation"
 require "saltbox/actions/change_tracking"
 require "saltbox/actions/registry"
+require "saltbox/actions/areas"
 require "saltbox/actions/finder"
 require "saltbox/actions/record_data"
 require "saltbox/actions/agent_tools"
@@ -72,15 +74,23 @@ module Saltbox
       # @return [void]
       def configure = yield(config)
 
-      # Runs the block as the caller, inside the app's set-up for an
-      # invocation (Configuration#around_invocation): its tenant, time zone
-      # and a fresh copy of the caller. Every invocation, catalog listing
-      # and find_action search runs inside it.
+      # Runs the block as the caller: refreshed (Configuration#refresh_caller),
+      # inside the app's set-up for an invocation
+      # (Configuration#around_invocation: its tenant, time zone, Current),
+      # then checked (Configuration#check_caller). Every invocation, catalog
+      # listing and find_action search runs inside it.
       #
       # @param caller [Caller]
       # @yieldparam fresh [Caller] the caller as the app refreshed it
       # @return [Object] the block's value
-      def within(caller, &block) = config.around_invocation.call(caller, block)
+      # @raise [Error] when the refresh or the check refuses the caller
+      def within(caller, &block)
+        fresh = config.refresh_caller.call(caller)
+        config.around_invocation.call(fresh, ->(set_up) {
+          config.check_caller.call(set_up)
+          block.call(set_up)
+        })
+      end
 
       # @return [void] forgets the configuration; for the gem's own specs
       # @api private

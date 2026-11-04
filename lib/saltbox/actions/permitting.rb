@@ -38,21 +38,45 @@ module Saltbox
 
       private
 
-      # The id of the record a field names, looked up through the person's
-      # policy scope.
+      # The id of the record a field names.
+      # - An entry in a lookup list (Configuration#lookup_lists), such as an
+      #   event type, may be named by id or by its name, ignoring case and
+      #   the spaces around it. Anyone who may pick from the list sees all
+      #   of it, so the lookup skips the policy scope. An unknown name is
+      #   refused with the names that would work, worded by the app's
+      #   actions.errors.not_in_lookup_list (default "isn't one of the
+      #   %{plural}"); one that matches more than one entry, with each match.
+      # - Any other record is named by id, through the person's policy scope.
       #
       # @param model [Class<ActiveRecord::Base>]
-      # @param value [String] the id sent
+      # @param value [String, nil] the id sent, or a lookup entry's name
       # @param field [String] the name it was sent under
-      # @return [Object] the record's id
-      # @raise [Error::ValidationFailed] when the person cannot see such a record
+      # @return [Object, nil] the record's id, or nil when the value is nil
+      # @raise [Error::ValidationFailed] when there is no such record the person can see
       # @api public
       def resolve_reference(model, value, field:)
+        return nil if value.nil?
+        lookup = Actions.config.lookup_lists.include?(model.name)
+        records = lookup ? model.all : scoped_records(model)
         id = model.type_for_attribute(model.primary_key).cast(value)
-        found = scoped_records(model).find_by(model.primary_key => id) if id
+        found = records.find_by(model.primary_key => id) if id
+        found ||= lookup_by_name(records, value, field:) if lookup
         return found.id if found
-        raise Error::ValidationFailed.new("#{field.humanize} isn't a #{model.model_name.human.downcase} you can see",
-          errors: {field => ["isn't a #{model.model_name.human.downcase} you can see"]})
+        plural = model.model_name.human.pluralize.downcase
+        unknown = I18n.t("actions.errors.not_in_lookup_list", plural:, default: "isn't one of the %{plural}")
+        refuse_reference!(field, unknown, "must be one of: #{records.order(:name).pluck(:name).join(", ")}") if lookup
+        refuse_reference!(field, "isn't a #{model.model_name.human.downcase} you can see")
+      end
+
+      # A lookup list's entry by its full name, ignoring case and the spaces around it.
+      def lookup_by_name(records, value, field:)
+        matches = records.where(records.arel_table[:name].lower.eq(value.to_s.strip.downcase)).to_a
+        return matches.first if matches.size <= 1
+        refuse_reference!(field, "matches more than one: #{matches.map { "#{it.name} (#{it.id})" }.join(", ")}")
+      end
+
+      def refuse_reference!(field, message, detail = message)
+        raise Error::ValidationFailed.new("#{field.humanize} #{message}", errors: {field => [detail]})
       end
 
       # @param fields [Array<String>] the fields sent that the person may not change

@@ -7,8 +7,8 @@ module Saltbox
     # each surface's entry point from its credential, never from anything the
     # caller sends.
     #
-    # The app subclasses it to add its own constructors (from an OAuth token,
-    # say) and #refresh.
+    # The app builds one from its own credential (an OAuth token, say) with
+    # .new, and refreshes it with Configuration#refresh_caller.
     #
     # Surfaces, by default:
     # - screen: a person clicking on the app's own screens;
@@ -130,14 +130,6 @@ module Saltbox
         raise Error::HumanRequired unless agent_allowed?(action)
         invocation.confirm!(action)
       end
-
-      # The caller as it stands now, for the app's around_invocation hook,
-      # so a revoked token or ended access stops the next call. A caller
-      # cannot change: an app's subclass returns a new one, and the gem's
-      # returns itself.
-      #
-      # @return [Caller] a replacement, or self
-      def refresh = self
 
       # Refuses a system caller at an entry point that serves requests: its
       # caller comes from the request's credential, never from the app

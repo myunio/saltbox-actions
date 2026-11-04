@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.2.0 (unreleased)
+
+### Areas
+
+- `config.areas` names each area's models, its `metadata_models` and its
+  `read_action`. With it, `config.area_for` answers from the areas and
+  `rails actions:check` runs `Saltbox::Actions::Areas.validate!`: no model
+  in two areas, metadata models among the area's models, and every tracked
+  model an area's models destroy with them mapped too.
+- `Saltbox::Actions::Areas` answers `names`, `area_for`, `for_model!`,
+  `metadata?` and `readable?(area, caller)`.
+
+### Lookup lists
+
+- `config.lookup_lists` names the models a field may pick by id or by name,
+  ignoring case and the spaces around it. A lookup skips the policy scope;
+  an unknown name is refused with the names that would work, worded by the
+  app's `actions.errors.not_in_lookup_list`.
+
+### The caller's set-up
+
+- `config.refresh_caller` returns the caller as it stands now, before any
+  tenant is set. `config.check_caller` refuses a caller inside
+  `around_invocation`. `Saltbox::Actions.within` runs refresh, set-up, then
+  check, around every invocation, catalog listing and `find_action` search.
+- `Caller#refresh` is gone: set `config.refresh_caller`.
+
+### Lists from a table
+
+- `config.list_adapter` connects the gem to the app's paging and table
+  libraries. `paginate(records)` pages a list and sets `@pagination`;
+  `table` declares a list's paging, sort, search and filters from one of the
+  app's tables, and `table_index` runs it, sending an agent the table's
+  metadata only when it asks with `include_filters`. `list_meta` is what a
+  list sends agents beside its summaries.
+- `paginated` takes its defaults from `config.page_size` (25) and
+  `config.max_page_size` (100), read when the action's class loads.
+
 ## 1.1.0 (unreleased)
 
 ### The initializer is config/initializers/saltbox_actions.rb
