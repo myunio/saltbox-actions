@@ -197,7 +197,7 @@ module Saltbox
         def declared_cli = @declared_cli
 
         # Declares who may see and run the action by the permission keys
-        # they hold (Configuration#permissions_held), or :everyone for every
+        # they hold (the base class's permissions_held), or :everyone for every
         # signed-in person. Each requirement is a key, or any_of(...) keys of
         # which one will do. Every requirement must be met. A declared
         # permission takes the place of permitted?'s policy question about

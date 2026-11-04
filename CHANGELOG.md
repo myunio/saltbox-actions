@@ -17,7 +17,8 @@ at the first call; there are no compatibility shims.
   it commits, never on rollback. Raising in a callback, or `throw :abort`,
   refuses the call.
 - `rescue_from`, as in a controller. Handlers run inside the invocation
-  callbacks, last declared first, and also take an error by its `cause`. The
+  callbacks, last declared first, and also take an error by its `cause`; a
+  gem `Error` is matched only by its own class. The
   gem's own translations (`RecordNotFound`, `RecordInvalid`,
   `RecordNotDestroyed`, `DeleteRestrictionError`, and each authorization
   adapter's refusal) are `rescue_from` lines in `Base`, so an app's own line

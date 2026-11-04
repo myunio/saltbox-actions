@@ -929,7 +929,10 @@ end
 
 Handlers run inside the invocation callbacks, so the tenant and `Current`
 are still set. They are found as a controller finds them: the last one
-declared first, and by an error's `cause` too. The gem's own translations
+declared first, and by an error's `cause` too. A gem `Error` is matched only
+by its own class, so a refusal an action raises while rescuing another error,
+such as `not_found` to hide a record the policy refused, stays the one it
+chose. The gem's own translations
 are `rescue_from` lines in `Saltbox::Actions::Base`:
 `ActiveRecord::RecordNotFound` is `not_found`, `RecordInvalid` and
 `RecordNotDestroyed` are `validation_failed`, `DeleteRestrictionError` is

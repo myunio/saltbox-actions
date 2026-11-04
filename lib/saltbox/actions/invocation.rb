@@ -136,7 +136,19 @@ module Saltbox
         run(instance)
       rescue => error
         error.request.save! if error.is_a?(Error::ConfirmationRequired) && error.request&.new_record?
-        instance.rescue_with_handler(error) ? instance.result : raise
+        handled?(instance, error) ? instance.result : raise
+      end
+
+      # Whether one of the action's rescue_from handlers took the error. An
+      # error is matched by its class, then, as in a controller, by its
+      # cause; a gem Error only by its own class, since it is the refusal
+      # the action chose, such as a not_found raised to hide a record the
+      # policy refused.
+      def handled?(instance, error)
+        return instance.rescue_with_handler(error) unless error.is_a?(Error)
+        handler = instance.handler_for_rescue(error) or return false
+        handler.call(error)
+        true
       end
 
       # Refuses in this order, so the first check that fails gives the error:

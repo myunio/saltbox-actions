@@ -75,9 +75,10 @@ RSpec.describe Saltbox::Actions::Lists do
   end
 
   it "pages a list with no table, and takes its default sizes from the configuration" do
-    original = [config.page_size, config.max_page_size]
-    config.page_size = 2
-    config.max_page_size = 3
+    with_settings(page_size: 2, max_page_size: 3) { pages_with_the_configured_sizes }
+  end
+
+  def pages_with_the_configured_sizes
     paged = Class.new(ApplicationAction) do
       def self.name = "Events::ListAction"
       paginated
@@ -91,8 +92,6 @@ RSpec.describe Saltbox::Actions::Lists do
     body = Saltbox::Actions::Invocation.call(action: paged, caller: as_screen(manager), arguments: {}).body
     expect(body).to eq("titles" => %w[A B], "pagination" => {"page" => 1, "page_size" => 2})
     expect { Saltbox::Actions::Invocation.call(action: paged, caller: as_screen(manager), arguments: {page_size: 4}) }.to have_field_errors(:page_size)
-  ensure
-    config.page_size, config.max_page_size = original
   end
 
   it "needs a list adapter to page" do

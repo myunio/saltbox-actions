@@ -144,6 +144,31 @@ RSpec.describe Saltbox::Actions::Invocation do
     }
   end
 
+  it "keeps a gem error an action raises while rescuing another, never answering it by its cause" do
+    archived = Class.new(ApplicationAction) do
+      def self.name = "Events::ArchiveAction"
+      kind :read
+      agents :allowed
+      policy_rule :show?
+      def perform
+        Event.find(0)
+      rescue ActiveRecord::RecordNotFound
+        raise Saltbox::Actions::Error.new("Archived", code: :archived, status: :conflict)
+      end
+    end
+    hidden = Class.new(archived) do
+      def self.name = "Events::ArchiveAction"
+
+      def perform
+        raise Pundit::NotAuthorizedError
+      rescue Pundit::NotAuthorizedError
+        raise Saltbox::Actions::Error::NotFound
+      end
+    end
+    expect { described_class.call(action: archived, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error, "Archived") { expect(it.code).to eq("archived") }
+    expect { described_class.call(action: hidden, caller: as_screen(manager)) }.to be_not_found
+  end
+
   it "answers with what a rescue_from handler renders when it does not raise, as a controller's does" do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::GuessAction"
