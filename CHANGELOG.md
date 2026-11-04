@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.0 (unreleased)
+## 1.4.0 (2026-11-04)
 
 The gem takes on what every app wrote around its actions. An app that
 follows the conventions writes none of it.
