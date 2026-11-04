@@ -98,4 +98,41 @@ RSpec.describe Saltbox::Actions::Lists do
     config.list_adapter = nil
     expect { list }.to raise_error(ArgumentError, /config.list_adapter/)
   end
+
+  describe "a list with a table and no perform" do
+    let(:table) do
+      Class.new do
+        extend Saltbox::Actions::Table
+
+        def self.to_s = "events"
+        summary :id, :title, parent: ->(event) { event.parent&.title }
+        includes :parent
+      end
+    end
+    let(:list) do
+      table = self.table
+      Class.new(ApplicationAction) do
+        def self.name = "Events::ListAction"
+        table table
+      end
+    end
+
+    it "renders the table's page with the index template, and its summary to an agent, its includes loaded" do
+      agm = Event.create!(org_id: 1, title: "AGM")
+      Event.create!(org_id: 1, title: "Dinner", parent: agm)
+      screen = Saltbox::Actions::Invocation.call(action: list, caller: as_screen(manager), arguments: {})
+      expect(screen.body).to eq("data" => {"events" => [{"id" => agm.id, "title" => "AGM"}, {"id" => agm.id + 1, "title" => "Dinner"}]})
+      loaded = nil
+      list.after_perform { loaded = @events.map { it.association(:parent).loaded? } }
+      agent = Saltbox::Actions::Invocation.call(action: list, caller: as_mcp(manager), arguments: {})
+      expect(agent.body.fetch("data").fetch("events")).to eq([{"id" => agm.id, "title" => "AGM", "parent" => nil},
+        {"id" => agm.id + 1, "title" => "Dinner", "parent" => "AGM"}])
+      expect(loaded).to eq([true, true])
+    end
+
+    it "keeps an action's own summary over its table's" do
+      list.summary :id
+      expect(list.summary.call(Event.new(id: 1, title: "AGM"))).to eq("id" => 1)
+    end
+  end
 end

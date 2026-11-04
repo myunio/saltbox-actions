@@ -8,7 +8,8 @@ module Saltbox
     # caller sends.
     #
     # The app builds one from its own credential (an OAuth token, say) with
-    # .new, and says how to refresh it in its base class's refresh_caller.
+    # .new, naming what built it (issued_by), which the gem asks to refresh
+    # it before every call (Base#refresh_caller).
     # Its surface is a StringInquirer, as Rails.env is: surface.assistant?.
     #
     # Surfaces, by default:
@@ -21,7 +22,7 @@ module Saltbox
     # One more surface is fixed, outside Configuration#surfaces: system, the
     # app itself in a job, a rake task or the console (Caller.system). The
     # API, MCP and the assistant refuse it.
-    class Caller < Data.define(:user, :surface, :agent_name, :scopes, :connection, :credential_id, :access)
+    class Caller < Data.define(:user, :surface, :agent_name, :scopes, :connection, :credential_id, :access, :issued_by)
       # @param user [Object] the person the action acts for
       # @param surface [String] one of Configuration#surfaces, or system
       # @param agent_name [String, nil] the agent's name, for audit and change notes
@@ -30,10 +31,12 @@ module Saltbox
       # @param credential_id [String, nil] the token's id
       # @param access [#allows?, nil] what the connection may reach, beyond the token's scopes;
       #   nil reaches every action
-      def initialize(user:, surface:, agent_name: nil, scopes: nil, connection: nil, credential_id: nil, access: nil)
+      # @param issued_by [#revalidate!, nil] what built the caller from its credential, asked
+      #   revalidate!(caller) before every call for the caller as the credential stands now
+      def initialize(user:, surface:, agent_name: nil, scopes: nil, connection: nil, credential_id: nil, access: nil, issued_by: nil)
         raise ArgumentError, "Unknown surface #{surface.inspect}" unless surface.to_s == SYSTEM || Actions.config.surfaces.include?(surface.to_s)
         scopes ||= Actions.config.scopes.values
-        super(user:, surface: ActiveSupport::StringInquirer.new(surface.to_s).freeze, agent_name:, scopes: scopes.to_a.freeze, connection:, credential_id:, access:)
+        super(user:, surface: ActiveSupport::StringInquirer.new(surface.to_s).freeze, agent_name:, scopes: scopes.to_a.freeze, connection:, credential_id:, access:, issued_by:)
       end
 
       # @param user [Object]
@@ -76,6 +79,20 @@ module Saltbox
 
       # @return [Boolean] whether the app itself is calling (Caller.system)
       def system? = surface == SYSTEM
+
+      # Which agent acted for the person, as a change keeps it: a snapshot,
+      # so it reads the same after the connection is gone. The machine and
+      # the time connected are the connection's label and approved_at, when
+      # it has them. Kept in each version's agent_via (the :paper_trail
+      # adapter) and in the app's Current.agent (AppCurrent).
+      #
+      # @return [Hash{String => String}, nil] name, and for a connection its machine, id and
+      #   connected time; nil for the person's own click
+      def agent_stamp
+        return if agent_name.blank?
+        {"name" => agent_name.to_s, "machine" => connection.try(:label), "connection_id" => connection.try(:id),
+         "connected_at" => connection.try(:approved_at)&.utc&.iso8601}.compact
+      end
 
       # Decided by the surface, never by the agent's display name.
       # @return [Boolean] whether anything but the person's own click, or the app itself, is acting

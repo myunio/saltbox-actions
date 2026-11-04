@@ -52,7 +52,9 @@ ActiveRecord::Schema.define(version: 1) do
     t.string :whodunnit
     t.text :object
     t.string :agent
+    t.json :agent_via
     t.string :surface
+    t.integer :connection_id
     t.string :invocation_id
     t.datetime :created_at
   end
