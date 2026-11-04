@@ -20,6 +20,9 @@ module Saltbox
     # - Schema: the JSON Schema of the action's input;
     # - Rendering: render and head;
     # - Permitting: permitted_attributes;
+    # - Callbacks: the invocation, perform and commit callbacks, and the
+    #   methods the gem and its adapters ask (refresh_caller, current_tenant);
+    # - ActiveSupport::Rescuable: rescue_from, as in a controller;
     # - Authorization::None, until the app declares an authorization adapter
     #   (config.adapters), which the declaration includes here, so every
     #   action has it.
@@ -36,7 +39,17 @@ module Saltbox
       include Rendering
       include Permitting
       include Lists
+      include Callbacks
+      include ActiveSupport::Rescuable
       include Authorization::None
+
+      # What Active Record raises inside an action, as callers see it. An
+      # app's own rescue_from for the same error is found first.
+      rescue_from(ActiveRecord::RecordNotFound) { raise Error::NotFound }
+      rescue_from(ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed) do |error|
+        raise Error::ValidationFailed.for(error.record.errors, fallback: error.message)
+      end
+      rescue_from(ActiveRecord::DeleteRestrictionError) { |error| raise Error::InUse, error.message }
 
       Caller = Actions::Caller
       Error = Actions::Error
@@ -137,19 +150,32 @@ module Saltbox
         end
       end
 
-      # @return [Caller] who is calling, and from where
+      # @return [Caller] who is calling, and from where; refreshed (#refresh_caller) once the call starts
       attr_reader :current_caller
-      # @return [Params] the checked input
+      # @return [Params] the checked input; empty until Invocation has checked it
       attr_reader :params
 
+      # The action is built before its input is checked, so its invocation
+      # callbacks run first; Invocation then assigns the input.
+      #
       # @param current_caller [Caller]
-      # @param params [Params] the input, already checked against the action's JSON Schema;
+      # @param params [Params, nil] the input, already checked against the action's JSON Schema;
       #   each attribute is cast once, by its type, from its value here
-      def initialize(current_caller:, params:)
+      # @param invocation [Invocation, nil] the call it runs in
+      def initialize(current_caller:, params: nil, invocation: nil)
         @current_caller = current_caller
-        @params = params
+        @invocation = invocation
         self.class.define_record_reader
-        super(params.to_h.slice(*self.class.declared_attributes.keys))
+        super()
+        assign_input(params || Params.new({}, action: self.class))
+      end
+
+      # @param params [Params] the checked input
+      # @return [void]
+      # @api private
+      def assign_input(params)
+        @params = params
+        assign_attributes(params.to_h.slice(*self.class.declared_attributes.keys))
       end
 
       # @return [Object] the person the action acts for

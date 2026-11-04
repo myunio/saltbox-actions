@@ -45,7 +45,7 @@ module Saltbox
         # - :allowed: they may run it.
         # - :confirm: an agent is told to ask the person first. The chat
         #   assistant never runs it. While Configuration#enforce_confirm is
-        #   on (the default), the server refuses it until the app's confirm hook approves.
+        #   on (the default), the server refuses it until the person approves (the :approvals adapter).
         # - :never: only the person, on a screen.
         #
         # @param rule [Symbol, nil] :allowed, :confirm or :never
@@ -129,14 +129,14 @@ module Saltbox
 
         # The feature flag the action needs. While the flag is off for the
         # caller, every caller gets not_found and the actions list leaves the
-        # action out. Configuration#validate_feature checks the key.
+        # action out. With the :flipper adapter, Flipper says whether it is on
+        # (Base#flipper_actors); without it, every feature is on.
         #
         # @param key [String, nil]
         # @return [String, nil]
         # @api public
         def feature(key = nil)
           return _feature unless key
-          Actions.config.validate_feature.call(key)
           self._feature = key
         end
 
@@ -197,7 +197,7 @@ module Saltbox
         def declared_cli = @declared_cli
 
         # Declares who may see and run the action by the permission keys
-        # they hold (Configuration#permissions_held), or :everyone for every
+        # they hold (the base class's permissions_held), or :everyone for every
         # signed-in person. Each requirement is a key, or any_of(...) keys of
         # which one will do. Every requirement must be met. A declared
         # permission takes the place of permitted?'s policy question about

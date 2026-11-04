@@ -63,6 +63,8 @@ RSpec.describe "An action whose policy is missing" do
     let(:dummy_actions) do
       %w[Events::ListAction Events::ShowAction].map do |name|
         Class.new(Saltbox::Actions::Base) do
+          include DummyBase
+
           define_singleton_method(:name) { name }
           policy_namespace ActionPolicies
           model Event
@@ -73,6 +75,8 @@ RSpec.describe "An action whose policy is missing" do
 
     let(:missing) do
       stub_const("Reports::ExportAction", Class.new(Saltbox::Actions::Base) {
+        include DummyBase
+
         define_verb :export, kind: :read, plural: true
         model Event
       })

@@ -204,16 +204,6 @@ RSpec.describe Saltbox::Actions::Registry do
       .to raise_error(ArgumentError, /CLI commands must be unique: events list \(Events::ListAction, Events::TallyAction\)\. To fix: declare cli/)
   end
 
-  it "runs the app's own checks beside the gem's" do
-    Saltbox::Actions.config.check_action { |klass| klass.description ? [] : ["write a description"] }
-    expect(problems(action("Events::PeekAction") {
-      kind :read
-      policy_rule :show?
-    })).to eq(["write a description"])
-  ensure
-    Saltbox::Actions.config.action_checks.pop
-  end
-
   it "versions every definition, and lists the definitions as the catalog file holds them" do
     expect(described_class.version).to match(/\A\h{16}\z/)
     expect(JSON.parse(described_class.catalog_json).pluck("name")).to eq(described_class.actions.map(&:action_name))

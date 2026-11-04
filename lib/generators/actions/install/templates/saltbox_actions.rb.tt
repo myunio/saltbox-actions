@@ -1,10 +1,11 @@
-# saltbox-actions settings. Every setting has a default that works for a
-# plain Rails app; see Saltbox::Actions::Configuration for each one.
+# saltbox-actions settings. Each is a value, with a default that works for a
+# plain Rails app; see Saltbox::Actions::Configuration for each one. What
+# every call shares is app/actions/application_action.rb's.
 Saltbox::Actions.configure do |config|
-  # The optional adapters to load: only those listed load. Uncomment each
-  # one the app uses and add the gem it names to the Gemfile; a declared
-  # adapter whose gem is missing stops the boot. Declare at most one of
-  # :pundit and :action_policy: the app's base action class includes it.
+  # The optional adapters to load, in any order: only those listed load.
+  # Uncomment each one the app uses and add the gem it names to the Gemfile;
+  # a declared adapter whose gem is missing stops the boot. Declare at most
+  # one of :pundit and :action_policy: the app's base action class includes it.
   config.adapters = [
 <% adapter_lines.each do |line| -%>
     <%= line %>

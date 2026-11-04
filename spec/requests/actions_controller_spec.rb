@@ -45,7 +45,9 @@ RSpec.describe "The actions API", type: :request do
   end
 
   it "answers an approved delete with no content" do
-    allow(Saltbox::Actions.config).to receive(:confirm).and_return(->(*) { true })
+    post "/api/v1/actions/delete_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
+    expect(response).to have_http_status(:forbidden)
+    approve_waiting(manager)
     post "/api/v1/actions/delete_event", params: {arguments: {id: event.id.to_s}}.to_json, headers: headers
     expect(response).to have_http_status(:no_content)
   end
@@ -60,17 +62,18 @@ RSpec.describe "The actions API", type: :request do
     expect(event.reload.status).to eq("draft")
   end
 
-  it "names each field the caller may not set, in the app's words when it sets on_forbidden_fields" do
+  it "names each field the caller may not set, in the app's words when it rescues them" do
     post "/api/v1/actions/create_event", params: {arguments: {title: "AGM", notes: "x"}}.to_json, headers: headers
     expect(response).to have_http_status(:forbidden)
     expect(response.parsed_body).to eq("error" => {"code" => "forbidden", "message" => "You can't change notes.", "errors" => {"notes" => ["you can't change this"]}})
 
-    refusal = ->(caller, action, fields) {
-      Saltbox::Actions::Error::Forbidden.new("User #{caller.user.id} can't change #{fields.to_sentence} on #{action.action_name}.",
-        errors: fields.index_with { ["needs events.notes"] }, details: {"needs" => "events.notes"})
-    }
-    allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
-    post "/api/v1/actions/create_event", params: {arguments: {title: "AGM", notes: "x"}}.to_json, headers: headers
+    refusal = proc do |error|
+      raise Saltbox::Actions::Error::Forbidden.new("User #{current_user.id} can't change #{error.fields.to_sentence} on #{self.class.action_name}.",
+        errors: error.fields.index_with { ["needs events.notes"] }, details: {"needs" => "events.notes"})
+    end
+    with_rescue_from(Saltbox::Actions::Error::ForbiddenFields, refusal) do
+      post "/api/v1/actions/create_event", params: {arguments: {title: "AGM", notes: "x"}}.to_json, headers: headers
+    end
     expect(response).to have_http_status(:forbidden)
     expect(response.parsed_body).to eq("error" => {"code" => "forbidden", "message" => "User 1 can't change notes on create_event.",
                                                    "errors" => {"notes" => ["needs events.notes"]}, "details" => {"needs" => "events.notes"}})

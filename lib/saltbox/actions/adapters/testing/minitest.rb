@@ -61,7 +61,7 @@ module Saltbox
           end
 
           # Without `as:` it checks the catalog's schema, built for
-          # Configuration#schema_user; pass a caller when the policy needs a person.
+          # the person with_schema_user yields; pass a caller when the policy needs a person.
           def assert_invalid_against_schema(arguments, action: action_class, as: nil)
             assert_raises(Error::ValidationFailed) { Arguments.check(action, arguments, as) }
           end

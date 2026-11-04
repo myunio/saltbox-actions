@@ -21,6 +21,11 @@ module Saltbox
           # action's input has already passed its schema (see Permitting).
           define_method(:permitted_attributes, Permitting.instance_method(:permitted_attributes))
 
+          # Pundit's refusal is answered as forbidden.
+          included do
+            rescue_from(::Pundit::NotAuthorizedError) { raise Error::Forbidden }
+          end
+
           class_methods do
             # Whether the person's role allows the action at all, asked of the
             # model's policy before any record is loaded. An action with no
@@ -69,9 +74,6 @@ module Saltbox
             def permitted_attribute_names_for(user, record)
               ::Pundit.policy!(user, policy_target(record)).permitted_attributes.map(&:to_s)
             end
-
-            # @return [Array<Class<Exception>>]
-            def authorization_errors = [::Pundit::NotAuthorizedError]
           end
 
           private

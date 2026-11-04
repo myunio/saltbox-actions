@@ -32,9 +32,19 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect { invoke.call("show_event", {id: event.id.to_s}, as_screen(manager)) }.not_to announce_changes
   end
 
-  it "undoes everything when the action fails partway" do
-    allow(Saltbox::Actions.config).to receive(:on_changes).and_return(->(*) { raise "store failed" })
-    expect { invoke.call("update_event", {id: event.id.to_s, title: "Gone"}, as_screen(manager)) }.to raise_error("store failed")
+  it "hands the changes.saltbox_actions subscribers the call's id, the caller and the action" do
+    seen = []
+    ActiveSupport::Notifications.subscribed(->(event) { seen << event.payload }, "changes.saltbox_actions") do
+      invoke.call("update_event", {id: event.id.to_s, title: "Annual meeting"}, as_mcp(manager))
+    end
+    expect(seen.sole).to include(action: Events::UpdateAction, changes: [["Event", event.id.to_s, "update"]], invocation_id: a_string_matching(/\A\h{8}-/))
+    expect(seen.sole[:caller].surface).to eq("mcp")
+  end
+
+  it "undoes everything when a subscriber fails, since it hears inside the transaction" do
+    failing = ->(*) { raise "store failed" }
+    run = -> { invoke.call("update_event", {id: event.id.to_s, title: "Gone"}, as_screen(manager)) }
+    expect { ActiveSupport::Notifications.subscribed(failing, "changes.saltbox_actions", &run) }.to raise_error("store failed")
     expect(event.reload.title).to eq("AGM")
     expect(PaperTrail::Version.where(item_id: event.id.to_s, event: "update")).to be_empty
     expect(Saltbox::Actions::Current.invocation_id).to be_nil
@@ -119,19 +129,88 @@ RSpec.describe Saltbox::Actions::Invocation do
     expect(invoke.call("delete_event", {id: event.id.to_s}, as_screen(manager))).to eq(Saltbox::Actions::Result.no_content)
   end
 
-  it "maps an app's own error to the refusal callers see" do
-    domain_error = Class.new(StandardError)
-    Saltbox::Actions.config.map_error(domain_error) { Saltbox::Actions::Error.new("Locked", code: :locked, status: :conflict) }
+  it "answers an app's own error with its rescue_from, inside the caller's set-up" do
+    domain_error = stub_const("Events::Locked", Class.new(StandardError))
     action = Class.new(ApplicationAction) do
       def self.name = "Events::LockAction"
       kind :change
       agents :allowed
       policy_rule :update?
+      rescue_from(domain_error) { raise Saltbox::Actions::Error.new("Locked in #{ActsAsTenant.current_tenant.id}", code: :locked, status: :conflict) }
       define_method(:perform) { raise domain_error }
     end
-    expect { described_class.call(action: action, caller: as_screen(manager)) }.to be_refused.with(:locked)
-  ensure
-    Saltbox::Actions.config.error_mappings.pop
+    expect { described_class.call(action: action, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error, "Locked in 1") { |error|
+      expect(error.code).to eq("locked")
+    }
+  end
+
+  it "keeps a gem error an action raises while rescuing another, never answering it by its cause" do
+    archived = Class.new(ApplicationAction) do
+      def self.name = "Events::ArchiveAction"
+      kind :read
+      agents :allowed
+      policy_rule :show?
+      def perform
+        Event.find(0)
+      rescue ActiveRecord::RecordNotFound
+        raise Saltbox::Actions::Error.new("Archived", code: :archived, status: :conflict)
+      end
+    end
+    hidden = Class.new(archived) do
+      def self.name = "Events::ArchiveAction"
+
+      def perform
+        raise Pundit::NotAuthorizedError
+      rescue Pundit::NotAuthorizedError
+        raise Saltbox::Actions::Error::NotFound
+      end
+    end
+    expect { described_class.call(action: archived, caller: as_screen(manager)) }.to raise_error(Saltbox::Actions::Error, "Archived") { expect(it.code).to eq("archived") }
+    expect { described_class.call(action: hidden, caller: as_screen(manager)) }.to be_not_found
+  end
+
+  it "answers with what a rescue_from handler renders when it does not raise, as a controller's does" do
+    action = Class.new(ApplicationAction) do
+      def self.name = "Events::GuessAction"
+      kind :read
+      agents :allowed
+      policy_rule :show?
+      rescue_from(KeyError) { render json: {guess: "none"} }
+      def perform = raise(KeyError)
+    end
+    expect(described_class.call(action: action, caller: as_screen(manager)).body).to eq("guess" => "none")
+  end
+
+  it "takes an error by its cause, as a controller does, and passes the gem's own refusals to a handler too" do
+    seen = []
+    action = Class.new(ApplicationAction) do
+      def self.name = "Events::WrapAction"
+      kind :read
+      agents :allowed
+      policy_rule :show?
+      attribute :title, :string
+      rescue_from(StandardError) { |error| seen << error.class and raise error }
+      define_method(:perform) do
+        Event.find(0)
+      rescue ActiveRecord::RecordNotFound
+        raise "the view failed"
+      end
+    end
+    expect { described_class.call(action: action, caller: as_screen(manager)) }.to raise_error(RuntimeError, "the view failed")
+    expect { described_class.call(action: action, caller: as_screen(manager), arguments: {title: 1}) }.to have_field_errors(:title)
+    expect(seen).to eq([RuntimeError, Saltbox::Actions::Error::ValidationFailed])
+    by_cause = Class.new(ApplicationAction) do
+      def self.name = "Events::WrapAction"
+      kind :read
+      agents :allowed
+      policy_rule :show?
+      def perform
+        Event.find(0)
+      rescue ActiveRecord::RecordNotFound
+        raise "the view failed"
+      end
+    end
+    expect { described_class.call(action: by_cause, caller: as_screen(manager)) }.to be_not_found
   end
 
   it "answers a delete that others depend on as in_use, a class of its own" do
@@ -221,26 +300,40 @@ RSpec.describe Saltbox::Actions::Invocation do
     let(:events_read_only) { Struct.new(:kinds) { def allows?(action) = kinds.include?(action.kind) }.new([:read]) }
     let(:connection) { Saltbox::Actions::Caller.new(user: manager, surface: "mcp", agent_name: "Claude", access: events_read_only) }
 
-    it "hides and refuses what the access does not reach, with the app's refusal" do
-      refusal = Saltbox::Actions::Error::InsufficientScope.new("Not allowed changes in Events", details: {"area" => "events", "needs" => "change"})
-      allow(Saltbox::Actions.config).to receive(:on_access_refused).and_return(->(_caller, _action) { refusal })
+    it "hides and refuses what the access does not reach, as OutsideAccess, an insufficient_scope naming the area and level" do
       expect(Events::UpdateAction).not_to be_listed_for(connection)
       expect(Events::ShowAction).to be_listed_for(connection)
-      expect { invoke.call("update_event", {id: event.id.to_s}, connection) }.to raise_error(refusal)
-      expect(refusal.as_json.dig("error", "details")).to eq("area" => "events", "needs" => "change")
+      expect { invoke.call("update_event", {id: event.id.to_s}, connection) }.to raise_error(Saltbox::Actions::Error::OutsideAccess) { |error|
+        expect(error).to have_attributes(code: "insufficient_scope", status: :forbidden, action: Events::UpdateAction, area: "events", needs: "change")
+        expect(error.as_json.dig("error", "details")).to eq("area" => "events", "needs" => "change")
+      }
+      expect(Saltbox::Actions::Error::OutsideAccess.new(action: Events::ShowAction)).to be_a(Saltbox::Actions::Error::InsufficientScope)
     end
 
-    it "runs the app's after_change_commit hook once a change commits" do
+    it "lets the app answer the refusal in its own words, with the caller's tenant still set" do
+      refuse = proc { |error| raise Saltbox::Actions::Error::InsufficientScope.new("Not allowed #{error.needs} in #{error.area} (org #{ActsAsTenant.current_tenant.id})") }
+      with_rescue_from(Saltbox::Actions::Error::OutsideAccess, refuse) do
+        expect { invoke.call("update_event", {id: event.id.to_s}, connection) }
+          .to raise_error(Saltbox::Actions::Error::InsufficientScope, "Not allowed change in events (org 1)")
+      end
+    end
+
+    it "runs the action's after_commit callbacks once a change commits, with its caller and result" do
       seen = []
-      allow(Saltbox::Actions.config).to receive(:after_change_commit).and_return(->(invocation, result) { seen << [invocation.action, result.status] })
-      invoke.call("update_event", {id: event.id.to_s, title: "AGM 2026"}, as_mcp(manager))
-      expect(seen).to eq([[Events::UpdateAction, 200]])
+      action = Class.new(Events::UpdateAction) do
+        def self.name = "Events::UpdateAction"
+        after_commit { seen << [self.class.action_name, current_caller.surface, result.status] }
+      end
+      invoke.call(action, {id: event.id.to_s, title: "AGM 2026"}, as_mcp(manager))
+      expect(seen).to eq([["update_event", "mcp", 200]])
     end
   end
 
-  it "checks the app's error mappings before its own, so an app may pass an ActiveRecord error through" do
-    allow(Saltbox::Actions.config).to receive(:error_mappings).and_return([[ActiveRecord::RecordNotFound, ->(_) {}]])
-    expect { invoke.call("show_event", {id: "0"}, as_screen(manager)) }.to raise_error(ActiveRecord::RecordNotFound)
+  it "finds the app's rescue_from before its own, so an app may pass an ActiveRecord error through" do
+    expect { invoke.call("show_event", {id: "0"}, as_screen(manager)) }.to be_not_found
+    with_rescue_from(ActiveRecord::RecordNotFound, proc { |error| raise error }) do
+      expect { invoke.call("show_event", {id: "0"}, as_screen(manager)) }.to raise_error(ActiveRecord::RecordNotFound)
+    end
   end
 
   it "refuses a validate_arguments override that never calls super, which would leave each default unset" do

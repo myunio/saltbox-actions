@@ -13,7 +13,7 @@ module Saltbox
     #     "documents" => {models: %w[Document Document::Assignment]}
     #   }
     #
-    # With areas given, Configuration#area_for answers from them, and
+    # Each action's area is its model's (Naming#area). With areas given,
     # `rails actions:check` runs Areas.validate!.
     module Areas
       # The dependent: options that destroy a record's dependents with it.

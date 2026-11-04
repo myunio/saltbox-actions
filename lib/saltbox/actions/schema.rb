@@ -106,8 +106,8 @@ module Saltbox
         # The input schema for one caller. A create or update lists the
         # fields the authorization adapter permits that caller, so two callers
         # see different schemas when their policy permits different fields.
-        # Without a caller it is the catalog's schema, built for
-        # Configuration#schema_user.
+        # Without a caller it is the catalog's schema, built for the person
+        # the base class's with_schema_user yields.
         #
         # @param caller [Caller, nil]
         # @return [Hash]
@@ -124,11 +124,11 @@ module Saltbox
         # each time; the Input is built once per action, per list of fields
         # and per locale, then shared by every caller with the same list, so
         # one caller's fields never reach another's schema. Run it inside the
-        # caller's Configuration#around_invocation, where the policy's tenant
-        # is set: every surface does. Permitting#permitted_attributes checks
+        # caller's invocation callbacks, where the policy's tenant is set:
+        # every surface does. Permitting#permitted_attributes checks
         # the fields against the real record again.
         #
-        # @param caller [Caller, nil] nil for the catalog's schema (Configuration#schema_user)
+        # @param caller [Caller, nil] nil for the catalog's schema (with_schema_user)
         # @return [Input]
         # @api private
         def input(caller = nil)
@@ -172,6 +172,26 @@ module Saltbox
           declared_attributes.key?(name) || (name == "id" && takes_id?) || model_field?(name)
         end
 
+        # Who a create or update's input schema is built for where there is
+        # no caller: the committed catalog (config/actions.json),
+        # `rails actions:check`, the registry spec or test, the generator's
+        # field list, and the schema matchers without `as:`. It yields the
+        # person the policy is asked about, inside whatever the policy needs,
+        # such as a tenant: by default nil, no person. The app's base class
+        # defines it to yield a person holding every permission, so the
+        # catalog lists every field. Callers never see that person: each
+        # gets the fields their own policy permits.
+        #
+        # @yieldparam user [Object, nil]
+        # @return [Object] the block's value
+        # @api public
+        #
+        # @example A policy that needs a person, in a multi-tenant app
+        #   def self.with_schema_user
+        #     ActsAsTenant.without_tenant { yield User.new(admin: true) }
+        #   end
+        def with_schema_user = yield(nil)
+
         # @param name [String]
         # @return [Boolean] whether the action could take it as a model field,
         #   for a caller whose policy permits it: one it accepts, or else a
@@ -191,8 +211,7 @@ module Saltbox
         def permitted_keys(caller)
           return accepted_keys if accepted_fields.any?
           return policy_keys(caller.user) if caller
-          schema_user = Actions.config.schema_user
-          schema_user ? schema_user.call(->(user) { policy_keys(user) }) : policy_keys(nil)
+          with_schema_user { |user| policy_keys(user) }
         end
 
         # The fields named with `accepts`, keyed as the model takes them: a

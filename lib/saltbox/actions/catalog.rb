@@ -16,10 +16,27 @@ module Saltbox
       extend ActiveSupport::Concern
 
       class_methods do
+        # Whether the action's feature is on for the caller: always, unless
+        # it declares one and the :flipper adapter is declared, when Flipper
+        # is asked for the action's flipper_actors. Asked inside the caller's
+        # set-up, so its tenant is set.
+        #
         # @param caller [Caller]
         # @return [Boolean] whether the action's feature is on for the caller, or the action needs none
         # @api public
-        def enabled_for?(caller) = feature.nil? || Actions.config.feature_enabled.call(feature, caller)
+        def enabled_for?(caller) = feature.nil? || new(current_caller: caller).send(:feature_on?, feature)
+
+        # The permission keys a caller's person holds, for actions that
+        # declare `permission`. None by default: the app's base class defines
+        # it.
+        #
+        # @param _caller [Caller]
+        # @return [Array<String>]
+        # @api public
+        #
+        # @example
+        #   def self.permissions_held(caller) = caller.user.permission_keys
+        def permissions_held(_caller) = []
 
         # @param caller [Caller]
         # @return [Boolean] whether the actions list shows it to this caller: its policy exists, and all four checks above
@@ -37,7 +54,7 @@ module Saltbox
         # @api public
         def permitted_for?(caller)
           return permitted?(caller.user) if permissions.nil?
-          permissions_met?(Actions.config.permissions_held.call(caller))
+          permissions_met?(permissions_held(caller))
         end
 
         # Whether this caller may also run it. A listed action can still be

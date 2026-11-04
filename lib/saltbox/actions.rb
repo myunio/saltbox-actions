@@ -25,6 +25,7 @@ require "saltbox/actions/rendering"
 require "saltbox/actions/permitting"
 require "saltbox/actions/lists"
 require "saltbox/actions/authorization"
+require "saltbox/actions/callbacks"
 require "saltbox/actions/invocation"
 require "saltbox/actions/change_tracking"
 require "saltbox/actions/registry"
@@ -42,9 +43,9 @@ module Saltbox
   # for AI agents, and an in-app assistant.
   #
   # The app's base class inherits from Base. The optional parts (an
-  # authorization library, the JSON API, MCP, an audit trail) are adapters,
-  # each switched on by name in the one configure block; the base class then
-  # includes the declared authorization adapter itself:
+  # authorization library, the JSON API, MCP, a tenant, feature flags, an
+  # audit trail, paging) are adapters, each switched on by name in the one
+  # configure block, which holds settings only:
   #
   # @example config/initializers/saltbox_actions.rb
   #   Saltbox::Actions.configure do |config|
@@ -62,9 +63,9 @@ module Saltbox
   #     end
   #   end
   #
-  # What the app decides (its name, its tenancy, its audit trail, how a
-  # change is announced) goes in the same configure block; see Configuration
-  # and Adapters.
+  # What the app adds to every call (who the caller is now, its time zone,
+  # how an error reaches the caller) goes in its ApplicationAction, as
+  # callbacks, rescue_from and the methods the gem calls; see Callbacks.
   module Actions
     class << self
       # @return [Configuration]
@@ -74,22 +75,21 @@ module Saltbox
       # @return [void]
       def configure = yield(config)
 
-      # Runs the block as the caller: refreshed (Configuration#refresh_caller),
-      # inside the app's set-up for an invocation
-      # (Configuration#around_invocation: its tenant, time zone, Current),
-      # then checked (Configuration#check_caller). Every invocation, catalog
-      # listing and find_action search runs inside it.
+      # Runs the block as the caller, inside the base class's invocation
+      # callbacks (Callbacks), on an instance of the base class
+      # (Configuration#base_class) built with the caller and no input: the
+      # caller is refreshed (Base#refresh_caller), each declared adapter
+      # sets up, then the app's callbacks run. Every actions list,
+      # find_action search and schema check for a caller runs inside it, as
+      # every invocation runs inside its own action's.
       #
       # @param caller [Caller]
       # @yieldparam fresh [Caller] the caller as the app refreshed it
       # @return [Object] the block's value
-      # @raise [Error] when the refresh or the check refuses the caller
-      def within(caller, &block)
-        fresh = config.refresh_caller.call(caller)
-        config.around_invocation.call(fresh, ->(set_up) {
-          config.check_caller.call(set_up)
-          block.call(set_up)
-        })
+      # @raise [Error] when the refresh or a callback refuses the caller
+      def within(caller)
+        setup = config.base.new(current_caller: caller)
+        setup.run_callbacks_around(:invocation) { yield setup.current_caller }
       end
 
       # @return [void] forgets the configuration; for the gem's own specs

@@ -4,21 +4,22 @@ module Saltbox
   module Actions
     module Adapters
       module Audit
-        # Uses PaperTrail as a source for the change collection: every version
-        # a change writes is noted, so Configuration#on_changes hears of each
-        # versioned record, dependents included. ChangeTracking does the same
-        # without PaperTrail; with both, each record is noted once. Wrap each run
-        # in a PaperTrail request so each version names the person and the agent.
-        # Declaring :paper_trail runs install! once the app has loaded; the
-        # request stays the app's, since what each version records depends on
-        # its versions table.
+        # Records who made each change with PaperTrail. Every action's work
+        # runs in a PaperTrail request, as a controller's does, stamped with
+        # the action's user_for_paper_trail (the person's id by default, nil
+        # for a system caller) and info_for_paper_trail (the versions table's
+        # other columns, none by default): PaperTrail's own names for its
+        # controller methods. Every version a change writes is also noted
+        # into the change collection, so the changes.saltbox_actions
+        # notification names each versioned record, dependents included.
+        # ChangeTracking does the same without PaperTrail; with both, each
+        # record is noted once.
         #
-        # @example config/initializers/saltbox_actions.rb
-        #   Saltbox::Actions.configure do |config|
-        #     config.adapters = [:pundit, :paper_trail]
-        #     config.around_perform do |invocation, run|
-        #       Saltbox::Actions::Adapters::Audit::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.() }
-        #     end
+        # @example app/actions/application_action.rb
+        #   class ApplicationAction < Saltbox::Actions::Base
+        #     private
+        #
+        #     def info_for_paper_trail = {agent: current_caller.agent_name, invocation_id:}
         #   end
         module PaperTrail
           # Notes each version created into the running change collection.
@@ -34,13 +35,12 @@ module Saltbox
           # @return [Boolean] whether install! has run
           def self.installed? = !!@installed
 
-          # @param invocation [Invocation]
-          # @param controller_info [Hash] extra columns for each version, such as agent and surface
-          # @yield the action's run
+          # @param whodunnit [Object, nil]
+          # @param controller_info [Hash]
+          # @yield the action's work
           # @return [Object] the block's value
-          def self.request(invocation, **controller_info, &)
-            ::PaperTrail.request(whodunnit: invocation.caller.user.id, controller_info:, &)
-          end
+          # @api private
+          def self.request(whodunnit:, controller_info:, &) = ::PaperTrail.request(whodunnit:, controller_info:, &)
         end
       end
     end

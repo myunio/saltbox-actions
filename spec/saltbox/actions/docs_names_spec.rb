@@ -22,6 +22,8 @@ RSpec.describe "Names in the README and CHANGELOG" do
   # An action with no model names, in asks:, the model its perform
   # authorizes and the policy that asks.
   examples = [
+    {doc: "README.md", says: "Here is a first action, for an app with a `Book` model, a `BookPolicy` and the scaffold's `books/show.json.jbuilder`",
+     action: "Books::UpdateAction", model: "Book", gives: {action_name: "update_book", expected_policy_name: "BookPolicy", policy_rule: :update?}},
     {doc: "README.md", says: "`Events::UpdateAction` works on `Event`, asks the policy's `update?` rule, and is named `update_event`",
      action: "Events::UpdateAction", model: "Event", gives: {action_name: "update_event", expected_policy_name: "EventPolicy", policy_rule: :update?}},
     {doc: "README.md", says: "`Tasks::List`, `Tasks::Show`, `Tasks::Create`, `Tasks::Update` and `Tasks::Delete`, named `list_tasks`, `show_task` and so on",

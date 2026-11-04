@@ -1,0 +1,5 @@
+# The base class for the app's actions, as ApplicationController is for its
+# controllers: callbacks around each call, rescue_from for the app's own
+# errors, and the methods the gem asks, such as refresh_caller.
+class ApplicationAction < Saltbox::Actions::Base
+end

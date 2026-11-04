@@ -18,25 +18,22 @@ module Saltbox
       # @param defaults [Hash{String => Object}, nil] each input's default, a value or a callable
       #   giving it; nil for the schema's own defaults
       # @param forbidden [#call, nil] whether a name the schema does not list is a field
-      #   the caller may not set, refused as forbidden rather than unknown
-      # @param refuse [#call] takes those fields and returns the Error::Forbidden to raise
-      def initialize(schema, name: nil, types: {}, defaults: nil, forbidden: nil, refuse: Error::Forbidden.method(:for_fields))
+      #   the caller may not set, refused with Error::ForbiddenFields rather than as unknown
+      def initialize(schema, name: nil, types: {}, defaults: nil, forbidden: nil)
         @schema = schema
         @name = name
         @types = types
         @defaults = defaults || schema.fetch("properties").filter_map { |field, property| [field, property["default"]] if property.key?("default") }.to_h
         @forbidden = forbidden
-        @refuse = refuse
       end
 
       # @param action [Class]
       # @param caller [Caller, nil] whose schema; nil for the catalog's
       # @return [Arguments] a checker for the action's input schema for that caller,
-      #   refusing a field they may not set with Configuration#on_forbidden_fields
+      #   refusing a field they may not set with Error::ForbiddenFields
       def self.for(action, caller = nil)
         input = action.input(caller)
-        refuse = caller ? ->(fields) { Actions.config.on_forbidden_fields.call(caller, action, fields) } : Error::Forbidden.method(:for_fields)
-        new(input.schema, name: action.action_name, types: input.types, defaults: input.defaults, forbidden: action.method(:model_field?), refuse:)
+        new(input.schema, name: action.action_name, types: input.types, defaults: input.defaults, forbidden: action.method(:model_field?))
       end
 
       # Checks input against the action's schema for a caller, inside the
@@ -86,7 +83,7 @@ module Saltbox
 
       def refuse_forbidden!(unlisted)
         forbidden = @forbidden ? unlisted.select { @forbidden.call(it) } : []
-        raise @refuse.call(forbidden) if forbidden.any?
+        raise Error::ForbiddenFields.new(fields: forbidden) if forbidden.any?
       end
 
       # The default of each input left out, for this call: a callable's

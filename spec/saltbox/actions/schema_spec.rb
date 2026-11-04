@@ -29,7 +29,7 @@ RSpec.describe Saltbox::Actions::Schema do
     end
 
     it "runs with a policy that needs a person, with no schema user set" do
-      allow(Saltbox::Actions.config).to receive(:schema_user).and_return(nil)
+      allow(ApplicationAction).to receive(:with_schema_user).and_yield(nil)
       expect { Events::CreateAction.input_schema }.to raise_error(NoMethodError)
       run = ->(user, arguments) { Saltbox::Actions::Invocation.call(action: "create_event", caller: as_screen(user), arguments:) }
       expect(run.call(note_keeper, {title: "AGM", notes: "Quorum is 12"}).status).to eq(201)
@@ -38,33 +38,44 @@ RSpec.describe Saltbox::Actions::Schema do
       expect { run.call(manager, {title: "AGM", notes: "x"}) }.to raise_error(Saltbox::Actions::Error::Forbidden, "You can't change notes.")
     end
 
-    it "refuses every field the caller may not set, once, through on_forbidden_fields" do
-      seen = []
-      refusal = ->(caller, action, fields) {
-        seen << [caller.user, action, fields]
-        Saltbox::Actions::Error::Forbidden.new("Not yours to change.")
-      }
-      allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
+    it "refuses every field the caller may not set, once, as ForbiddenFields, which the app may rescue" do
       invocation = -> { Saltbox::Actions::Invocation.call(action: "create_event", caller: as_screen(manager), arguments: {title: "AGM", notes: "x", nope: 1}) }
-      expect { invocation.call }.to raise_error(Saltbox::Actions::Error::Forbidden, "Not yours to change.")
+      expect { invocation.call }.to raise_error(Saltbox::Actions::Error::ForbiddenFields) { |error|
+        expect(error).to have_attributes(code: "forbidden", status: :forbidden, fields: %w[notes], message: "You can't change notes.",
+          errors: {"notes" => ["you can't change this"]})
+      }
+      seen = []
+      refusal = proc do |error|
+        seen << [current_user, self.class, error.fields]
+        raise Saltbox::Actions::Error::Forbidden, "Not yours to change."
+      end
+      with_rescue_from(Saltbox::Actions::Error::ForbiddenFields, refusal) do
+        expect { invocation.call }.to raise_error(Saltbox::Actions::Error::Forbidden, "Not yours to change.")
+      end
       expect(seen).to eq([[manager, Events::CreateAction, %w[notes]]])
     end
 
-    it "answers a field the policy refuses for the record through on_forbidden_fields too" do
+    it "words the refusal with the app's actions.errors.forbidden_fields and forbidden_field" do
+      I18n.backend.store_translations(:en, actions: {errors: {forbidden_fields: "Ask an organizer about %{fields}.", forbidden_field: "organizers only"}})
+      expect(Saltbox::Actions::Error::ForbiddenFields.new(fields: %w[notes capacity])).to have_attributes(message: "Ask an organizer about notes and capacity.",
+        errors: {"notes" => ["organizers only"], "capacity" => ["organizers only"]})
+    ensure
+      I18n.reload!
+    end
+
+    it "answers a field the policy refuses for the record as ForbiddenFields too" do
       event = Event.create!(org_id: 1, title: "AGM")
       action = Class.new(Events::UpdateAction) do
         def self.name = "Events::UpdateAction"
         private def permitted_attribute_names(record) = super - %w[capacity title]
       end
-      refusal = ->(caller, action, fields) { Saltbox::Actions::Error::Forbidden.new("#{caller.user.id}/#{action.name}: #{fields.join(",")}") }
-      allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(refusal)
+      action.rescue_from(Saltbox::Actions::Error::ForbiddenFields) { |error| raise Saltbox::Actions::Error::Forbidden, "#{current_user.id}/#{self.class.name}: #{error.fields.join(",")}" }
       run = -> { Saltbox::Actions::Invocation.call(action: action, caller: as_screen(manager), arguments: {id: event.id.to_s, title: "Picnic", capacity: 5, featured: true}) }
       expect { run.call }.to raise_error(Saltbox::Actions::Error::Forbidden, "1/Events::UpdateAction: title,capacity")
       expect(event.reload.title).to eq("AGM")
     end
 
     it "keeps the gem's own refusal where there is no caller" do
-      allow(Saltbox::Actions.config).to receive(:on_forbidden_fields).and_return(->(*) { raise "not called" })
       checker = Saltbox::Actions::Arguments.new({"properties" => {}}, forbidden: ->(_) { true })
       expect { checker.validate!(notes: "x") }.to raise_error(Saltbox::Actions::Error::Forbidden, "You can't change notes.")
     end

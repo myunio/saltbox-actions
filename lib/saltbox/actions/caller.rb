@@ -8,7 +8,8 @@ module Saltbox
     # caller sends.
     #
     # The app builds one from its own credential (an OAuth token, say) with
-    # .new, and refreshes it with Configuration#refresh_caller.
+    # .new, and says how to refresh it in its base class's refresh_caller.
+    # Its surface is a StringInquirer, as Rails.env is: surface.assistant?.
     #
     # Surfaces, by default:
     # - screen: a person clicking on the app's own screens;
@@ -32,7 +33,7 @@ module Saltbox
       def initialize(user:, surface:, agent_name: nil, scopes: nil, connection: nil, credential_id: nil, access: nil)
         raise ArgumentError, "Unknown surface #{surface.inspect}" unless surface.to_s == SYSTEM || Actions.config.surfaces.include?(surface.to_s)
         scopes ||= Actions.config.scopes.values
-        super(user:, surface: surface.to_s, agent_name:, scopes: scopes.to_a.freeze, connection:, credential_id:, access:)
+        super(user:, surface: ActiveSupport::StringInquirer.new(surface.to_s).freeze, agent_name:, scopes: scopes.to_a.freeze, connection:, credential_id:, access:)
       end
 
       # @param user [Object]
@@ -95,8 +96,8 @@ module Saltbox
       #   anything the policy allows.
       # - Every other caller follows the action's `agents` declaration.
       # - The chat assistant never runs a :confirm action. Any other agent may
-      #   once the app's Configuration#confirm hook approves, which Invocation
-      #   asks while Configuration#enforce_confirm is on (the default).
+      #   once the person approves it (the :approvals adapter), which
+      #   Invocation asks while Configuration#enforce_confirm is on (the default).
       # - A browser assistant on the page (WebMCP) never runs a destructive action.
       #
       # @param action [Class]
@@ -123,7 +124,7 @@ module Saltbox
       # @return [void]
       # @raise [Error::HumanRequired] when its `agents` declaration bars this caller
       # @raise [Error::ConfirmationRequired] when it is :confirm, Configuration#enforce_confirm
-      #   is on, and the app's Configuration#confirm hook does not approve it
+      #   is on, and the person has not approved it
       # @raise [ArgumentError] outside a running action
       def confirm!(action)
         invocation = Current.invocation or raise ArgumentError, "confirm! checks a caller inside a running action"

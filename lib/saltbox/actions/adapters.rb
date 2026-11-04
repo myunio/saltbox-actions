@@ -15,6 +15,10 @@ module Saltbox
     # authorized by it is refused when it is run. Naming an adapter the app did not declare
     # raises NotDeclared, naming the line to add.
     #
+    # The order of config.adapters does not matter: what each adapter does
+    # around a call runs in one fixed order, declared once in Base
+    # (Callbacks), and the rest answers a question only when asked.
+    #
     # The test helpers are not declared: a spec or test helper requires
     # them, as pundit/rspec is required (see TESTING).
     module Adapters
@@ -50,8 +54,14 @@ module Saltbox
           "gives an in-app RubyLLM chat the actions as tools", nil),
         Adapter.new(:invocation_job, :entry_points, "InvocationJob", nil,
           "runs an action later as an Active Job, for perform_later", :active_job),
+        Adapter.new(:acts_as_tenant, :tenancy, "ActsAsTenant", "acts_as_tenant",
+          "runs every call in the caller's tenant with acts_as_tenant, and refuses a person with none", nil),
+        Adapter.new(:flipper, :features, "Flipper", "flipper",
+          "asks Flipper whether an action's feature is on, for the tenant or the person", nil),
         Adapter.new(:paper_trail, :audit, "PaperTrail", "paper_trail",
-          "hears of every record a change versions with PaperTrail, for on_changes", nil),
+          "stamps each PaperTrail version an action writes with the person, and notes it as a change", nil),
+        Adapter.new(:pagy, :lists, "Pagy", "pagy",
+          "pages lists with Pagy, and is the list adapter unless the app names its own", nil),
         Adapter.new(:approvals, :confirmation, "Approvals", nil,
           "keeps each agent's :confirm call for the person to approve, in saltbox_action_approvals (rails g actions:approvals)", :active_record)
       ].index_by(&:name).freeze
@@ -218,8 +228,23 @@ module Saltbox
         def self.const_missing(name) = Adapters.missing(self, name) || super
       end
 
-      # Audit trails that tell on_changes what a change wrote.
+      # The tenant every call runs in.
+      module Tenancy
+        def self.const_missing(name) = Adapters.missing(self, name) || super
+      end
+
+      # Feature flags an action's `feature` is checked with.
+      module Features
+        def self.const_missing(name) = Adapters.missing(self, name) || super
+      end
+
+      # Audit trails that stamp and note what a change wrote.
       module Audit
+        def self.const_missing(name) = Adapters.missing(self, name) || super
+      end
+
+      # Paging libraries lists page with.
+      module Lists
         def self.const_missing(name) = Adapters.missing(self, name) || super
       end
 

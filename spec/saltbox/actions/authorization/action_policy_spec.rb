@@ -3,6 +3,8 @@
 RSpec.describe "The ActionPolicy adapter", authorization: :action_policy do
   before do
     stub_const("PolicyAction", Class.new(Saltbox::Actions::Base) {
+      include DummyBase
+
       policy_namespace ActionPolicies
     })
   end

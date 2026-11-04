@@ -1,5 +1,110 @@
 # Changelog
 
+## 1.3.0 (unreleased)
+
+An app shapes the gem in its base class, as it shapes a request in
+`ApplicationController`. The initializer holds settings only: every one is a
+value, and none takes a block. Each removed setting fails loudly, at boot or
+at the first call; there are no compatibility shims.
+
+### The base class
+
+- Invocation callbacks (`before_invocation`, `around_invocation`,
+  `after_invocation`) run around every call, actions list and `find_action`
+  search. Perform callbacks (`before_perform`, `around_perform`,
+  `after_perform`) run around the action's own work, outside its
+  transaction. `after_commit` runs once a change and every transaction around
+  it commits, never on rollback. Raising in a callback, or `throw :abort`,
+  refuses the call.
+- `rescue_from`, as in a controller. Handlers run inside the invocation
+  callbacks, last declared first, and also take an error by its `cause`; a
+  gem `Error` is matched only by its own class. The
+  gem's own translations (`RecordNotFound`, `RecordInvalid`,
+  `RecordNotDestroyed`, `DeleteRestrictionError`, and each authorization
+  adapter's refusal) are `rescue_from` lines in `Base`, so an app's own line
+  for the same error wins. The gem's own refusals reach the handlers too.
+- Methods the gem asks, each with a default: `refresh_caller`,
+  `current_tenant`, `flipper_actors`, `user_for_paper_trail`,
+  `info_for_paper_trail`, `self.permissions_held(caller)` and
+  `self.with_schema_user`. `invocation_id` is the call's id.
+- `Saltbox::Actions.within(caller)` runs the invocation callbacks on an
+  instance of `config.base_class` and yields the refreshed caller.
+- The default `refresh_caller` reloads an Active Record person and refuses
+  one who is gone. It refuses a caller holding a credential
+  (`credential_id` or `connection`): an app that serves tokens defines it.
+- An action is built before its input is checked; the input is assigned
+  once checked.
+- `rails g actions:install` also writes `app/actions/application_action.rb`.
+
+### Adapters
+
+- `:acts_as_tenant` runs every call, list and search in `current_tenant`, by
+  default the tenant the person's model belongs to, and refuses a person
+  with none. A system caller keeps the tenant around it.
+- `:flipper` checks an action's `feature` with
+  `Flipper.enabled?(key, *flipper_actors)`; the default actor is the tenant,
+  else the person.
+- `:pagy` is the list adapter unless the app names its own, and the default
+  for `page_size` and `max_page_size`, from Pagy's `limit` and
+  `client_limit`. A table adapter can extend it for its paging.
+- `:paper_trail` runs each action inside a PaperTrail request, with
+  `user_for_paper_trail` as `whodunnit` and `info_for_paper_trail` as
+  `controller_info`.
+- The order of `config.adapters` does not matter: each adapter's callbacks
+  are declared once, in a fixed place.
+
+### Errors
+
+- `Error::OutsideAccess`, an `InsufficientScope` carrying the action, its
+  `area` and the level it `needs`, is raised when a connection's access does
+  not reach an action. Its details are `{"area", "needs"}`.
+- `Error::ForbiddenFields`, a `Forbidden` carrying the `fields`, is raised for
+  fields the caller may not set, worded by `actions.errors.forbidden_fields`
+  and `actions.errors.forbidden_field`.
+- The approval refusal is worded by `actions.errors.approval_needed`, with
+  `%{user}`, `%{app}` and `%{url}`.
+
+### Changes
+
+- `changes.saltbox_actions` gains `invocation_id` in its payload.
+- `Caller#surface` is an `ActiveSupport::StringInquirer`:
+  `surface.assistant?`.
+- `config.approvals` gains `name:` and `url:`.
+- `config.max_array_items` takes a positive number only.
+
+### Removed, and what replaces each
+
+- `config.refresh_caller`: define `refresh_caller` in the base class.
+- `config.around_invocation`: an `around_invocation` callback; the tenant
+  comes from `:acts_as_tenant`.
+- `config.check_caller`: a `before_invocation` callback, with `if:`.
+- `config.around_perform`: an `around_perform` callback;
+  `info_for_paper_trail` for PaperTrail's stamp.
+- `config.on_changes`: subscribe to `changes.saltbox_actions`. It runs inside
+  the transaction, and its exception rolls the change back.
+- `config.on_access_refused`: `rescue_from Error::OutsideAccess`.
+- `config.after_change_commit`: an `after_commit` callback.
+- `config.feature_enabled`: `:flipper`, or `flipper_actors`.
+- `config.validate_feature`: a spec over the app's actions' `feature` keys.
+- `config.permissions_held`: `self.permissions_held(caller)` in the base class.
+- `config.schema_user`: `self.with_schema_user` in the base class.
+- `config.on_forbidden_fields`: the I18n keys, or
+  `rescue_from Error::ForbiddenFields`.
+- `config.map_error` and `config.error_mappings`: `rescue_from`.
+- `config.confirm`: `:approvals`; without it an agent's `:confirm` call is
+  refused with `confirmation_required`.
+- `config.area_for`: `config.areas`.
+- `config.check_action`, `config.action_checks`, `config.check_registry` and
+  `config.registry_checks`: a spec over `ApplicationAction::Registry.actions`.
+- `config.max_array_items` as a lambda: a number, set at boot.
+- `config.approvals`' `message:`: `actions.errors.approval_needed`.
+  `current_tenant:`: `:acts_as_tenant`'s tenant.
+- `Error::Forbidden.for_fields`: `Error::ForbiddenFields.new(fields:)`.
+- `Adapters::Audit::PaperTrail.request(invocation, ...)`:
+  `info_for_paper_trail`.
+- An authorization adapter's `authorization_errors`: a `rescue_from` in the
+  adapter's `included` block.
+
 ## 1.2.0 (2026-11-03)
 
 ### Areas

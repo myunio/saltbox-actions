@@ -27,6 +27,15 @@ RSpec.describe Saltbox::Actions::Generators::InstallGenerator do
     end
   end
 
+  it "writes the base class, and keeps one the app already has" do
+    generate
+    base = destination.join("app/actions/application_action.rb")
+    expect(base.read).to include("class ApplicationAction < Saltbox::Actions::Base\nend\n")
+    base.write("class ApplicationAction < Saltbox::Actions::Base\n  around_invocation :in_time_zone\nend\n")
+    generate
+    expect(base.read).to include("around_invocation :in_time_zone")
+  end
+
   it "writes a configure block that declares what is uncommented" do
     generate
     with_fresh_config do

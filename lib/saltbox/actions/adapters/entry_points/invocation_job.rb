@@ -33,7 +33,7 @@ module Saltbox
           # @param caller [Caller]
           # @return [Hash] what the job needs to build the caller again
           # @api private
-          def self.serialize_caller(caller) = caller.to_h.compact.merge(class: caller.class.name).deep_stringify_keys
+          def self.serialize_caller(caller) = caller.to_h.compact.merge(surface: caller.surface.to_s, class: caller.class.name).deep_stringify_keys
 
           # @param action [String] the action's public name, found in the registry
           # @param input [Hash]

@@ -367,7 +367,11 @@ RSpec.describe "Namespaced policies" do
         def permitted_attributes = %i[title]
         relation_scope { |relation| relation.where(org_id: user.org_id) }
       })
-      stub_const("PolicyAction", Class.new(Saltbox::Actions::Base) { define_verb :export, kind: :read, plural: true })
+      stub_const("PolicyAction", Class.new(Saltbox::Actions::Base) {
+        include DummyBase
+
+        define_verb :export, kind: :read, plural: true
+      })
     end
 
     after { ActionPolicy::LookupChain::NamespaceCache.clear }

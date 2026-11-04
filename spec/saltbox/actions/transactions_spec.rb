@@ -4,7 +4,15 @@ RSpec.describe "Changes and transactions" do
   self.use_transactional_tests = false
 
   let!(:event) { Event.create!(org_id: 1, title: "AGM") }
-  let(:update) { ->(title) { Saltbox::Actions::Invocation.call(action: "update_event", caller: as_screen(manager), arguments: {id: event.id.to_s, title:}) } }
+  let(:update) { ->(title, action: "update_event") { Saltbox::Actions::Invocation.call(action:, caller: as_screen(manager), arguments: {id: event.id.to_s, title:}) } }
+
+  # Events::UpdateAction, with an after_commit callback.
+  def committing(&callback)
+    Class.new(Events::UpdateAction) do
+      def self.name = "Events::UpdateAction"
+      after_commit(&callback)
+    end
+  end
 
   after do
     Event.delete_all
@@ -13,22 +21,23 @@ RSpec.describe "Changes and transactions" do
   end
 
   it "undoes a failed change inside the caller's own transaction, even when the caller rescues it" do
-    allow(Saltbox::Actions.config).to receive(:on_changes).and_return(->(*) { raise Saltbox::Actions::Error::ValidationFailed, "store failed" })
-    ActiveRecord::Base.transaction do
-      update.call("Gone")
-    rescue Saltbox::Actions::Error::ValidationFailed
-      nil
+    failing = ->(*) { raise Saltbox::Actions::Error::ValidationFailed, "store failed" }
+    ActiveSupport::Notifications.subscribed(failing, "changes.saltbox_actions") do
+      ActiveRecord::Base.transaction do
+        update.call("Gone")
+      rescue Saltbox::Actions::Error::ValidationFailed
+        nil
+      end
     end
     expect(event.reload.title).to eq("AGM")
   end
 
-  it "runs after_change_commit once every enclosing transaction commits, and never on rollback" do
+  it "runs after_commit once every enclosing transaction commits, and never on rollback" do
     seen = []
-    allow(Saltbox::Actions.config).to receive(:after_change_commit)
-      .and_return(->(invocation, _) { seen << [invocation.action.action_name, ActiveRecord::Base.connection.transaction_open?] })
+    action = committing { seen << [self.class.action_name, ActiveRecord::Base.connection.transaction_open?] }
 
     ActiveRecord::Base.transaction do
-      update.call("Rolled back")
+      update.call("Rolled back", action:)
       expect(seen).to be_empty
       raise ActiveRecord::Rollback
     end
@@ -36,23 +45,23 @@ RSpec.describe "Changes and transactions" do
     expect(event.reload.title).to eq("AGM")
 
     ActiveRecord::Base.transaction do
-      update.call("Annual meeting")
+      update.call("Annual meeting", action:)
       expect(seen).to be_empty
     end
     expect(seen).to eq([["update_event", false]])
 
-    update.call("Annual general meeting")
+    update.call("Annual general meeting", action:)
     expect(seen.last).to eq(["update_event", false])
   end
 
-  it "keeps the invocation's id for an after_change_commit deferred past its run" do
+  it "keeps the invocation's id for an after_commit deferred past its run" do
     ids = []
-    allow(Saltbox::Actions.config).to receive(:after_change_commit).and_return(->(invocation, _) { ids << invocation.invocation_id })
-    ActiveRecord::Base.transaction { update.call("Annual meeting") }
+    action = committing { ids << invocation_id }
+    ActiveRecord::Base.transaction { update.call("Annual meeting", action:) }
     expect(ids).to contain_exactly(a_string_matching(/\A\h{8}-/))
   end
 
-  it "does not note writes made in commit callbacks, which run after on_changes" do
+  it "does not note writes made in commit callbacks, which run after the changes are announced" do
     stub_const("Booking", Class.new(ApplicationRecord) {
       self.table_name = "events"
       before_commit { Event.create!(org_id: 1, title: "Before commit") }

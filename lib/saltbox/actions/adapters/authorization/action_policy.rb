@@ -73,6 +73,9 @@ module Saltbox
             include Namespace
             include Policies
             extend ContextMacro
+
+            # ActionPolicy's refusal is answered as forbidden.
+            rescue_from(::ActionPolicy::Unauthorized) { raise Error::Forbidden }
           end
 
           class_methods do
@@ -135,9 +138,6 @@ module Saltbox
               policy = policy_class.new(record, **authorization_context_for(user))
               policy.respond_to?(:permitted_attributes) ? policy.permitted_attributes.map(&:to_s) : []
             end
-
-            # @return [Array<Class<Exception>>]
-            def authorization_errors = [::ActionPolicy::Unauthorized]
 
             # @api private
             # @param record [Object] a record, a model, a relation or a symbol

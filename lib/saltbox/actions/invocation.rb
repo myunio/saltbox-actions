@@ -1,13 +1,16 @@
 module Saltbox
   module Actions
-    # The one path every surface runs an action through. Inside the app's
-    # set-up for the caller (Configuration#around_invocation) it refuses in a
-    # fixed order, checks the input, and runs the action: a read as it is, a
-    # change inside its model's transaction that notes every record it
-    # changed (see ChangeTracking) and hands them to Configuration#on_changes
-    # before commit. The same changes are
-    # published as the changes.saltbox_actions notification. Every refusal
-    # leaves as an Error.
+    # The one path every surface runs an action through. The action is
+    # built with the caller, then its invocation callbacks run (Callbacks):
+    # the caller is refreshed, each declared adapter sets up, then the app's.
+    # Inside them it refuses in a fixed order, checks the input, and runs the
+    # action inside its perform callbacks: a read as it is, a change inside
+    # its model's transaction that notes every record it changed (see
+    # ChangeTracking) and instruments them as the changes.saltbox_actions
+    # notification before commit, then runs its commit callbacks once it
+    # commits. An error raised inside goes to the action's rescue_from
+    # handlers, still inside the invocation callbacks. What leaves is an
+    # Error, or a bug, which stays a 500.
     class Invocation
       # @return [Class] the action being run
       attr_reader :action
@@ -70,7 +73,7 @@ module Saltbox
       end
 
       # @return [String, nil] this invocation's id, from when it starts; kept
-      #   for a hook that runs after it, such as a deferred after_change_commit
+      #   for a callback that runs after it, such as a deferred after_commit
       attr_reader :invocation_id
 
       # @param arguments [Hash]
@@ -80,70 +83,88 @@ module Saltbox
       def call(arguments, expected_kind: nil)
         Adapters.check_authorization!(@action)
         raise ArgumentError, "Nested action invocations are not supported; compose domain methods" if Current.invocation_id
-        Actions.within(@caller) do |fresh|
-          @caller = fresh
-          @invocation_id = SecureRandom.uuid_v7
-          # Approvals are for this call's arguments only.
-          @confirmed = Set.new
-          Current.set(invocation: self, invocation_id: @invocation_id, arguments_checked: false) do
-            refuse!
-            if expected_kind && @action.kind != expected_kind
-              raise Error::ValidationFailed, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
-            end
-            @arguments = @action.validate_arguments(arguments, @caller)
-            refuse_lost_defaults!
-            action = @action.new(current_caller: @caller, params: Params.new(@arguments, action: @action))
-            raise Error::ValidationFailed.for(action.errors) unless action.valid?
-            confirm!(@action)
-            run(action)
+        @invocation_id = SecureRandom.uuid_v7
+        # Approvals are for this call's arguments only.
+        @confirmed = Set.new
+        instance = @action.new(current_caller: @caller, invocation: self)
+        Current.set(invocation: self, invocation_id: @invocation_id, arguments_checked: false) do
+          instance.run_callbacks_around(:invocation) do
+            @caller = instance.current_caller
+            run_checked(instance, arguments, expected_kind)
           end
-        rescue Error::ConfirmationRequired => error
-          # Saved once the change's writes have rolled back, still inside the
-          # app's set-up for the caller, so the person's request is kept.
-          error.request.save! if error.request&.new_record?
-          raise
         end
-      rescue Error
-        raise
-      rescue => error
-        mapped = translate(error)
-        mapped ? raise(mapped) : raise
       end
 
-      # Refuses a :confirm action the app's Configuration#confirm hook does
-      # not approve, when Configuration#enforce_confirm is on and an agent
-      # calls. An action approved once in this call is not asked again; the
-      # next call on the same Invocation asks afresh.
-      # Caller#confirm! calls it for an action named inside another.
+      # Refuses a :confirm action the person has not approved, when
+      # Configuration#enforce_confirm is on and an agent calls: with the
+      # :approvals adapter, until they approve this exact call
+      # (Approval.redeem!); without it, always. An action approved once in
+      # this call is not asked again; the next call on the same Invocation
+      # asks afresh. Caller#confirm! calls it for an action named inside
+      # another.
       #
       # @param action [Class]
       # @return [void]
-      # @raise [Error::ConfirmationRequired, Error]
+      # @raise [Error::ConfirmationRequired]
       # @api private
       def confirm!(action)
         return unless Actions.config.enforce_confirm && @caller.agent? && action.agents == :confirm
         return if @confirmed.include?(action)
-        approved = Actions.config.confirm.call(self, action)
-        raise Error::ConfirmationRequired.new(details: {"action" => action.action_name}) unless approved == true
+        raise Error::ConfirmationRequired.new(details: {"action" => action.action_name}) unless Adapters.declared?(:approvals)
+        Approval.redeem!(self, action)
         @confirmed << action
       end
 
       private
 
+      # Everything inside the invocation callbacks. An error raised here
+      # goes to the action's rescue_from handlers, once: a handler that
+      # raises sends its error on, one that returns answers with what the
+      # action rendered, and an error no handler takes leaves as it is.
+      # A request a person is asked to approve is saved first, once the
+      # change's writes have rolled back, in the caller's tenant.
+      def run_checked(instance, arguments, expected_kind)
+        refuse!
+        if expected_kind && @action.kind != expected_kind
+          raise Error::ValidationFailed, "#{@action.action_name} is a #{@action.kind} action; run it with run_#{@action.kind}_action"
+        end
+        @arguments = @action.validate_arguments(arguments, @caller)
+        refuse_lost_defaults!
+        instance.assign_input(Params.new(@arguments, action: @action))
+        raise Error::ValidationFailed.for(instance.errors) unless instance.valid?
+        confirm!(@action)
+        run(instance)
+      rescue => error
+        error.request.save! if error.is_a?(Error::ConfirmationRequired) && error.request&.new_record?
+        handled?(instance, error) ? instance.result : raise
+      end
+
+      # Whether one of the action's rescue_from handlers took the error. An
+      # error is matched by its class, then, as in a controller, by its
+      # cause; a gem Error only by its own class, since it is the refusal
+      # the action chose, such as a not_found raised to hide a record the
+      # policy refused.
+      def handled?(instance, error)
+        return instance.rescue_with_handler(error) unless error.is_a?(Error)
+        handler = instance.handler_for_rescue(error) or return false
+        handler.call(error)
+        true
+      end
+
       # Refuses in this order, so the first check that fails gives the error:
       # - the action's feature is off for the caller: not_found;
       # - the action's `agents` declaration bars this caller: human_required;
-      # - the connection's access does not reach it: Configuration#on_access_refused's error;
+      # - the connection's access does not reach it: Error::OutsideAccess, an insufficient_scope;
       # - the token lacks the scope: insufficient_scope;
       # - the person's role is not allowed the action, or they lack a permission
       #   it declares (unless Configuration#enforce_permissions is off): forbidden.
       # Then the input is checked against the schema and the action's
       # validations: validation_failed. Last, #confirm! refuses a :confirm
-      # action the app has not approved: confirmation_required.
+      # action the person has not approved: confirmation_required.
       def refuse!
         raise Error::NotFound unless @action.enabled_for?(@caller)
         raise Error::HumanRequired unless @caller.agent_allowed?(@action)
-        raise Actions.config.on_access_refused.call(@caller, @action) unless @caller.reaches?(@action)
+        raise Error::OutsideAccess.new(action: @action) unless @caller.reaches?(@action)
         raise Error::InsufficientScope unless @caller.includes_scope?(@action.required_scope)
         allowed = Actions.config.enforce_permissions ? @action.permitted_for?(@caller) : @action.permitted?(@caller.user)
         raise Error::Forbidden unless allowed
@@ -164,43 +185,27 @@ module Saltbox
           "call super, which checks the input and fills in each default"
       end
 
-      def run(action)
-        Actions.config.around_perform.call(self, -> do
-          next action.perform_now if @action.kind == :read
+      def run(instance)
+        instance.run_callbacks_around(:perform) do
+          next instance.perform_now if @action.kind == :read
           # Its own savepoint inside a caller's transaction, so a failure
           # undoes the action's writes even when the caller rescues it.
           # The model's own connection, so a model in a second database
           # is rolled back too. Writes on any other connection are not.
           transaction_class.transaction(requires_new: true) do
-            result, changes = self.class.collect_changes { action.perform_now }
-            Actions.config.on_changes.call(changes, self)
-            ActiveSupport::Notifications.instrument("changes.saltbox_actions", action: @action, caller: @caller, changes:)
+            result, changes = self.class.collect_changes { instance.perform_now }
+            # Inside the transaction: a subscriber's exception rolls the change back.
+            ActiveSupport::Notifications.instrument("changes.saltbox_actions", action: @action, caller: @caller, changes:, invocation_id: @invocation_id)
             # Once the caller's transactions commit too; never on rollback.
-            ActiveRecord.after_all_transactions_commit { Actions.config.after_change_commit.call(self, result) }
+            ActiveRecord.after_all_transactions_commit { instance.run_callbacks(:commit) }
             result
           end
-        end)
+        end
       end
 
       def transaction_class
         model = @action.model
         (model.is_a?(Class) && model < ActiveRecord::Base) ? model : ActiveRecord::Base
-      end
-
-      # The Error callers see for an exception raised inside the action, or
-      # nil for a bug, which stays a 500.
-      def translate(error)
-        Actions.config.error_mappings.each do |error_class, mapping|
-          error_class = error_class.constantize if error_class.is_a?(String)
-          return mapping.call(error) if error.is_a?(error_class)
-        end
-        case error
-        when ActiveRecord::RecordNotFound then Error::NotFound.new
-        when ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed
-          Error::ValidationFailed.for(error.record.errors, fallback: error.message)
-        when ActiveRecord::DeleteRestrictionError then Error::InUse.new(error.message)
-        when *@action.authorization_errors then Error::Forbidden.new
-        end
       end
     end
   end

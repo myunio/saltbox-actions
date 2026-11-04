@@ -1,11 +1,15 @@
-# Configuration#enforce_confirm, the confirm hook and Caller#confirm!.
+# Configuration#enforce_confirm, the person's approval (the :approvals
+# adapter, Approval.redeem!) and Caller#confirm!.
 RSpec.describe "Confirming a :confirm action" do
   let(:event) { Event.create!(org_id: 1, title: "AGM") }
   let(:config) { Saltbox::Actions.config }
   let(:cancel) { ->(caller) { Saltbox::Actions::Invocation.call(action: "cancel_event", caller:, arguments: {id: event.id.to_s}) } }
 
+  # The person's answer, as Approval.redeem! gives it: true, or a refusal.
   def approve(answer = true, &block)
-    allow(config).to receive(:confirm).and_return(block || ->(*) { answer })
+    allow(Saltbox::Actions::Approval).to receive(:redeem!) do |invocation, action|
+      (block ? block.call(invocation, action) : answer) == true or raise Saltbox::Actions::Error::ConfirmationRequired
+    end
   end
 
   {screen: :allowed, webmcp: :allowed, api: :allowed, mcp: :allowed, assistant: :human_required}.each do |surface, answer|
@@ -18,7 +22,7 @@ RSpec.describe "Confirming a :confirm action" do
     end
   end
 
-  it "is on by default: with no confirm hook, every agent but the chat is refused, and a person is not" do
+  it "is on by default: with nothing approved, every agent but the chat is refused, and a person is not" do
     expect(Saltbox::Actions::Configuration.new.enforce_confirm).to be(true)
     expect(config.enforce_confirm).to be(true)
     expect { cancel.call(as_api(manager)) }.to be_refused.with(:confirmation_required)
@@ -37,7 +41,15 @@ RSpec.describe "Confirming a :confirm action" do
     end
   end
 
-  it "runs it once the hook approves, and hands the hook the call" do
+  it "refuses every agent's call without the :approvals adapter, and never asks" do
+    approve { raise "asked" }
+    allow(Saltbox::Actions::Adapters).to receive(:declared?).and_call_original
+    allow(Saltbox::Actions::Adapters).to receive(:declared?).with(:approvals).and_return(false)
+    expect { cancel.call(as_mcp(manager)) }.to be_refused.with(:confirmation_required)
+    expect { cancel.call(as_screen(manager)) }.not_to be_refused
+  end
+
+  it "runs it once the person approves, and asks about the call" do
     seen = nil
     approve { |invocation, action| seen = [invocation.caller.surface, invocation.arguments, action] and true }
     with_settings(enforce_confirm: true) { cancel.call(as_mcp(manager)) }
@@ -45,7 +57,7 @@ RSpec.describe "Confirming a :confirm action" do
     expect(seen).to eq(["mcp", {"id" => event.id.to_s}, Events::CancelAction])
   end
 
-  it "hands the hook the input the action runs with, a callable default's value included" do
+  it "asks about the input the action runs with, a callable default's value included" do
     reason = "Snow"
     cancelling = Class.new(Events::CancelAction) do
       def self.name = "Events::CancelAction"
@@ -62,7 +74,7 @@ RSpec.describe "Confirming a :confirm action" do
     expect(event.reload.notes).to eq("Flood")
   end
 
-  it "refuses when the hook answers anything but true, and passes on an error it raises" do
+  it "refuses until the person approves, and passes on the refusal the approvals raise" do
     with_settings(enforce_confirm: true) do
       approve("yes")
       expect { cancel.call(as_mcp(manager)) }.to be_refused.with(:confirmation_required)
@@ -142,7 +154,7 @@ RSpec.describe "Confirming a :confirm action" do
       with_settings(enforce_confirm: true) { reschedule.call(as_screen(manager)) }
     end
 
-    it "refuses with enforce_confirm on, rolling back the change, until the hook approves the named action" do
+    it "refuses with enforce_confirm on, rolling back the change, until the person approves the named action" do
       with_settings(enforce_confirm: true) do
         expect { reschedule.call(as_mcp(manager)) }.to be_refused.with(:confirmation_required)
         expect(event.reload).to have_attributes(title: "AGM", status: "draft")
