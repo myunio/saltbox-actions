@@ -6,13 +6,7 @@ RSpec.describe Saltbox::Actions::Areas do
      "billing" => {models: %w[Billing::Invoice]}}
   end
 
-  around do |example|
-    original = config.areas
-    config.areas = areas
-    example.run
-  ensure
-    config.instance_variable_set(:@areas, original)
-  end
+  around { |example| with_settings(areas:) { example.run } }
 
   it "lists the areas in the app's order, and the area of each model" do
     expect(described_class.names).to eq(%w[events billing])
@@ -23,11 +17,12 @@ RSpec.describe Saltbox::Actions::Areas do
   end
 
   it "answers each action's area from them, unless the app sets area_for" do
-    original = config.instance_variable_get(:@area_for)
-    config.instance_variable_set(:@area_for, nil)
+    with_fresh_config do |fresh|
+      fresh.areas = areas
+      expect(Events::UpdateAction.area).to eq("events")
+    end
     expect(Events::UpdateAction.area).to eq("events")
-  ensure
-    config.instance_variable_set(:@area_for, original)
+    expect(config.area_for.call(EventKind)).to be_nil
   end
 
   it "lets an area's readers see the record of only its metadata models" do

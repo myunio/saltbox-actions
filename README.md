@@ -578,7 +578,8 @@ config.lookup_lists = %w[Event::Type PaymentMethod]
 ```
 
 An unknown name is refused with the names that would work, and a name two
-entries share with both. An attribute that names a record looks it up
+entries share with both. Word the refusal in the locale file, such as
+`actions.errors.not_in_lookup_list: "isn't one of the club's %{plural}"`. An attribute that names a record looks it up
 the same way, with `resolve_reference(PaymentMethod, payment_method, field: "payment_method")`.
 
 **Attributes.** Any other input is an Active Model attribute. `perform`
@@ -634,7 +635,9 @@ its validations still run on the default.
 
 `paginated` declares the paging inputs a list takes, as attributes: `page`,
 from 1, and `page_size`, from 1 to `max_page_size`. The defaults are
-`config.page_size` (25) and `config.max_page_size` (100). `paginate(records)`
+`config.page_size` (25) and `config.max_page_size` (100), read when the
+action's class loads, as `table` reads `config.list_adapter`. Rails runs
+`config/initializers` before it loads `app/actions`, so set them there. `paginate(records)`
 pages them with your own paging library, through `config.list_adapter`
 (see Lists from a table), and sets `@pagination` for the view:
 

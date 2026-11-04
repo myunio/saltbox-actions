@@ -43,6 +43,9 @@ RSpec.describe "Resolving a reference" do
       expect(error.message).to eq("Kind isn't one of the event kinds")
       expect(error.errors).to eq("kind" => ["must be one of: AGM, Picnic"])
     }
+    I18n.backend.store_translations(:en, actions: {errors: {not_in_lookup_list: "isn't one of the club's %{plural}"}})
+    expect { resolve.call(EventKind, "Dance") }.to raise_error(Saltbox::Actions::Error::ValidationFailed, "Kind isn't one of the club's event kinds")
+    I18n.backend.reload!
     twin = EventKind.create!(name: "picnic")
     expect { resolve.call(EventKind, "Picnic") }.to raise_error(Saltbox::Actions::Error::ValidationFailed, /matches more than one: .*\(#{twin.id}\)/)
   end

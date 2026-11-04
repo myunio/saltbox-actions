@@ -16,7 +16,8 @@
 
 - `config.lookup_lists` names the models a field may pick by id or by name,
   ignoring case and the spaces around it. A lookup skips the policy scope;
-  an unknown name is refused with the names that would work.
+  an unknown name is refused with the names that would work, worded by the
+  app's `actions.errors.not_in_lookup_list`.
 
 ### The caller's set-up
 
@@ -35,7 +36,7 @@
   metadata only when it asks with `include_filters`. `list_meta` is what a
   list sends agents beside its summaries.
 - `paginated` takes its defaults from `config.page_size` (25) and
-  `config.max_page_size` (100).
+  `config.max_page_size` (100), read when the action's class loads.
 
 ## 1.1.0 (unreleased)
 

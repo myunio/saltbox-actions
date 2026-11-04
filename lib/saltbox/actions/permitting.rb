@@ -43,8 +43,9 @@ module Saltbox
       #   event type, may be named by id or by its name, ignoring case and
       #   the spaces around it. Anyone who may pick from the list sees all
       #   of it, so the lookup skips the policy scope. An unknown name is
-      #   refused with the names that would work; one that matches more than
-      #   one entry, with each match.
+      #   refused with the names that would work, worded by the app's
+      #   actions.errors.not_in_lookup_list (default "isn't one of the
+      #   %{plural}"); one that matches more than one entry, with each match.
       # - Any other record is named by id, through the person's policy scope.
       #
       # @param model [Class<ActiveRecord::Base>]
@@ -62,7 +63,8 @@ module Saltbox
         found ||= lookup_by_name(records, value, field:) if lookup
         return found.id if found
         plural = model.model_name.human.pluralize.downcase
-        refuse_reference!(field, "isn't one of the #{plural}", "must be one of: #{records.order(:name).pluck(:name).join(", ")}") if lookup
+        unknown = I18n.t("actions.errors.not_in_lookup_list", plural:, default: "isn't one of the %{plural}")
+        refuse_reference!(field, unknown, "must be one of: #{records.order(:name).pluck(:name).join(", ")}") if lookup
         refuse_reference!(field, "isn't a #{model.model_name.human.downcase} you can see")
       end
 

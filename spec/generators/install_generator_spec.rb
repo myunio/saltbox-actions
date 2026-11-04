@@ -29,16 +29,15 @@ RSpec.describe Saltbox::Actions::Generators::InstallGenerator do
 
   it "writes a configure block that declares what is uncommented" do
     generate
-    original = Saltbox::Actions.config
-    Saltbox::Actions.reset_config!
-    load initializer.to_s
-    expect(Saltbox::Actions.config.adapters).to eq([])
+    with_fresh_config do
+      load initializer.to_s
+      expect(Saltbox::Actions.config.adapters).to eq([])
+    end
 
     initializer.write(initializer.read.sub("# :mcp,", ":mcp,"))
-    Saltbox::Actions.reset_config!
-    load initializer.to_s
-    expect(Saltbox::Actions.config.adapters).to eq([:mcp])
-  ensure
-    Saltbox::Actions.instance_variable_set(:@config, original)
+    with_fresh_config do
+      load initializer.to_s
+      expect(Saltbox::Actions.config.adapters).to eq([:mcp])
+    end
   end
 end
