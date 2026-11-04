@@ -15,7 +15,8 @@ module Saltbox
     # (time_zone). Afterwards, error or not, the attributes the call found
     # are put back as they were, without running any writer, so a writer
     # that sets another attribute (a session= that sets account) cannot
-    # undo one restored before it.
+    # undo one restored before it; the time zone the call found is put
+    # back too, so a writer that sets Time.zone ends with the call.
     #
     # A system caller (Caller.system) keeps the Current around it, such as
     # a job's. An app without a Current is left alone.
@@ -38,12 +39,14 @@ module Saltbox
         current = app_current
         return in_zone(tenant, &) unless current
         found = current.instance.attributes
+        zone = Time.zone
         begin
           current.instance.attributes = current.new.attributes
           assign(current, caller, tenant, invocation_id)
           in_zone(tenant, &)
         ensure
           current.instance.attributes = found
+          Time.zone = zone
         end
       end
 

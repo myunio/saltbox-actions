@@ -998,8 +998,8 @@ run, with nothing for you to write when your app follows these conventions:
    `User`), the tenant under its model's name, `agent` (the agent's stamp,
    `Caller#agent_stamp`), `surface`, `connection` and `invocation_id`. The
    call runs in the tenant's `time_zone`, when it has one. Afterwards, error
-   or not, the attributes the call found are put back as they were, without
-   running a writer. A system caller keeps the `Current` around it.
+   or not, the attributes and the time zone the call found are put back as
+   they were, without running a writer. A system caller keeps the `Current` around it.
 5. **The audit stamp**, under `:paper_trail` (see [PaperTrail](#papertrail)).
 
 A value of your own goes on `Current` in an `around_invocation`, inside the
@@ -1047,7 +1047,8 @@ def current_tenant = current_caller.connection&.organization || super
 
 ```ruby
 # app/endpoints/mcp_endpoint.rb, in call
-caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name, connection: token)
+caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name, connection: token,
+  credential_id: token.id, issued_by: AccessToken)
 ```
 
 Before any tenant is set, the caller is found again (see

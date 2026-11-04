@@ -19,8 +19,8 @@ follows the conventions writes none of it.
 - The app's `Current` is set for the call from a fresh one: the person and
   the tenant under their models' names, `agent` (the stamp), `surface`,
   `connection` and `invocation_id`, each the app's `Current` declares. The
-  call runs in the tenant's `time_zone`. The attributes found are put back
-  afterwards, error or not, without running a writer. A system caller keeps
+  call runs in the tenant's `time_zone`. The attributes and the time zone
+  found are put back afterwards, error or not, without running a writer. A system caller keeps
   its `Current`.
 - `Caller#agent_stamp`: the agent's name, and for a connection its `label`,
   id and `approved_at`.

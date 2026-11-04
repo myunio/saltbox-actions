@@ -114,7 +114,14 @@ RSpec.describe "The gem's built-ins" do
     let(:connection) { Struct.new(:id, :label, :approved_at).new(7, "Office computer", Time.utc(2026, 11, 2, 14)) }
     let(:agent) { Saltbox::Actions::Caller.new(user: member, surface: "mcp", agent_name: "Claude", connection:) }
 
-    before { stub_const("Current", current) }
+    # Each example's Current is a class of its own under the one name, which
+    # CurrentAttributes keeps its instance by, as Rails's test helper clears.
+    before do
+      ActiveSupport::CurrentAttributes.clear_all
+      stub_const("Current", current)
+    end
+
+    after { ActiveSupport::CurrentAttributes.clear_all }
 
     it "sets the person, the tenant, the agent's stamp and the call on a fresh Current" do
       Current.set(session: {member: :outer}, cache: :outer, locale: "fr") do
@@ -138,6 +145,47 @@ RSpec.describe "The gem's built-ins" do
       allow(Org).to receive(:find_or_create_by!).and_return(org)
       expect(within(as_screen(manager)) { Time.zone.name }).to eq("Pacific/Auckland")
       expect(Time.zone.name).to eq("UTC")
+    end
+
+    context "with a writer that sets Time.zone" do
+      let(:current) do
+        Class.new(ActiveSupport::CurrentAttributes) do
+          attribute :member, :fail
+          cattr_accessor :raising
+
+          # A writer that sets the zone, as Rails's guide shows for user=.
+          def member=(value)
+            super
+            Time.zone = "Asia/Tokyo"
+            raise "writer failed" if self.class.raising
+          end
+        end
+      end
+
+      it "ends the writer's zone with the call" do
+        expect(within(agent) { Time.zone.name }).to eq("Asia/Tokyo")
+        expect(Time.zone.name).to eq("UTC")
+      end
+
+      it "ends it when the writer raises, and puts back the Current the call found" do
+        Current.fail = :outer
+        current.raising = true
+        expect { within(agent) { raise "ran" } }.to raise_error("writer failed")
+        expect(Time.zone.name).to eq("UTC")
+        expect(Current.fail).to eq(:outer)
+      ensure
+        current.raising = false
+      end
+
+      it "puts back the zone of the call around a nested one" do
+        zones = within(agent) do
+          Time.zone = "Europe/Paris"
+          within(agent) { nil }
+          Time.zone.name
+        end
+        expect(zones).to eq("Europe/Paris")
+        expect(Time.zone.name).to eq("UTC")
+      end
     end
 
     it "leaves a system caller's Current as it is" do
