@@ -145,7 +145,8 @@ module Saltbox
         # the base class with the model first, it serves every action of
         # that model; declared in an action, it serves that action alone.
         # Called with nothing, it returns the action's summary: its own, else
-        # the nearest base class's for its model, else nil.
+        # its table's (Table), else the nearest base class's for its model,
+        # else nil.
         #
         # @param fields [Array<Class, Symbol>] the model, in the base class only, then the record's own
         #   attributes or methods
@@ -158,7 +159,7 @@ module Saltbox
         #   summary :id, :title
         # @api public
         def summary(*fields, **computed)
-          return @summary || inherited_summary if fields.empty? && computed.empty?
+          return @summary || (table.summary if table.is_a?(Table)) || inherited_summary if fields.empty? && computed.empty?
           return @summary = Summary.build(fields, computed) unless fields.first.is_a?(Class)
           model = fields.shift
           raise ArgumentError, "summary #{model} names no field" if fields.empty? && computed.empty?

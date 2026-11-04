@@ -12,7 +12,11 @@ module Saltbox
         # org), never ActsAsTenant.tenant_klass, which names whichever model
         # declared last. A person with no tenant is refused, never run
         # unscoped. A system caller keeps the tenant around it, such as a
-        # job's. The person is reloaded (Base#refresh_caller) outside any
+        # job's. Inside every call, a query on a tenant's model outside any
+        # tenant raises ActsAsTenant::Errors::NoTenantSet, as acts_as_tenant's
+        # require_tenant does, for that call's thread alone and on top of the
+        # app's own require_tenant; ActsAsTenant.without_tenant still reads
+        # every tenant. The person is reloaded (Base#refresh_caller) outside any
         # tenant, so require_tenant does not refuse the lookup. Approvals
         # (the :approvals adapter) are kept in the same tenant.
         #
@@ -44,6 +48,33 @@ module Saltbox
           # @yield the work, outside any tenant
           # @return [Object] the block's value
           def self.without_tenant(&) = ::ActsAsTenant.without_tenant(&)
+
+          # Where the flag for the running call is kept.
+          STRICT = :saltbox_actions_require_tenant
+
+          # Requires a tenant on every tenant-scoped query inside the block,
+          # on this thread (or fiber) alone.
+          #
+          # @yield the work
+          # @return [Object] the block's value
+          def self.strictly
+            found = ActiveSupport::IsolatedExecutionState[STRICT]
+            ActiveSupport::IsolatedExecutionState[STRICT] = true
+            yield
+          ensure
+            ActiveSupport::IsolatedExecutionState[STRICT] = found
+          end
+
+          # @return [Boolean] whether a call on this thread requires a tenant now
+          def self.strict? = ActiveSupport::IsolatedExecutionState[STRICT] == true
+
+          # Adds the running call's requirement to acts_as_tenant's own.
+          module RequireTenant
+            # @param relation [ActiveRecord::Relation, nil]
+            # @return [Boolean]
+            def should_require_tenant?(relation = nil) = ActsAsTenant.strict? || super
+          end
+          ::ActsAsTenant.singleton_class.prepend(RequireTenant)
         end
       end
     end

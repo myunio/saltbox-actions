@@ -23,6 +23,4 @@ class ApplicationAction < Saltbox::Actions::Base
 
   # Tokens are not checked in the dummy app: every caller stands as it is.
   def refresh_caller = current_caller
-
-  def info_for_paper_trail = {agent: current_caller.agent_name, surface: current_caller.surface, invocation_id:}
 end

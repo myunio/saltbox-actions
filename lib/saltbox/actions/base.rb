@@ -201,10 +201,14 @@ module Saltbox
         result
       end
 
-      # Does the action's work. Every action defines it.
+      # Does the action's work. Every action defines it, but a list action
+      # that declares a table, which renders the table's page (Lists#render_table).
       #
       # @raise [NotImplementedError] when the action does not define it
-      def perform = raise(NotImplementedError, "#{self.class.name} must define perform")
+      def perform
+        return render_table if self.class.table
+        raise NotImplementedError, "#{self.class.name} must define perform"
+      end
 
       private
 

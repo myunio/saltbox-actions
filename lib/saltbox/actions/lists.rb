@@ -6,6 +6,8 @@ module Saltbox
     # (Configuration#list_adapter).
     # - `table` gives a list action the search, sort and filters of one of
     #   the app's tables, the same table its screen shows, and its paging;
+    #   with no perform of its own, the action renders the table's page
+    #   (render_table), summarized for agents as the table declares (Table);
     # - `table_index` runs them. The table's metadata, such as every filter
     #   with its values, can run to kilobytes: a screen always gets it, an
     #   agent only when it sends include_filters as true;
@@ -16,11 +18,6 @@ module Saltbox
     # @example
     #   class Events::ListAction < ApplicationAction
     #     table EventsTable
-    #
-    #     def perform
-    #       @events, @table, @pagination = table_index
-    #       render :index, meta: list_meta
-    #     end
     #   end
     module Lists
       extend ActiveSupport::Concern
@@ -57,6 +54,24 @@ module Saltbox
       end
 
       private
+
+      # What a list action with a table and no perform of its own does: one
+      # page of the table's records, with the associations the table
+      # includes, as the view's instance variable (@events for Event), its
+      # metadata as @table_metadata and its page as @pagination, rendered
+      # with the index template and list_meta.
+      #
+      # @return [void]
+      # @api public
+      def render_table
+        records, = table_index
+        table = self.class.table
+        if table.is_a?(Table) && table.includes.any?
+          ActiveRecord::Associations::Preloader.new(records: records.to_a, associations: table.includes).call
+        end
+        instance_variable_set(:"@#{self.class.model.model_name.plural}", records)
+        render :index, meta: list_meta
+      end
 
       # One page of the table's records, with its metadata and the page, as
       # the app's screen gets them. The table does its own scoping.

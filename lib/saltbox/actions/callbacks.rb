@@ -10,10 +10,19 @@ module Saltbox
     #   transaction: the place for an audit trail's request;
     # - commit callbacks run once a change has committed, never on rollback.
     #
-    # The gem's own come first: the caller is refreshed (Base#refresh_caller),
-    # then each declared adapter's run, in a fixed order whatever the order of
-    # config.adapters, then the app's, in the order its classes declare them.
-    # Raising in a callback refuses the call.
+    # The gem's own come first, in this order, whatever the order of
+    # config.adapters:
+    # 1. every query reads past Active Record's query cache, so a change
+    #    another connection made, such as a revoked token, is seen now;
+    # 2. the caller is refreshed (Base#refresh_caller);
+    # 3. under the :acts_as_tenant adapter, the call runs in the caller's
+    #    tenant, and a query on a tenant's model outside any tenant raises;
+    # 4. the app's Current is set for the caller and restored after
+    #    (AppCurrent), in the tenant's time zone;
+    # 5. under the :paper_trail adapter, the work runs in a PaperTrail
+    #    request stamped with who made each change.
+    # Then the app's, in the order its classes declare them. Raising in a
+    # callback refuses the call.
     #
     # An invocation callback reads the caller (current_caller, current_user,
     # current_tenant), never the action's own declarations: a list or search
@@ -37,8 +46,10 @@ module Saltbox
 
         # The gem's own, declared here once, so they run first and in this
         # order whatever the order of config.adapters.
+        around_invocation :reading_fresh
         before_invocation :apply_refreshed_caller
         around_invocation :with_current_tenant, if: -> { Adapters.declared?(:acts_as_tenant) }
+        around_invocation :with_app_current
         around_perform :with_paper_trail_request, if: -> { Adapters.declared?(:paper_trail) }
       end
 
@@ -123,31 +134,39 @@ module Saltbox
 
       private
 
-      # The caller as they stand now, asked first, before every call,
-      # actions list and search, so a revoked token or ended access stops
-      # the next one. By default:
-      # - a caller holding a credential (credential_id or connection) is
-      #   refused, since only the app knows its tokens: an app that serves
-      #   them defines refresh_caller;
-      # - an Active Record person is reloaded, outside any tenant under the
-      #   :acts_as_tenant adapter, and refused when they are gone;
+      # The caller as they stand now, asked before every call, actions list
+      # and search, so a revoked token or ended access stops the next one.
+      # Nothing for the app to write when it follows the conventions:
+      # - a caller built from a credential names what built it
+      #   (Caller#issued_by), which is asked `revalidate!(caller)` and returns
+      #   the caller as the credential stands now, or nil or raises to
+      #   refuse; a credential caller that names nothing is refused;
+      # - an Active Record person is found again with their class's
+      #   `find_for_actions(id)` when it defines one (nil refuses them, as
+      #   Devise's active_for_authentication? does), else reloaded outside any
+      #   tenant under the :acts_as_tenant adapter, and refused when gone;
       # - any other caller, such as Caller.system's, is kept as it is.
+      # Every read is past the query cache (see reading_fresh).
       #
       # @return [Caller] a new caller; a caller cannot change
       # @raise [Error::Unauthorized]
       #
-      # @example
-      #   def refresh_caller
-      #     fresh = User.active.find_by(id: current_user.id) or raise Error::Unauthorized
-      #     current_caller.with(user: fresh)
+      # @example The person's class
+      #   class User < ApplicationRecord
+      #     def self.find_for_actions(id) = active.find_by(id:)
+      #   end
+      #
+      # @example A token's caller
+      #   ApplicationAction::Caller.new(user: token.user, surface: "api", credential_id: token.id, issued_by: TokenSignIn)
+      #
+      #   module TokenSignIn
+      #     def self.revalidate!(caller) = (token = Token.live.find_by(id: caller.credential_id)) && caller_for(token)
       #   end
       def refresh_caller
-        raise Error::Unauthorized if current_caller.credential_id || current_caller.connection
+        return revalidated_caller if current_caller.credential_id || current_caller.connection
         person = current_user
         return current_caller unless person.is_a?(ActiveRecord::Base) && person.persisted?
-        model = person.class
-        reload = -> { model.uncached { model.find_by(model.primary_key => person.id) } }
-        fresh = Adapters.declared?(:acts_as_tenant) ? Adapters::Tenancy::ActsAsTenant.without_tenant(&reload) : reload.call
+        fresh = person.class.respond_to?(:find_for_actions) ? person.class.find_for_actions(person.id) : reloaded(person)
         fresh ? current_caller.with(user: fresh) : raise(Error::Unauthorized)
       end
 
@@ -167,8 +186,21 @@ module Saltbox
       # @return [Object, nil] the person the :paper_trail adapter stamps on each version: their id
       def user_for_paper_trail = current_user.try(:id)
 
-      # @return [Hash] the columns the :paper_trail adapter sets on each version, beside the person
-      def info_for_paper_trail = {}
+      # The columns the :paper_trail adapter sets on each version, beside the
+      # person: each of these the versions table has, by its name:
+      # - agent: the agent's name (Caller#agent_name);
+      # - agent_via: the agent's stamp (Caller#agent_stamp);
+      # - surface: where the call came from;
+      # - connection_id: the connection behind a token;
+      # - invocation_id: the call's id.
+      #
+      # @return [Hash]
+      def info_for_paper_trail
+        stamp = {agent: current_caller.agent_name, agent_via: current_caller.agent_stamp, surface: current_caller.surface.to_s,
+                 connection_id: current_caller.connection.try(:id), invocation_id:}
+        columns = Adapters::Audit::PaperTrail.columns
+        stamp.select { |column, _| columns.include?(column.to_s) }
+      end
 
       # @param key [String]
       # @return [Boolean] whether the feature is on, as the :flipper adapter asks
@@ -181,11 +213,31 @@ module Saltbox
         @current_caller = fresh
       end
 
-      def with_current_tenant(&)
-        return yield if current_caller.system?
-        tenant = current_tenant or raise Error::Forbidden, "#{Actions.config.app_name} found no tenant for this person, so nothing runs."
-        Adapters::Tenancy::ActsAsTenant.with_tenant(tenant, &)
+      # Every read of the call, the refresh included, goes to the database:
+      # a cached answer could be one from before another connection revoked
+      # the caller's access.
+      def reading_fresh(&) = ActiveRecord::Base.uncached(&)
+
+      def revalidated_caller
+        issuer = current_caller.issued_by or raise Error::Unauthorized
+        issuer.revalidate!(current_caller) || raise(Error::Unauthorized)
       end
+
+      def reloaded(person)
+        model = person.class
+        reload = -> { model.find_by(model.primary_key => person.id) }
+        Adapters.declared?(:acts_as_tenant) ? Adapters::Tenancy::ActsAsTenant.without_tenant(&reload) : reload.call
+      end
+
+      def with_current_tenant(&work)
+        Adapters::Tenancy::ActsAsTenant.strictly do
+          next work.call if current_caller.system?
+          tenant = current_tenant or raise Error::Forbidden, "#{Actions.config.app_name} found no tenant for this person, so nothing runs."
+          Adapters::Tenancy::ActsAsTenant.with_tenant(tenant, &work)
+        end
+      end
+
+      def with_app_current(&) = AppCurrent.set(current_caller, tenant: current_tenant, invocation_id:, &)
 
       def with_paper_trail_request(&) = Adapters::Audit::PaperTrail.request(whodunnit: user_for_paper_trail, controller_info: info_for_paper_trail, &)
     end
