@@ -15,11 +15,14 @@ loads only when your app switches it on:
 | Core: actions, checks, catalog, generators | `rails` (8.0+), `json_schemer` | Always on |
 | Pundit authorization | `pundit` | `:pundit` in `config.adapters` |
 | ActionPolicy authorization | `action_policy` | `:action_policy` in `config.adapters` |
+| Every call in the caller's tenant | `acts_as_tenant` | `:acts_as_tenant` in `config.adapters` |
+| Feature flags on actions | `flipper` | `:flipper` in `config.adapters` |
+| Paging lists | `pagy` (43 or later) | `:pagy` in `config.adapters` |
 | JSON API controller | none | `:controller` in `config.adapters` |
 | MCP server for AI agents | `mcp` | `:mcp` in `config.adapters` |
 | Tools for an in-app RubyLLM chat | `ruby_llm` | `:ruby_llm_tool` in `config.adapters` |
 | Running an action later (`perform_later`) | none (Active Job) | `:invocation_job` in `config.adapters` |
-| PaperTrail versions as changes | `paper_trail` | `:paper_trail` in `config.adapters` |
+| PaperTrail versions as changes, stamped with the caller | `paper_trail` | `:paper_trail` in `config.adapters` |
 | Approvals of agents' `:confirm` calls, in the gem's table | none (Active Record) | `:approvals` in `config.adapters`, then `bin/rails g actions:approvals` |
 | RSpec helpers and matchers | `rspec-rails` | `require "saltbox/actions/adapters/testing/rspec"` in `spec/rails_helper.rb` |
 | Minitest helpers | none | `require "saltbox/actions/adapters/testing/minitest"` in `test/test_helper.rb` |
@@ -32,8 +35,9 @@ Saltbox::Actions.configure do |config|
 end
 ```
 
-An adapter you declare without its gem stops the boot, naming the gem to
-add. Code that uses an adapter you did not declare raises
+The order of the list does not matter: each adapter does its part of a
+call in one fixed place, whatever its position. An adapter you declare
+without its gem stops the boot, naming the gem to add. Code that uses an adapter you did not declare raises
 `Saltbox::Actions::Adapters::NotDeclared`, naming the line to add. Action
 views render with any Rails template handler: the examples use Jbuilder,
 which a new Rails app already has.
@@ -152,25 +156,36 @@ error names the fix.
 ## Install
 
 saltbox-actions needs Ruby 3.4 or later and Rails 8.0 or later. It is not on
-RubyGems yet, so install it from GitHub and pin a commit:
+RubyGems yet, so add it from GitHub, pinned to a release:
 
 ```ruby
 # Gemfile
-gem "saltbox-actions", github: "myunio/saltbox-actions", ref: "<commit sha>"
+gem "saltbox-actions", github: "myunio/saltbox-actions", tag: "v1.3.0"
 ```
 
-Add the gem of each optional part you use (see [What it needs](#what-it-needs)),
-then write the initializer:
+Then run the generator:
 
 ```sh
 bin/rails g actions:install
 ```
 
-It writes `config/initializers/saltbox_actions.rb` with every adapter listed and
-commented out, each with what it does and the gem it needs. Uncomment the
-ones you use.
+It writes two files. The initializer holds the gem's settings, and every
+setting is a value:
 
-Then make a base class for your actions:
+```ruby
+# config/initializers/saltbox_actions.rb
+Saltbox::Actions.configure do |config|
+  config.adapters = [:pundit]
+  config.app_name = "Shelf"
+end
+```
+
+The generated one lists every adapter, commented out, with what it does and
+the gem it needs. Uncomment the ones you use and add their gems (see
+[What it needs](#what-it-needs)).
+
+The base class is what every action shares, as `ApplicationController` is
+for every request:
 
 ```ruby
 # app/actions/application_action.rb
@@ -178,14 +193,35 @@ class ApplicationAction < Saltbox::Actions::Base
 end
 ```
 
-It needs no `include`: declaring `:pundit` or `:action_policy` includes the
-adapter in `Saltbox::Actions::Base`, so every action has it, an engine's own
-base class too, whenever it was defined and after each reload. With neither, every action is allowed and
-`rails actions:check` asks for no policy. To use your own rules, see
-[Authorization](#authorization).
+That is the whole setup. Here is a first action, for an app with a `Book`
+model, a `BookPolicy` and the scaffold's `books/show.json.jbuilder`:
 
-To hear about the records each change writes (see `on_changes` under
-Configuration), include change tracking in your models:
+```ruby
+# app/actions/books/update_action.rb
+class Books::UpdateAction < ApplicationAction
+  def perform
+    book.update!(permitted_attributes(book))
+    render :show
+  end
+end
+```
+
+```ruby
+Books::UpdateAction.perform_now(caller: ApplicationAction::Caller.screen(User.first), id: Book.first.id, title: "Dune")
+```
+
+The base class needs no `include`: declaring `:pundit` or `:action_policy`
+includes the adapter in `Saltbox::Actions::Base`, so every action has it, an
+engine's own base class too, whenever it was defined and after each reload.
+With neither, every action is allowed and `rails actions:check` asks for no
+policy. To use your own rules, see [Authorization](#authorization).
+
+What your app adds to every call goes in the base class too, as it would in
+`ApplicationController`: callbacks, `rescue_from`, and the few methods the
+gem asks (see [The base class](#the-base-class)).
+
+To hear about the records each change writes (see
+[Change tracking](#change-tracking)), include change tracking in your models:
 
 ```ruby
 # app/models/application_record.rb
@@ -214,7 +250,7 @@ person's own tasks, and nobody else's.
 
 ```ruby
 # Gemfile
-gem "saltbox-actions", github: "myunio/saltbox-actions", ref: "<commit sha>"
+gem "saltbox-actions", github: "myunio/saltbox-actions", tag: "v1.3.0"
 gem "pundit"
 gem "mcp"
 ```
@@ -359,8 +395,9 @@ This token can do anything Ada can, changes included: a caller built
 without `scopes:` holds every scope. For a read-only connection, store
 scopes on the token and pass them: `scopes: ["api:read"]`. A delete action
 is `:confirm`: the server refuses it to agents with `confirmation_required`
-until your app's `confirm` hook approves (see Agents). Until it has one,
-deletes run only on screens.
+until the person approves the call, which the `:approvals` adapter keeps
+for them (see [Approvals](#approvals)). Without it, deletes run only on
+screens.
 
 **8. Check it.** With `bin/rails server` running, list the person's tasks
 as an agent would:
@@ -635,11 +672,12 @@ its validations still run on the default.
 
 `paginated` declares the paging inputs a list takes, as attributes: `page`,
 from 1, and `page_size`, from 1 to `max_page_size`. The defaults are
-`config.page_size` (25) and `config.max_page_size` (100), read when the
-action's class loads, as `table` reads `config.list_adapter`. Rails runs
-`config/initializers` before it loads `app/actions`, so set them there. `paginate(records)`
-pages them with your own paging library, through `config.list_adapter`
-(see Lists from a table), and sets `@pagination` for the view:
+`config.page_size` (25) and `config.max_page_size` (100), or Pagy's `limit`
+and `client_limit` under `:pagy`, read when the action's class loads, as
+`table` reads `config.list_adapter`. Rails runs `config/initializers` before
+it loads `app/actions`, so set them there. `paginate(records)` pages them
+through `config.list_adapter`, which is Pagy under `:pagy` (see Lists from a
+table), and sets `@pagination` for the view:
 
 ```ruby
 paginated page_size: 50, max_page_size: 200
@@ -830,7 +868,7 @@ A policy written only for people does not let it through. In the
 walkthrough above, `TaskPolicy` lets it list tasks but finds none, and
 refuses it any one task as `not_found`. A rule that calls a person's
 method on it, such as `user.manager?`, raises `NoMethodError`. So does any
-hook of yours that reads `caller.user`, such as `permissions_held`:
+method of yours that reads the person, such as `self.permissions_held(caller)`:
 answer for `caller.system?` there. `SystemUser#id` is `nil`, so an audit
 trail records no person.
 
@@ -845,57 +883,90 @@ request's credential.
 
 `perform_later` takes a system caller too; the job runs as the app.
 
+### The base class
+
+`ApplicationAction` is where your app shapes every call, as
+`ApplicationController` does for a request. Three kinds of thing go there.
+
+**Callbacks**, declared as `before_action` is, with `if:` and `unless:`:
+
+| Callbacks | Run around | The place for |
+|---|---|---|
+| `before_invocation`, `around_invocation`, `after_invocation` | every call, actions list and `find_action` search | `Current`, the time zone, a rule on a whole surface |
+| `before_perform`, `around_perform`, `after_perform` | the action's own work, outside its transaction | an audit trail's request, a lock |
+| `after_commit` | nothing: it runs once a change has committed, never on rollback or for a read | mail, a broadcast, anything outside the database |
+
+```ruby
+class ApplicationAction < Saltbox::Actions::Base
+  around_invocation :in_time_zone
+  before_invocation :require_chat, if: -> { current_caller.surface.assistant? }
+  after_commit :tell_watchers
+
+  private
+
+  def in_time_zone(&) = Time.use_zone(current_user.time_zone, &)
+  def require_chat = current_user.can_chat? || raise(Error::Forbidden, "Chat is off for you.")
+  def tell_watchers = WatchersMailer.changed(current_user, self.class.action_name).deliver_later
+end
+```
+
+Raising in a callback refuses the call, and so does `throw :abort`, with
+`forbidden`. The gem's own callbacks run first: `refresh_caller`, then each
+declared adapter's, such as the tenant `:acts_as_tenant` sets. Yours run
+after them, in the order you declare them. An actions list or a search has
+no action, so it runs the base class's invocation callbacks on an instance
+of the base class: an invocation callback reads the caller (`current_caller`,
+`current_user`, `current_tenant`), never the action's own declarations.
+
+**`rescue_from`**, for your own errors, as in a controller. A handler raises
+the refusal callers see, or renders an answer:
+
+```ruby
+rescue_from Events::Locked do |error|
+  raise Error.new(error.message, code: :locked, status: :conflict)
+end
+```
+
+Handlers run inside the invocation callbacks, so the tenant and `Current`
+are still set. They are found as a controller finds them: the last one
+declared first, and by an error's `cause` too. The gem's own translations
+are `rescue_from` lines in `Saltbox::Actions::Base`:
+`ActiveRecord::RecordNotFound` is `not_found`, `RecordInvalid` and
+`RecordNotDestroyed` are `validation_failed`, `DeleteRestrictionError` is
+`in_use`, and the authorization adapter's refusal is `forbidden`. A line of
+yours for the same error wins. The gem's own refusals reach your handlers
+too, so a handler for `StandardError` sees them: raise again what it does not
+answer. An error no handler takes stays a 500.
+
+**Methods the gem asks**, each with a default:
+
+| Method | Default | Define it to |
+|---|---|---|
+| `refresh_caller` (private) | Reloads an Active Record person; refuses a caller holding a token | Check that a token is still good (see [The tenant](#the-tenant)) |
+| `current_tenant` | Under `:acts_as_tenant`, the tenant the person's model belongs to | Pick the tenant some other way |
+| `flipper_actors` (private) | Under `:flipper`, the tenant, else the person | Turn features on per person too |
+| `user_for_paper_trail`, `info_for_paper_trail` (private) | The person's id; nothing | Stamp more on each version (see [PaperTrail](#papertrail)) |
+| `self.permissions_held(caller)` | `[]` | Name the permissions a caller holds, which `permission` declarations ask for |
+| `self.with_schema_user` | Yields `nil` | Name the person a schema is built for where there is no caller (see [Authorization](#authorization)) |
+
+`invocation_id` is the call's id, for a log line or an audit stamp.
+
 ### The tenant
 
-In a multi-tenant app, each call runs inside one tenant. Set it, and your
-`Current` attributes, in `around_invocation`, from the caller. Every way in
-runs through it: screens, the API, MCP, jobs and the console.
-
-`Saltbox::Actions.within(caller)` runs the set-up, and every invocation,
-catalog listing and `find_action` search runs inside it, in three steps:
-
-1. `refresh_caller` returns the caller as it stands now, so a revoked token
-   or a person whose access ended stops at the next call. It runs before
-   any tenant is set.
-2. `around_invocation` sets the tenant and `Current` for the refreshed caller.
-3. `check_caller` runs inside the set-up, the place for a rule on a whole
-   surface, such as a permission your chat needs. Raise an `Error` to refuse.
+In a multi-tenant app on acts_as_tenant, declare `:acts_as_tenant`. Every
+call, actions list and `find_action` search then runs in the caller's
+tenant, on screens, the API, MCP, jobs and the console:
 
 ```ruby
-config.refresh_caller { |caller| caller.with(user: User.active.find(caller.user.id)) }
-config.check_caller do |caller|
-  raise Saltbox::Actions::Error::Forbidden if caller.surface == "assistant" && !caller.user.can_chat?
-end
+config.adapters = [:pundit, :acts_as_tenant]
 ```
 
-Here each token belongs to one organization, and the MCP endpoint and
-`current_caller` pass the token as the caller's `connection`. A screen's
-tenant is already set by the request, and a job's by acts_as_tenant, which
-keeps the tenant a job was enqueued in:
-
-```ruby
-# app/models/current.rb
-class Current < ActiveSupport::CurrentAttributes
-  attribute :user
-end
-
-# config/initializers/saltbox_actions.rb
-Saltbox::Actions.configure do |config|
-  config.around_invocation do |caller, run|
-    organization = caller.connection&.organization || ActsAsTenant.current_tenant
-    ActsAsTenant.with_tenant(organization) do
-      Current.set(user: (caller.user unless caller.system?)) { run.call(caller) }
-    end
-  end
-end
-```
-
-```ruby
-# app/endpoints/mcp_endpoint.rb, in call
-caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name, connection: token)
-```
-
-A system caller has no token. Set the tenant around it:
+The tenant is `current_tenant`. By default it is the record the person's
+model belongs to through its `acts_as_tenant` association, such as an
+`Account`'s organization. A person with no tenant is refused with
+`forbidden`, so nothing runs unscoped. A system caller keeps the tenant set
+around it, such as a job's, which acts_as_tenant keeps from when the job was
+enqueued:
 
 ```ruby
 Organization.find_each do |organization|
@@ -905,23 +976,57 @@ Organization.find_each do |organization|
 end
 ```
 
-Without acts_as_tenant, keep the tenant in `Current` the same way. Rails
-resets `Current` before a job runs, so take the tenant from what the caller
-carries, which travels with the job: its token (`caller.connection`), or
-the person (`caller.user`) when each person belongs to one organization.
-
-A back-office action that works across tenants turns the tenant off for
-its run. `around_invocation` sees only the caller, so do it in `around_perform`,
-which sees the action:
+Where the tenant comes from elsewhere, such as the token, define it. Here the
+MCP endpoint and `current_caller` pass the token as the caller's
+`connection`:
 
 ```ruby
-config.around_perform do |invocation, run|
-  next run.call unless invocation.action.outer_namespace == ["admin"]
-  ActsAsTenant.without_tenant { run.call }
+# app/actions/application_action.rb
+def current_tenant = current_caller.connection&.organization || super
+```
+
+```ruby
+# app/endpoints/mcp_endpoint.rb, in call
+caller = ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: token.name, connection: token)
+```
+
+Before any tenant is set, the gem asks `refresh_caller` for the caller as
+they stand now, so a revoked token or a person whose access ended stops at
+the next call. The default reloads an Active Record person, outside any
+tenant, and refuses one who is gone. It refuses a caller holding a token
+(`credential_id` or `connection`), since only your app knows whether the
+token is still good. An app that serves tokens defines it:
+
+```ruby
+# app/actions/application_action.rb
+private
+
+def refresh_caller
+  token = AccessToken.active.find_by(id: current_caller.connection&.id) or raise Error::Unauthorized
+  current_caller.with(user: token.user, connection: token)
 end
 ```
 
-With acts_as_tenant's `require_tenant`, set `schema_user` (see
+Without acts_as_tenant, set the tenant in an `around_invocation` callback,
+from what the caller carries: its token (`caller.connection`), or the person.
+Both travel with a job, and Rails resets `Current` before a job runs.
+
+```ruby
+around_invocation do |_action, block|
+  Current.set(organization: current_user.organization) { block.call }
+end
+```
+
+A back-office action that works across tenants turns the tenant off for its
+run, in an `around_perform`:
+
+```ruby
+around_perform :across_tenants, if: -> { self.class.outer_namespace == ["admin"] }
+
+def across_tenants(&) = ActsAsTenant.without_tenant(&)
+```
+
+With acts_as_tenant's `require_tenant`, define `self.with_schema_user` (see
 Authorization) before you generate a create or update action. The generator
 builds a record to read its fields, which needs a tenant. In specs, create
 records inside `ActsAsTenant.with_tenant`, or set the tenant in a `before`.
@@ -951,30 +1056,15 @@ never runs a destructive action. The committed catalog lists every
 action's rule, so a change to one shows up in review.
 
 `enforce_confirm` is on by default: the server refuses a `:confirm` action
-to every agent until your app approves it. That includes a script on the API:
-every surface but the person's own screen and the app itself counts. With no
-`confirm` hook, every such call gets `confirmation_required`. Say how a person
-approves:
+to every agent until the person approves the call. That includes a script on
+the API: every surface but the person's own screen and the app itself
+counts. The `:approvals` adapter keeps each request until the person
+approves it (see [Approvals](#approvals)). Without it, every such call gets
+`confirmation_required`, so the action runs only on screens.
 
-```ruby
-Saltbox::Actions.configure do |config|
-  config.confirm do |invocation, action|
-    Approval.granted?(invocation.caller.user, action.action_name, invocation.arguments)
-  end
-end
-```
-
-An agent on the API, MCP or a browser page gets `confirmation_required` for a
-`:confirm` action until the hook returns `true`. The hook sees the caller, the
-action and the checked arguments, every default filled in, so what it
-approves is what runs: an approval keyed on `invocation.arguments` does not
-match a later call whose default changed. It can ask the person in your app. It can
-also raise an error of its own, such as
-`Saltbox::Actions::Error::ConfirmationRequired.new("Approve it under Requests in the app")`.
-A person on a screen and the app itself (`Caller.system`) are never asked.
-
-To keep each request in a table until the person approves it, use the
-`:approvals` adapter (see [Approvals](#approvals)).
+An approval is for the call's checked arguments, every default filled in, so
+what the person approves is what runs. A person on a screen and the app
+itself (`Caller.system`) are never asked.
 
 To let agents run `:confirm` actions with nothing checked, on purpose, set
 `config.enforce_confirm = false`. Then the agent is only told to ask first;
@@ -990,7 +1080,7 @@ current_caller.confirm!(Events::PublishAction) if status == "published"
 `confirm!` refuses with `human_required` when that action's `agents`
 bar the caller, and with `confirmation_required` when it is `:confirm` and
 not approved. Call it before the action writes anything: a refusal rolls
-back the change, including anything the hook wrote.
+back the change.
 
 ### The order of refusals
 
@@ -1031,14 +1121,18 @@ Each refusal is a class under `ApplicationAction::Error`, whose code is its
 name in snake case: `Unauthorized`, `Forbidden`, `HumanRequired`,
 `ConfirmationRequired`, `InsufficientScope`, `NotFound`, `UnknownAction`,
 `ValidationFailed` and `InUse` (a delete that other records still depend on,
-from Active Record's `DeleteRestrictionError`). Three build a refusal for you:
+from Active Record's `DeleteRestrictionError`). Two more name what was
+refused, and keep their parent's code: `OutsideAccess`, an
+`InsufficientScope` (see [Limit what a connection reaches](#limit-what-a-connection-reaches)),
+and `ForbiddenFields`, a `Forbidden` (see [Authorization](#authorization)).
+Three build a refusal for you:
 
 - `Error::ValidationFailed.for(record.errors, fallback: "Could not save")`:
   the full messages, and the errors by field;
 - `Error::ValidationFailed.from_result(result)`: a failed result object's
   `errors`, joined as the message, with no field errors;
-- `Error::Forbidden.for_fields(%w[notes])`: fields the person sent but may not
-  change.
+- `Error::ForbiddenFields.new(fields: %w[notes])`: fields the person sent but
+  may not change.
 
 ### Limit what a connection reaches
 
@@ -1063,16 +1157,15 @@ ApplicationAction::Caller.new(user: token.user, surface: "mcp", agent_name: "Cla
 
 The caller then sees only those actions. The catalog, `find_action` and the
 MCP tools leave the rest out, and a call to one of them is refused with
-`insufficient_scope`. The default message talks about read-only tokens, so
-set `on_access_refused` to say what happened in your words. It is also the
-place to note the refusal:
+`Error::OutsideAccess`: an `insufficient_scope` that names the action, its
+area and the level it needs, in its details as
+`{"area": "events", "needs": "change"}`. To say what happened in your words,
+or to note the refusal, rescue it. The handler runs in the caller's tenant:
 
 ```ruby
-# config/initializers/saltbox_actions.rb
-Saltbox::Actions.configure do |config|
-  config.on_access_refused do |caller, action|
-    Saltbox::Actions::Error::InsufficientScope.new("This connection may not use #{action.title}. Allow it in Settings.")
-  end
+# app/actions/application_action.rb
+rescue_from Error::OutsideAccess do |error|
+  raise Error::InsufficientScope, "This connection may not use #{error.action.title}. Allow it in Settings."
 end
 ```
 
@@ -1229,7 +1322,10 @@ Your screens may list records through a table library of your own: one
 definition of a list's search, sort, filters and columns. A list action can
 use the same table, so agents search and filter the way the screen does.
 `config.list_adapter` connects the gem to your table and paging libraries.
-It answers six methods:
+Under `:pagy` it is Pagy, which pages a list with nothing more to write; a
+table adapter of your own can extend it for its paging
+(`extend Saltbox::Actions::Adapters::Lists::Pagy`) and add the table's four
+methods. Without Pagy, it answers six methods:
 
 ```ruby
 # app/actions/list_adapter.rb
@@ -1473,9 +1569,6 @@ mapped too. `Areas` also answers `names`, `area_for(type)`,
 `for_model!(type)`, `metadata?(area, type)` and, inside
 `Saltbox::Actions.within`, `readable?(area, caller)`.
 
-`config.area_for { |model| ... }` takes the place of `areas` when an app
-works out an action's area its own way.
-
 ### In-app assistant
 
 With `:ruby_llm_tool` declared, `Saltbox::Actions::Adapters::EntryPoints::RubyLLMTool`
@@ -1618,31 +1711,32 @@ policy has `permitted_attributes` may not also list fields with `accepts`:
 `rails actions:check` says so.
 
 Each caller's input schema lists the fields the policy permits that caller.
-The policy is asked with the real person, inside `around_invocation`, so a
-tenant is set. Two callers whose policy permits different fields see
+The policy is asked with the real person, inside the invocation callbacks,
+so a tenant is set. Two callers whose policy permits different fields see
 different schemas. A field of the model the caller may not set is refused
-as forbidden: "You can't change notes."
-
-To word that refusal yourself, set `on_forbidden_fields`. It gets the
-caller, the action and the fields they sent but may not set, and returns
-the error to raise:
+with `Error::ForbiddenFields`, a `forbidden` worded by your
+`actions.errors.forbidden_fields` and `actions.errors.forbidden_field`
+translations: "You can't change notes." To word it from your own data,
+rescue it:
 
 ```ruby
-config.on_forbidden_fields do |caller, action, fields|
-  Saltbox::Actions::Error::Forbidden.new("Your role, #{caller.user.role_name}, can't change #{fields.to_sentence}.",
-    errors: fields.index_with { ["your role can't change this"] })
+# app/actions/application_action.rb
+rescue_from Error::ForbiddenFields do |error|
+  raise Error::Forbidden.new("Your role, #{current_user.role_name}, can't change #{error.fields.to_sentence}.",
+    errors: error.fields.index_with { ["your role can't change this"] })
 end
 ```
 
 Some places have no caller: the committed catalog, `rails actions:check`
 and the registry spec, the generator's field list, and
 `be_invalid_against_schema` or `assert_invalid_against_schema` without `as:`.
-They build the schema for `config.schema_user`, a person who may set
-every field. Without it the policy is asked with no person. If your policy
-needs a person or a tenant, set it:
+They build the schema for the person `self.with_schema_user` yields, one
+who may set every field. By default it yields `nil`, and the policy is asked
+with no person. If your policy needs a person or a tenant, define it:
 
 ```ruby
-config.schema_user { |run| ActsAsTenant.without_tenant { run.call(User.new(admin: true)) } }
+# app/actions/application_action.rb
+def self.with_schema_user = ActsAsTenant.without_tenant { yield User.new(admin: true) }
 ```
 
 With neither, every action is allowed: `authorize` and `policy_scope` pass
@@ -1710,9 +1804,12 @@ your rules need; the rest keep the allow-everything defaults.
 | `supplies_fields?` | class | Whether the adapter says which fields a person may set. When true, a create or update takes the fields below, and `accepts` is refused. Default: false. |
 | `scoped_records(model)` | action | The records the person may pick for a `belongs_to` field. |
 | `permitted?(user)` | class | Whether the person may run the action at all, before any record loads. Decides the actions list too. |
-| `permitted_attribute_names_for(user, record)` | class | The fields a create or update takes, for the input schema. The user is the caller's; where there is no caller it is `schema_user`'s, or `nil`, and `record` a record or a model class. |
-| `authorization_errors` | class | Your refusal's exception classes. They are answered as `forbidden`. |
+| `permitted_attribute_names_for(user, record)` | class | The fields a create or update takes, for the input schema. The user is the caller's; where there is no caller it is the one `with_schema_user` yields, and `record` a record or a model class. |
 | `authorization_problems` | class | What `rails actions:check` should report, such as a missing rule. Default: nothing. |
+
+Answer your refusal's exception as `forbidden` with a `rescue_from` in the
+concern's `included` block, as the Pundit adapter does for
+`Pundit::NotAuthorizedError`.
 
 Here the models answer for themselves: `Event.visible_to(user)` is a scope,
 `user.can?(:update?, event)` decides each rule, and
@@ -1725,11 +1822,14 @@ module ApplicationAction::ModelAuthorization
 
   class NotAllowed < StandardError; end
 
+  included do
+    rescue_from(NotAllowed) { raise Saltbox::Actions::Error::Forbidden }
+  end
+
   class_methods do
     def permitted?(user) = user.present?
     def supplies_fields? = true
     def permitted_attribute_names_for(user, record) = (record.is_a?(Class) ? record : record.class).writable_attributes(user)
-    def authorization_errors = [NotAllowed]
   end
 
   def authorize(record, rule = nil)
@@ -1777,7 +1877,7 @@ It notes only what runs those callbacks. These are not noted:
   `upsert_all`, `update_column(s)` and raw SQL;
 - `touch`, unless PaperTrail writes a version for it;
 - writes made in `before_commit` or `after_commit` callbacks, which run
-  after `on_changes`.
+  after the changes are announced.
 
 Note such a write yourself, inside the action:
 
@@ -1786,9 +1886,29 @@ Event.where(id: ids).update_all(status: "cancelled")
 ids.each { Saltbox::Actions::Invocation.note("Event", it, "update") }
 ```
 
-`on_changes` runs before commit. If the caller's own transaction later
-rolls back, the changes it heard of are undone; do anything outside the
-database in `after_change_commit`.
+Each change's records are announced as the `changes.saltbox_actions`
+notification, inside the change's transaction, once every record is noted:
+
+```ruby
+# config/initializers/action_changes.rb
+ActiveSupport::Notifications.subscribe("changes.saltbox_actions") do |event|
+  event.payload => {action:, caller:, changes:, invocation_id:}
+  ChangeLog.record!(action.action_name, caller.user, changes, invocation_id)
+end
+```
+
+| Key | Holds |
+|---|---|
+| `action` | The action class |
+| `caller` | The caller, as `refresh_caller` returned them |
+| `changes` | Each changed record's type, id and event, once: `[["Event", "12", "update"]]` |
+| `invocation_id` | The call's id |
+
+A subscriber runs inside the transaction. What it writes commits with the
+change, and an exception it raises rolls the change back and reaches the
+caller. If the caller's own transaction later rolls back, what it wrote is
+undone too, so do anything outside the database in an `after_commit`
+callback (see [The base class](#the-base-class)).
 
 Using another audit gem, such as Audited or Logidze? Skip the concern and
 note each entry it writes yourself:
@@ -1805,26 +1925,21 @@ model's transaction: `transaction: Entry.current_transaction`.
 ### PaperTrail
 
 With `:paper_trail` declared, every version an action writes is also noted
-as a change. To have each version record the person, the agent and the
-surface, wrap each run in a PaperTrail request:
+as a change, and each action runs inside a PaperTrail request, as a
+controller action does. Its `whodunnit` is `user_for_paper_trail`, the
+person's id, and its `controller_info` is `info_for_paper_trail`. To record
+the agent and the surface too, give `versions` a column for each and define
+the method:
 
 ```ruby
-# config/initializers/saltbox_actions.rb
-Saltbox::Actions.configure do |config|
-  config.adapters = [:pundit, :paper_trail]
+# app/actions/application_action.rb
+private
 
-  config.around_perform do |invocation, run|
-    Saltbox::Actions::Adapters::Audit::PaperTrail.request(invocation, agent: invocation.caller.agent_name) { run.call }
-  end
-end
+def info_for_paper_trail = {agent: current_caller.agent_name, surface: current_caller.surface.to_s, invocation_id:}
 ```
 
-The wrapper stays yours to write: what each version records depends on the
-columns your `versions` table has, and `Caller.system`'s user has no id.
-
-Each keyword after `invocation` goes to PaperTrail's `controller_info`, so a
-richer agent stamp (the machine, the connection) goes there, with a column on
-`versions` for each.
+`Caller.system`'s user has no id, so a job's versions record no person
+unless `user_for_paper_trail` names one.
 
 ### Approvals
 
@@ -1843,7 +1958,8 @@ Name your classes, then write the table's migration:
 # config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
   config.adapters = [:pundit, :approvals]
-  config.approvals = {user: "User", tenant: "Org", connection: "Oauth::Connection"}
+  config.approvals = {user: "User", name: :full_name, tenant: "Org", connection: "Oauth::Connection",
+    url: "https://events.example.com/settings/approvals"}
 end
 ```
 
@@ -1853,22 +1969,33 @@ bin/rails db:migrate
 ```
 
 - `user` is the caller's user's class, the person who approves.
+- `name`, optional, is the method that names the person to the agent;
+  `to_s` by default.
 - `tenant`, optional, keeps every approval in one tenant: it is saved with
-  the current tenant, and a call or a screen in another tenant never sees or
-  redeems it. The current tenant is acts_as_tenant's, or give
-  `current_tenant: -> { Current.org }`. With a tenant and none set, the call
-  is refused with an error, never saved without one.
+  acts_as_tenant's current tenant, which `:acts_as_tenant` sets for every
+  call, and a call or a screen in another tenant never sees or redeems it.
+  With a tenant and none set, the call is refused with an error, never saved
+  without one.
 - `connection`, optional, is the class of the caller's `connection`. The
   migration then gives it a foreign key that removes a connection's
   approvals with it.
-- `message`, optional, takes the request and returns what the agent is told
-  until the person approves:
-  `message: ->(approval) { "Approve it under Settings, Connections, then call it again." }`.
+- `url`, optional, is where the person approves.
+
+Until the person approves, the agent is told your
+`actions.errors.approval_needed` translation, given the person as `%{user}`,
+`%{app}` and `%{url}`:
+
+```yaml
+# config/locales/actions.en.yml
+en:
+  actions:
+    errors:
+      approval_needed: "Ask %{user} to approve this in %{app}, at %{url}. Then call it again with the same arguments."
+```
 
 The migration's foreign keys point at each class's table; the key type
 follows your `config.generators` (`primary_key_type: :uuid`), or
-`--primary-key-type`. With `:approvals` declared, `Approval.redeem!` is the
-`confirm` hook unless you set your own.
+`--primary-key-type`.
 
 A request refused inside a change, by `current_caller.confirm!`, is saved
 after the change rolls back, so the person still has it to approve.
@@ -2121,51 +2248,37 @@ Writing it needs the database, like `actions:check`.
 
 ## Configuration
 
-Every setting has a default that works for a plain Rails app. Set only what
-you need:
+Every setting is a value, with a default that works for a plain Rails app.
+What runs around a call, and how your errors reach callers, is your base
+class's (see [The base class](#the-base-class)). Set only what you need:
 
 ```ruby
 # config/initializers/saltbox_actions.rb
 Saltbox::Actions.configure do |config|
-  # The optional adapters to load (see What it needs).
-  config.adapters = [:pundit, :controller, :mcp]
+  # The optional adapters to load, in any order (see What it needs).
+  config.adapters = [:pundit, :acts_as_tenant, :controller, :mcp]
 
   config.app_name = "Events"   # used in tool titles and default messages
   # Sent to MCP agents after the gem's sentence on record data.
-  config.instructions = "Events keeps a team's events. Use find_action for anything not listed."
-
-  # Run each call inside your own context: tenant, time zone, Current (see The tenant).
-  config.refresh_caller { |caller| caller.with(user: User.active.find(caller.user.id)) }
-  config.around_invocation { |caller, run| Current.set(user: caller.user) { run.call(caller) } }
+  config.instructions = Rails.root.join("config/agent_instructions.md").read
 
   # Each area's models (see Areas), and the lookup lists a field may name by name (see Input).
   config.areas = {"events" => {models: %w[Event]}}
   config.lookup_lists = %w[Event::Type]
 
-  # What lists page and tables query with (see Lists from a table).
+  # What tables query with (see Lists from a table). Under :pagy it is Pagy.
   config.list_adapter = "ListAdapter"
 
-  # Hear about every changed record, inside the transaction (see Change tracking).
-  config.on_changes { |changes, invocation| EventLog.record(changes, invocation.caller) }
-
-  # Run something once the change has committed. Never runs on rollback.
-  config.after_change_commit { |invocation, result| }
-
-  config.feature_enabled { |key, caller| Flipper.enabled?(key, caller.user) }
-  config.permissions_held { |caller| caller.user.permission_keys }
-
-  # Turn your own errors into ones callers see.
-  config.map_error("Events::Locked") { |error| Saltbox::Actions::Error.new(error.message, code: :locked) }
-
-  # Add a check of your own, run by rails actions:check.
-  config.check_action { |action| action.description ? [] : ["write a description"] }
+  # The most items an array input may hold.
+  config.max_array_items = 100
 end
 ```
 
 Other settings include `scopes` (default `api:read` and `api:write`),
 `action_paths` (the folders actions load from), `strict_action_paths`,
-`catalog_path`, `enforce_confirm` (on by default) with `confirm` (see Agents),
-`around_perform`, `schema_user`, `error_format` and `result_format`. See
+`catalog_path`, `page_size` and `max_page_size` (see Input), `require_area`
+(see Areas), `approvals` (see Approvals), `enforce_confirm` (on by default;
+see Agents), `enforce_permissions`, `error_format` and `result_format`. See
 `lib/saltbox/actions/configuration.rb` for each one.
 
 ## Known limits

@@ -245,7 +245,7 @@ module Saltbox
 
             # Passes when the action's input schema refuses the arguments, before
             # any caller is checked. Without `as:` it is the catalog's schema,
-            # built for Configuration#schema_user; pass a caller when the
+            # built for the person with_schema_user yields; pass a caller when the
             # policy needs a person, or to check that caller's fields.
             #
             # @example

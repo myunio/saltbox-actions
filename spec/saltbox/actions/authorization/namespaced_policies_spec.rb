@@ -369,6 +369,7 @@ RSpec.describe "Namespaced policies" do
       })
       stub_const("PolicyAction", Class.new(Saltbox::Actions::Base) {
         include DummyBase
+
         define_verb :export, kind: :read, plural: true
       })
     end

@@ -97,6 +97,7 @@ RSpec.describe "Running as a caller" do
       end
       action = Class.new(base) do
         def self.name = "Events::UpdateAction"
+
         def perform
           event.update!(permitted_attributes(event))
           head :no_content

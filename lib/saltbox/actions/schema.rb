@@ -106,8 +106,8 @@ module Saltbox
         # The input schema for one caller. A create or update lists the
         # fields the authorization adapter permits that caller, so two callers
         # see different schemas when their policy permits different fields.
-        # Without a caller it is the catalog's schema, built for
-        # Configuration#schema_user.
+        # Without a caller it is the catalog's schema, built for the person
+        # the base class's with_schema_user yields.
         #
         # @param caller [Caller, nil]
         # @return [Hash]
@@ -124,11 +124,11 @@ module Saltbox
         # each time; the Input is built once per action, per list of fields
         # and per locale, then shared by every caller with the same list, so
         # one caller's fields never reach another's schema. Run it inside the
-        # caller's Configuration#around_invocation, where the policy's tenant
-        # is set: every surface does. Permitting#permitted_attributes checks
+        # caller's invocation callbacks, where the policy's tenant is set:
+        # every surface does. Permitting#permitted_attributes checks
         # the fields against the real record again.
         #
-        # @param caller [Caller, nil] nil for the catalog's schema (Configuration#schema_user)
+        # @param caller [Caller, nil] nil for the catalog's schema (with_schema_user)
         # @return [Input]
         # @api private
         def input(caller = nil)
