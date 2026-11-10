@@ -10,6 +10,8 @@ module Saltbox
     # - a field the schema does not list;
     # - a value of the wrong type, or a number its type cannot hold;
     # - a missing required field.
+    # A field inside a list or an object is named by its path, such as
+    # payments.1.amount, so a form can show the message on that item's row.
     # @api private
     class Arguments
       # @param schema [Hash] a closed JSON Schema object
@@ -102,11 +104,19 @@ module Saltbox
 
       def field_errors(failures)
         failures.each_with_object({}) do |error, result|
-          names = error["data_pointer"].split("/")[1]&.then { |part| [part.gsub("~1", "/").gsub("~0", "~")] }
-          names ||= error.dig("details", "missing_keys") || ["arguments"]
+          path = path(error)
+          missing = error.dig("details", "missing_keys")
+          names = if missing then missing.map { [*path, it].join(".") }
+          elsif path.any? then [path.join(".")]
+          else ["arguments"]
+          end
           names.each { |name| (result[name] ||= []) << message(name, error) }
         end
       end
+
+      # The segments of the field a failure is about, from its JSON Pointer:
+      # ["payments", "1", "amount"] for /payments/1/amount.
+      def path(error) = error["data_pointer"].split("/").drop(1).map { it.gsub("~1", "/").gsub("~0", "~") }
 
       def message(name, error)
         return "#{@name} takes no id; declare attribute :id" if name == "id" && @name && !@schema.fetch("properties").key?("id")
@@ -118,7 +128,7 @@ module Saltbox
       # the schema does not list, which fields it does.
       def sentence(error)
         return error["error"] unless unknown?(error)
-        name = error["data_pointer"].delete_prefix("/").gsub("~1", "/").gsub("~0", "~")
+        name = path(error).join(".")
         "#{@name || "The action"} does not take #{name}. It #{takes}."
       end
 

@@ -76,7 +76,7 @@ module Saltbox
       end
 
       def refuse_reference!(field, message, detail = message)
-        raise Error::ValidationFailed.new("#{field.humanize} #{message}", errors: {field => [detail]})
+        raise Error::ValidationFailed.new("#{field.split(".").last.humanize} #{message}", errors: {field => [detail]})
       end
 
       # @param fields [Array<String>] the fields sent that the person may not change

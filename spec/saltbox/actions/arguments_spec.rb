@@ -24,6 +24,25 @@ RSpec.describe Saltbox::Actions::Arguments do
       .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors["id"]).to eq(["list_events takes no id; declare attribute :id"]) }
   end
 
+  describe "a list of records" do
+    let(:checker) do
+      payment = {"type" => "object", "properties" => {"amount" => {"type" => "number"}, "paid_on" => {"type" => "string", "format" => "date"}},
+                 "required" => ["amount"], "additionalProperties" => false}
+      described_class.new({"type" => "object", "properties" => {"payments" => {"type" => "array", "items" => payment}},
+                           "required" => [], "additionalProperties" => false})
+    end
+
+    it "names a field of an item by the item's place in the list and the field, such as payments.1.paid_on" do
+      expect { checker.validate!(payments: [{amount: 1}, {amount: 2, paid_on: "soon"}]) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["payments.1.paid_on"]) }
+    end
+
+    it "names an item's missing field and a field the item does not take by their paths" do
+      expect { checker.validate!(payments: [{paid_on: "2026-11-01"}, {amount: 1, amount_cents: 100}]) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to contain_exactly("payments.0.amount", "payments.1.amount_cents") }
+    end
+  end
+
   it "fills in a declared default for an argument left out or sent as null" do
     schema = {"type" => "object", "properties" => {"limit" => {"type" => "integer", "default" => 25}}, "required" => [], "additionalProperties" => false}
     checker = described_class.new(schema)
