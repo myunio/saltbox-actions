@@ -10,6 +10,9 @@ module Saltbox
     # - a field the schema does not list;
     # - a value of the wrong type, or a number its type cannot hold;
     # - a missing required field.
+    # A field inside a list or an object is named by its path, such as
+    # payments.1.amount, so a form can show the message on that item's row.
+    # A dot inside one name is escaped (Arguments.key).
     # @api private
     class Arguments
       # @param schema [Hash] a closed JSON Schema object
@@ -69,7 +72,7 @@ module Saltbox
         failures = schemer.validate(arguments).to_a
         errors = field_errors(failures)
         out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
-        out_of_range.each { (errors[it] ||= []) << "is out of range" }
+        out_of_range.each { (errors[self.class.key([it])] ||= []) << "is out of range" }
         messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it}` is out of range" }
         raise Error::ValidationFailed.new(messages.join("; "), errors:) if errors.any?
         Current.arguments_checked = true
@@ -78,6 +81,26 @@ module Saltbox
 
       # @return [Concurrent::Map] compiled JSON Schema checkers, cached by schema
       def self.schemers = @schemers ||= Concurrent::Map.new
+
+      # The key a field's errors are listed under: its path joined with
+      # dots, such as payments.1.amount. A dot or a backslash inside one
+      # name is escaped with a backslash, so a field named a.b (a\.b) never
+      # shares a key with field b inside a (a.b).
+      #
+      # @param path [Array<String, Integer>] the field's names and list positions, outermost first
+      # @return [String]
+      #
+      # @example
+      #   Arguments.key(["payments", 1, "amount"]) # => "payments.1.amount"
+      #   Arguments.key(["v1.2"])                  # => "v1\\.2"
+      # @api public
+      def self.key(path) = path.map { it.to_s.gsub(/[\\.]/) { "\\#{it}" } }.join(".")
+
+      # The last name in a key, unescaped: amount for payments.1.amount.
+      #
+      # @param key [String] a key from Arguments.key
+      # @return [String]
+      def self.last_name(key) = key.scan(/(?:\\.|[^\\.])+/).last.to_s.gsub(/\\(.)/, '\1')
 
       private
 
@@ -102,11 +125,19 @@ module Saltbox
 
       def field_errors(failures)
         failures.each_with_object({}) do |error, result|
-          names = error["data_pointer"].split("/")[1]&.then { |part| [part.gsub("~1", "/").gsub("~0", "~")] }
-          names ||= error.dig("details", "missing_keys") || ["arguments"]
+          path = path(error)
+          missing = error.dig("details", "missing_keys")
+          names = if missing then missing.map { self.class.key([*path, it]) }
+          elsif path.any? then [self.class.key(path)]
+          else ["arguments"]
+          end
           names.each { |name| (result[name] ||= []) << message(name, error) }
         end
       end
+
+      # The segments of the field a failure is about, from its JSON Pointer:
+      # ["payments", "1", "amount"] for /payments/1/amount.
+      def path(error) = error["data_pointer"].split("/").drop(1).map { it.gsub("~1", "/").gsub("~0", "~") }
 
       def message(name, error)
         return "#{@name} takes no id; declare attribute :id" if name == "id" && @name && !@schema.fetch("properties").key?("id")
@@ -118,7 +149,7 @@ module Saltbox
       # the schema does not list, which fields it does.
       def sentence(error)
         return error["error"] unless unknown?(error)
-        name = error["data_pointer"].delete_prefix("/").gsub("~1", "/").gsub("~0", "~")
+        name = self.class.key(path(error))
         "#{@name || "The action"} does not take #{name}. It #{takes}."
       end
 

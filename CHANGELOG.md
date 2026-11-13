@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.0.0 (unreleased)
+
+A refusal about one item in a list names that item, so a form can show
+it on the item's row. A caller that reads a list's errors under the
+argument's name (`errors["payments"]`) must read them under the item's
+path instead.
+
+- A field inside a list or an object is named by its path, joined with
+  dots: `payments.1.amount` for a wrong type or a field the item does
+  not take, and `payments.0.amount` for an item's missing field. Before,
+  each was named by its argument alone (`payments`).
+- `resolve_reference(model, value, field: "payments.0.payment_method")`
+  refuses under that path, and its message names only the last part:
+  "Payment method isn't one of the payment methods".
+- `Error::ValidationFailed.from_result(result, errors:)` carries a
+  service's errors by field. A result whose errors are a Hash, such as
+  `{reason: ["Reason is required"]}`, keeps its fields too, and its
+  messages are joined as the message.
+- A dot or a backslash inside a field's name is escaped with a
+  backslash in its key, so a field named `a.b` (`a\.b`) never shares a
+  key with field `b` inside `a` (`a.b`). An app with a dotted field name
+  reads its errors under the escaped key; before, they were under
+  `a.b`. `Arguments.key(["rows", 0, "v1.2"])` builds a key, such as a
+  `resolve_reference` path.
+
 ## 1.4.0 (2026-11-04)
 
 The gem takes on what every app wrote around its actions. An app that

@@ -96,7 +96,7 @@ module Saltbox
           @fields = fields
           message ||= I18n.t("actions.errors.forbidden_fields", fields: fields.to_sentence, default: "You can't change %{fields}.")
           field = I18n.t("actions.errors.forbidden_field", default: "you can't change this")
-          super(message, errors: fields.index_with { [field] }, **options)
+          super(message, errors: fields.to_h { [Arguments.key([it]), [field]] }, **options)
         end
       end
 
@@ -189,12 +189,28 @@ module Saltbox
         self.default_message = "The arguments are not valid."
 
         # A failed result object as a refusal, with the result's errors
-        # joined as the message and no field errors. Raised inside a change,
-        # it rolls back everything the action wrote.
+        # joined as the message. Errors given by field, as a Hash, keep their
+        # fields, so a form can show each on its input; so do the field
+        # errors passed in, such as a service's {"payments.1.amount" => [...]}.
+        # Raised inside a change, it rolls back everything the action wrote.
         #
-        # @param result [#errors] a failure, whose errors are strings
+        # @param result [#errors] a failure, whose errors are strings, or
+        #   strings by field
+        # @param errors [Hash{String => Array<String>}, nil] errors by field
+        #   to carry, in place of a Hash failure's own
         # @return [ValidationFailed]
-        def self.from_result(result) = new(Array(result.errors).join("; ").presence)
+        #
+        # @example
+        #   failure = Struct.new(:errors).new({reason: ["Reason is required"]})
+        #   Error::ValidationFailed.from_result(failure).errors # => {"reason" => ["Reason is required"]}
+        def self.from_result(result, errors: nil)
+          messages = result.errors
+          if messages.is_a?(Hash)
+            errors ||= messages
+            messages = messages.values.flatten
+          end
+          new(Array(messages).join("; ").presence, errors: errors&.to_h { |field, list| [field.to_s, Array(list)] }.presence)
+        end
 
         # The refusal for an action's or a record's validation errors: the
         # full messages, in the person's language, and the errors by field,

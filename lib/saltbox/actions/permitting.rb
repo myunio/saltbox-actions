@@ -32,7 +32,7 @@ module Saltbox
         refuse_forbidden_fields!(forbidden) if forbidden.any?
         sent.to_h do |name, field|
           value = params[name]
-          [field.key, (field.reference && !value.nil?) ? resolve_reference(field.reference, value, field: name) : value]
+          [field.key, (field.reference && !value.nil?) ? resolve_reference(field.reference, value, field: Arguments.key([name])) : value]
         end.with_indifferent_access
       end
 
@@ -50,7 +50,8 @@ module Saltbox
       #
       # @param model [Class<ActiveRecord::Base>]
       # @param value [String, nil] the id sent, or a lookup entry's name
-      # @param field [String] the name it was sent under
+      # @param field [String] the key its errors go under: the name it was sent under, or its
+      #   path inside a list, such as payments.0.payment_method (Arguments.key builds one)
       # @return [Object, nil] the record's id, or nil when the value is nil
       # @raise [Error::ValidationFailed] when there is no such record the person can see
       # @api public
@@ -76,7 +77,7 @@ module Saltbox
       end
 
       def refuse_reference!(field, message, detail = message)
-        raise Error::ValidationFailed.new("#{field.humanize} #{message}", errors: {field => [detail]})
+        raise Error::ValidationFailed.new("#{Arguments.last_name(field).humanize} #{message}", errors: {field => [detail]})
       end
 
       # @param fields [Array<String>] the fields sent that the person may not change

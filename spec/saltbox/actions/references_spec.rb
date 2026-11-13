@@ -9,16 +9,19 @@ RSpec.describe "Resolving a reference" do
       policy_rule :show?
       attribute :target, :string
       attribute :value, :string
+      attribute :field, :string
 
       def perform
         skip_authorization
         skip_policy_scope
-        render json: {"id" => resolve_reference(target.constantize, value, field: "kind")}
+        render json: {"id" => resolve_reference(target.constantize, value, field: field || "kind")}
       end
     end
   end
   let(:resolve) do
-    ->(model, value, caller: as_screen(manager)) { Saltbox::Actions::Invocation.call(action: pick, caller:, arguments: {target: model.name, value:}).body["id"] }
+    ->(model, value, caller: as_screen(manager), field: nil) {
+      Saltbox::Actions::Invocation.call(action: pick, caller:, arguments: {target: model.name, value:, field:}.compact).body["id"]
+    }
   end
 
   around do |example|
@@ -48,6 +51,14 @@ RSpec.describe "Resolving a reference" do
     I18n.backend.reload!
     twin = EventKind.create!(name: "picnic")
     expect { resolve.call(EventKind, "Picnic") }.to raise_error(Saltbox::Actions::Error::ValidationFailed, /matches more than one: .*\(#{twin.id}\)/)
+  end
+
+  it "refuses a reference inside a list under its path, naming only the field in the message" do
+    EventKind.create!(name: "Picnic")
+    expect { resolve.call(EventKind, "Dance", field: "events.1.kind") }.to raise_error(Saltbox::Actions::Error::ValidationFailed) { |error|
+      expect(error.message).to eq("Kind isn't one of the event kinds")
+      expect(error.errors).to eq("events.1.kind" => ["must be one of: Picnic"])
+    }
   end
 
   it "finds any other record by id only, through the person's policy scope" do

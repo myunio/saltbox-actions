@@ -626,6 +626,9 @@ An unknown name is refused with the names that would work, and a name two
 entries share with both. Word the refusal in the locale file, such as
 `actions.errors.not_in_lookup_list: "isn't one of the club's %{plural}"`. An attribute that names a record looks it up
 the same way, with `resolve_reference(PaymentMethod, payment_method, field: "payment_method")`.
+For a record named inside a list, pass its path, such as
+`field: "payments.#{index}.payment_method"`: the refusal is under that path,
+and its message names only the field.
 
 **Attributes.** Any other input is an Active Model attribute. `perform`
 reads it as a method: `reason`, not `params[:reason]`. A typo is a
@@ -640,6 +643,10 @@ attribute :payments, :array, of: {amount: :decimal, paid_on: :date}
 
 The types are `:string`, `:integer`, `:decimal`, `:boolean`, `:date`,
 `:datetime`, `:time` (a time of day, `"HH:MM"` from `00:00` to `23:59`), `:array` and `:hash`.
+A refusal about one item in a list is named by its path, joined with
+dots, such as `payments.1.amount`, so a form can show it on the item's row.
+A dot inside one name is escaped with a backslash (`v1\.2`), so a field
+named `a.b` never shares a key with field `b` inside `a`.
 `nullable: true` lets `null` clear a value; otherwise `null` counts as left
 out, since agents often send it for a field they skip.
 
@@ -1176,8 +1183,9 @@ Three build a refusal for you:
 
 - `Error::ValidationFailed.for(record.errors, fallback: "Could not save")`:
   the full messages, and the errors by field;
-- `Error::ValidationFailed.from_result(result)`: a failed result object's
-  `errors`, joined as the message, with no field errors;
+- `Error::ValidationFailed.from_result(result, errors: nil)`: a failed result
+  object's `errors`, joined as the message, with the errors by field passed
+  in, or the result's own when they are a Hash;
 - `Error::ForbiddenFields.new(fields: %w[notes])`: fields the person sent but
   may not change.
 
