@@ -58,10 +58,11 @@ RSpec.describe Saltbox::Actions::Arguments do
       expect { dotted.validate!({}) }.to raise_error(ArgumentError, "a.b has a dot: an error names a field by its path, joined with dots")
     end
 
-    it "allows a dot in a field's default or listed values, which are data" do
-      schema = {"type" => "object", "properties" => {"host" => {"type" => "string", "enum" => ["a.example"], "default" => "a.example"}},
+    it "allows a field's default to hold a key with a dot, even when the default looks like a schema, since it is data" do
+      settings = {"properties" => {"v1.2" => true}}
+      schema = {"type" => "object", "properties" => {"settings" => {"type" => "object", "default" => settings}},
                 "required" => [], "additionalProperties" => false}
-      expect(described_class.new(schema).validate!({})).to eq("host" => "a.example")
+      expect(described_class.new(schema).validate!({})).to eq("settings" => settings)
     end
   end
 
