@@ -51,18 +51,19 @@ RSpec.describe Saltbox::Actions::Arguments do
         .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["orders.0.lines.1.quantity"]) }
     end
 
-    it "refuses a schema with a field whose name has a dot, whose errors would share a key with a nested field" do
+    it "escapes a dot inside a field's name, so field a.b and field b inside a are told apart" do
       item = {"type" => "object", "properties" => {"b" => {"type" => "integer"}}}
       dotted = described_class.new({"type" => "object", "properties" => {"a.b" => {"type" => "integer"}, "a" => item},
                                     "required" => [], "additionalProperties" => false})
-      expect { dotted.validate!({}) }.to raise_error(ArgumentError, "a.b has a dot: an error names a field by its path, joined with dots")
+      expect { dotted.validate!("a.b": "one", a: {b: "two"}) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to contain_exactly("a\\.b", "a.b") }
     end
 
-    it "allows a field's default to hold a key with a dot, even when the default looks like a schema, since it is data" do
-      settings = {"properties" => {"v1.2" => true}}
-      schema = {"type" => "object", "properties" => {"settings" => {"type" => "object", "default" => settings}},
-                "required" => [], "additionalProperties" => false}
-      expect(described_class.new(schema).validate!({})).to eq("settings" => settings)
+    it "builds a key from a path, escaping a dot or a backslash inside a name, and reads back its last name" do
+      expect(described_class.key(["payments", 1, "amount"])).to eq("payments.1.amount")
+      expect(described_class.key(["rows", 0, "v1.2", "a\\b"])).to eq("rows.0.v1\\.2.a\\\\b")
+      expect(described_class.last_name("rows.0.v1\\.2")).to eq("v1.2")
+      expect(described_class.last_name("payments.1.amount")).to eq("amount")
     end
   end
 

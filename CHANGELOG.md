@@ -18,9 +18,12 @@ path instead.
   service's errors by field. A result whose errors are a Hash, such as
   `{reason: ["Reason is required"]}`, keeps its fields too, and its
   messages are joined as the message.
-- An attribute, an item's field or a field in a hand-written schema
-  whose name has a dot raises `ArgumentError`, since its errors would
-  share a key with a field nested under it (`a.b`).
+- A dot or a backslash inside a field's name is escaped with a
+  backslash in its key, so a field named `a.b` (`a\.b`) never shares a
+  key with field `b` inside `a` (`a.b`). An app with a dotted field name
+  reads its errors under the escaped key; before, they were under
+  `a.b`. `Arguments.key(["rows", 0, "v1.2"])` builds a key, such as a
+  `resolve_reference` path.
 
 ## 1.4.0 (2026-11-04)
 

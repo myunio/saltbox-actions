@@ -96,7 +96,7 @@ module Saltbox
           @fields = fields
           message ||= I18n.t("actions.errors.forbidden_fields", fields: fields.to_sentence, default: "You can't change %{fields}.")
           field = I18n.t("actions.errors.forbidden_field", default: "you can't change this")
-          super(message, errors: fields.index_with { [field] }, **options)
+          super(message, errors: fields.to_h { [Arguments.key([it]), [field]] }, **options)
         end
       end
 

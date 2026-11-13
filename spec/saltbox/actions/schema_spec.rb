@@ -115,13 +115,6 @@ RSpec.describe Saltbox::Actions::Schema do
     expect(export.input_schema["properties"]).to have_key("format")
   end
 
-  it "refuses an attribute or an item's field whose name has a dot, since errors name a field by its dotted path" do
-    expect { Class.new(ApplicationAction) { attribute :"rows.title", :string } }
-      .to raise_error(ArgumentError, "rows.title has a dot: an error names a field by its path, joined with dots")
-    expect { Class.new(ApplicationAction) { attribute :rows, :array, of: {"seat.row": :string} } }
-      .to raise_error(ArgumentError, "seat.row has a dot: an error names a field by its path, joined with dots")
-  end
-
   it "shapes an attribute's schema with the validations that always run" do
     action = Class.new(ApplicationAction) do
       def self.name = "Events::ImportAction"
