@@ -140,7 +140,25 @@ module Saltbox
       end
 
       def schemer
-        self.class.schemers[@schema] ||= JSONSchemer.schema(@schema, regexp_resolver: "ecma")
+        self.class.schemers[@schema] ||= begin
+          refuse_dotted!(@schema)
+          JSONSchemer.schema(@schema, regexp_resolver: "ecma")
+        end
+      end
+
+      # Keywords whose values are data, not schemas, so a dot in them is fine.
+      DATA_KEYWORDS = %w[default enum const examples].freeze
+
+      # A field named with a dot would share its error key with a field
+      # nested under that name (a.b), so a schema may not have one.
+      def refuse_dotted!(schema)
+        case schema
+        when Hash
+          dotted = schema["properties"]&.keys&.find { it.include?(".") }
+          raise ArgumentError, "#{dotted} has a dot: an error names a field by its path, joined with dots" if dotted
+          schema.except(*DATA_KEYWORDS).each_value { refuse_dotted!(it) }
+        when Array then schema.each { refuse_dotted!(it) }
+        end
       end
     end
   end

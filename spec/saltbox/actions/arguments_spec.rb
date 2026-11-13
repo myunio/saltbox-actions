@@ -41,6 +41,28 @@ RSpec.describe Saltbox::Actions::Arguments do
       expect { checker.validate!(payments: [{paid_on: "2026-11-01"}, {amount: 1, amount_cents: 100}]) }
         .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to contain_exactly("payments.0.amount", "payments.1.amount_cents") }
     end
+
+    it "names a field in a list inside a list by its whole path, such as orders.0.lines.1.quantity" do
+      line = {"type" => "object", "properties" => {"quantity" => {"type" => "integer"}}, "additionalProperties" => false}
+      order = {"type" => "object", "properties" => {"lines" => {"type" => "array", "items" => line}}, "additionalProperties" => false}
+      nested = described_class.new({"type" => "object", "properties" => {"orders" => {"type" => "array", "items" => order}},
+                                    "required" => [], "additionalProperties" => false})
+      expect { nested.validate!(orders: [{lines: [{quantity: 1}, {quantity: "two"}]}]) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["orders.0.lines.1.quantity"]) }
+    end
+
+    it "refuses a schema with a field whose name has a dot, whose errors would share a key with a nested field" do
+      item = {"type" => "object", "properties" => {"b" => {"type" => "integer"}}}
+      dotted = described_class.new({"type" => "object", "properties" => {"a.b" => {"type" => "integer"}, "a" => item},
+                                    "required" => [], "additionalProperties" => false})
+      expect { dotted.validate!({}) }.to raise_error(ArgumentError, "a.b has a dot: an error names a field by its path, joined with dots")
+    end
+
+    it "allows a dot in a field's default or listed values, which are data" do
+      schema = {"type" => "object", "properties" => {"host" => {"type" => "string", "enum" => ["a.example"], "default" => "a.example"}},
+                "required" => [], "additionalProperties" => false}
+      expect(described_class.new(schema).validate!({})).to eq("host" => "a.example")
+    end
   end
 
   it "fills in a declared default for an argument left out or sent as null" do

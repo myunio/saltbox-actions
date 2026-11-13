@@ -645,6 +645,8 @@ The types are `:string`, `:integer`, `:decimal`, `:boolean`, `:date`,
 `:datetime`, `:time` (a time of day, `"HH:MM"` from `00:00` to `23:59`), `:array` and `:hash`.
 A refusal about one item in a list is named by its path, joined with
 dots, such as `payments.1.amount`, so a form can show it on the item's row.
+A name with a dot, of an attribute or an item's field, is refused, since
+its errors would share a key with a field nested under it.
 `nullable: true` lets `null` clear a value; otherwise `null` counts as left
 out, since agents often send it for a field they skip.
 

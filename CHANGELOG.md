@@ -1,9 +1,11 @@
 # Changelog
 
-## 1.5.0 (unreleased)
+## 2.0.0 (unreleased)
 
 A refusal about one item in a list names that item, so a form can show
-it on the item's row.
+it on the item's row. A caller that reads a list's errors under the
+argument's name (`errors["payments"]`) must read them under the item's
+path instead.
 
 - A field inside a list or an object is named by its path, joined with
   dots: `payments.1.amount` for a wrong type or a field the item does
@@ -16,6 +18,9 @@ it on the item's row.
   service's errors by field. A result whose errors are a Hash, such as
   `{reason: ["Reason is required"]}`, keeps its fields too, and its
   messages are joined as the message.
+- An attribute, an item's field or a field in a hand-written schema
+  whose name has a dot raises `ArgumentError`, since its errors would
+  share a key with a field nested under it (`a.b`).
 
 ## 1.4.0 (2026-11-04)
 
