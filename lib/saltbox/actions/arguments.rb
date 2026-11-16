@@ -12,7 +12,6 @@ module Saltbox
     # - a missing required field.
     # A field inside a list or an object is named by its path, such as
     # payments.1.amount, so a form can show the message on that item's row.
-    # A dot inside one name is escaped (Arguments.key).
     # @api private
     class Arguments
       # @param schema [Hash] a closed JSON Schema object
@@ -74,8 +73,8 @@ module Saltbox
         # The schema refuses an integer outside its range by name; this finds
         # what it cannot: an id too large for its column, a float that is not finite.
         out_of_range = arguments.flat_map { |name, value| Casting.out_of_range(value, @types[name], [name]) }
-          .reject { errors.key?(self.class.key(it)) }
-        out_of_range.each { (errors[self.class.key(it)] ||= []) << "is out of range" }
+          .reject { errors.key?(it.join(".")) }
+        out_of_range.each { (errors[it.join(".")] ||= []) << "is out of range" }
         messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it.join("/")}` is out of range" }
         raise Error::ValidationFailed.new(messages.join("; "), errors:) if errors.any?
         Current.arguments_checked = true
@@ -84,26 +83,6 @@ module Saltbox
 
       # @return [Concurrent::Map] compiled JSON Schema checkers, cached by schema
       def self.schemers = @schemers ||= Concurrent::Map.new
-
-      # The key a field's errors are listed under: its path joined with
-      # dots, such as payments.1.amount. A dot or a backslash inside one
-      # name is escaped with a backslash, so a field named a.b (a\.b) never
-      # shares a key with field b inside a (a.b).
-      #
-      # @param path [Array<String, Integer>] the field's names and list positions, outermost first
-      # @return [String]
-      #
-      # @example
-      #   Arguments.key(["payments", 1, "amount"]) # => "payments.1.amount"
-      #   Arguments.key(["v1.2"])                  # => "v1\\.2"
-      # @api public
-      def self.key(path) = path.map { it.to_s.gsub(/[\\.]/) { "\\#{it}" } }.join(".")
-
-      # The last name in a key, unescaped: amount for payments.1.amount.
-      #
-      # @param key [String] a key from Arguments.key
-      # @return [String]
-      def self.last_name(key) = key.scan(/(?:\\.|[^\\.])+/).last.to_s.gsub(/\\(.)/, '\1')
 
       private
 
@@ -130,8 +109,8 @@ module Saltbox
         failures.each_with_object({}) do |error, result|
           path = path(error)
           missing = error.dig("details", "missing_keys")
-          names = if missing then missing.map { self.class.key([*path, it]) }
-          elsif path.any? then [self.class.key(path)]
+          names = if missing then missing.map { [*path, it].join(".") }
+          elsif path.any? then [path.join(".")]
           else ["arguments"]
           end
           names.each { |name| (result[name] ||= []) << message(name, error) }
@@ -152,7 +131,7 @@ module Saltbox
       # the schema does not list, which fields it does.
       def sentence(error)
         return error["error"] unless unknown?(error)
-        name = self.class.key(path(error))
+        name = path(error).join(".")
         "#{@name || "The action"} does not take #{name}. It #{takes}."
       end
 
@@ -164,7 +143,25 @@ module Saltbox
       end
 
       def schemer
-        self.class.schemers[@schema] ||= JSONSchemer.schema(@schema, regexp_resolver: "ecma")
+        self.class.schemers[@schema] ||= begin
+          refuse_dotted!(@schema)
+          JSONSchemer.schema(@schema, regexp_resolver: "ecma")
+        end
+      end
+
+      # Keywords whose values are data, not schemas, so a dot in them is fine.
+      DATA_KEYWORDS = %w[default enum const examples].freeze
+
+      # A field named with a dot would share its error key with a field
+      # nested under that name (a.b), so a schema may not have one.
+      def refuse_dotted!(schema)
+        case schema
+        when Hash
+          dotted = schema["properties"]&.keys&.find { it.include?(".") }
+          raise ArgumentError, "#{dotted} has a dot: an error names a field by its path, joined with dots" if dotted
+          schema.except(*DATA_KEYWORDS).each_value { refuse_dotted!(it) }
+        when Array then schema.each { refuse_dotted!(it) }
+        end
       end
     end
   end
