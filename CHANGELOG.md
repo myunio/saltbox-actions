@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-11-16)
 
 A refusal about one item in a list names that item, so a form can show
 it on the item's row. A caller that reads a list's errors under the
