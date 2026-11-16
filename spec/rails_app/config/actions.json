@@ -95,6 +95,7 @@
         "page": {
           "type": "integer",
           "minimum": 1,
+          "maximum": 9223372036854775807,
           "description": "Page number, from 1"
         }
       },
@@ -154,7 +155,9 @@
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "minimum": -2147483648,
+          "maximum": 2147483647
         },
         "price": {
           "type": [
@@ -390,6 +393,7 @@
         "page": {
           "type": "integer",
           "minimum": 1,
+          "maximum": 9223372036854775807,
           "default": 1
         },
         "page_size": {
@@ -645,7 +649,9 @@
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "minimum": -2147483648,
+          "maximum": 2147483647
         },
         "price": {
           "type": [

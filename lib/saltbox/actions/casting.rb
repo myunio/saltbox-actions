@@ -13,8 +13,8 @@ module Saltbox
     # A decimal keeps its string, so no digit is lost. Any other value stays
     # as it was sent, so the schema refuses it by name: unlike Active Record,
     # "lots" never becomes 0, "yes" never becomes true, and 30 February never
-    # becomes 2 March. Casting.invalid? then finds the numbers the schema
-    # passes but the type cannot hold.
+    # becomes 2 March. Casting.out_of_range then finds the numbers the
+    # schema passes but the type cannot hold.
     # @api private
     module Casting
       # Integer() and Float() also read 1_000, and Float() reads hex such as
@@ -96,15 +96,19 @@ module Saltbox
 
       # @param value [Object] one input, after Casting.cast
       # @param type [ActiveModel::Type::Value, Inputs::List, Hash, nil]
-      # @return [Boolean] whether it holds an integer the type cannot store, or
-      #   a float that is not finite, which JSON cannot carry
-      def self.invalid?(value, type)
+      # @param path [Array<String, Integer>] where the value is in the input
+      # @return [Array<Array<String, Integer>>] the path of each integer inside the value
+      #   the type cannot store, and of each float that is not finite, which JSON cannot carry
+      #
+      # @example
+      #   Casting.out_of_range([{"capacity" => 1}, {"capacity" => 10**30}], rows, ["rows"]) # => [["rows", 1, "capacity"]]
+      def self.out_of_range(value, type, path = [])
         case value
-        when Array then type.is_a?(Inputs::List) && value.any? { invalid?(it, type.item) }
-        when Hash then type.is_a?(Hash) && value.any? { |name, item| invalid?(item, type[name.to_s]) }
-        when Integer then type.is_a?(ActiveModel::Type::Value) && type.type == :integer && !type.serializable?(value)
-        when Float then !value.finite?
-        else false
+        when Array then type.is_a?(Inputs::List) ? value.each_with_index.flat_map { |item, index| out_of_range(item, type.item, [*path, index]) } : []
+        when Hash then type.is_a?(Hash) ? value.flat_map { |name, item| out_of_range(item, type[name.to_s], [*path, name.to_s]) } : []
+        when Integer then (type.is_a?(ActiveModel::Type::Value) && type.type == :integer && !type.serializable?(value)) ? [path] : []
+        when Float then value.finite? ? [] : [path]
+        else []
         end
       end
 

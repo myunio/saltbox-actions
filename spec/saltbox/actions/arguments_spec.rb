@@ -24,6 +24,48 @@ RSpec.describe Saltbox::Actions::Arguments do
       .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors["id"]).to eq(["list_events takes no id; declare attribute :id"]) }
   end
 
+  describe "a list of records" do
+    let(:checker) do
+      payment = {"type" => "object", "properties" => {"amount" => {"type" => "number"}, "paid_on" => {"type" => "string", "format" => "date"}},
+                 "required" => ["amount"], "additionalProperties" => false}
+      described_class.new({"type" => "object", "properties" => {"payments" => {"type" => "array", "items" => payment}},
+                           "required" => [], "additionalProperties" => false})
+    end
+
+    it "names a field of an item by the item's place in the list and the field, such as payments.1.paid_on" do
+      expect { checker.validate!(payments: [{amount: 1}, {amount: 2, paid_on: "soon"}]) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["payments.1.paid_on"]) }
+    end
+
+    it "names an item's missing field and a field the item does not take by their paths" do
+      expect { checker.validate!(payments: [{paid_on: "2026-11-01"}, {amount: 1, amount_cents: 100}]) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to contain_exactly("payments.0.amount", "payments.1.amount_cents") }
+    end
+
+    it "names a field in a list inside a list by its whole path, such as orders.0.lines.1.quantity" do
+      line = {"type" => "object", "properties" => {"quantity" => {"type" => "integer"}}, "additionalProperties" => false}
+      order = {"type" => "object", "properties" => {"lines" => {"type" => "array", "items" => line}}, "additionalProperties" => false}
+      nested = described_class.new({"type" => "object", "properties" => {"orders" => {"type" => "array", "items" => order}},
+                                    "required" => [], "additionalProperties" => false})
+      expect { nested.validate!(orders: [{lines: [{quantity: 1}, {quantity: "two"}]}]) }
+        .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["orders.0.lines.1.quantity"]) }
+    end
+
+    it "refuses a schema with a field whose name has a dot, whose errors would share a key with a nested field" do
+      item = {"type" => "object", "properties" => {"b" => {"type" => "integer"}}}
+      dotted = described_class.new({"type" => "object", "properties" => {"a.b" => {"type" => "integer"}, "a" => item},
+                                    "required" => [], "additionalProperties" => false})
+      expect { dotted.validate!({}) }.to raise_error(ArgumentError, "a.b has a dot: an error names a field by its path, joined with dots")
+    end
+
+    it "allows a field's default to hold a key with a dot, even when the default looks like a schema, since it is data" do
+      settings = {"properties" => {"v1.2" => true}}
+      schema = {"type" => "object", "properties" => {"settings" => {"type" => "object", "default" => settings}},
+                "required" => [], "additionalProperties" => false}
+      expect(described_class.new(schema).validate!({})).to eq("settings" => settings)
+    end
+  end
+
   it "fills in a declared default for an argument left out or sent as null" do
     schema = {"type" => "object", "properties" => {"limit" => {"type" => "integer", "default" => 25}}, "required" => [], "additionalProperties" => false}
     checker = described_class.new(schema)

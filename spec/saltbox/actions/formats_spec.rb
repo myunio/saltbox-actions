@@ -16,6 +16,11 @@ RSpec.describe "Error and result formats" do
   it "builds a validation refusal from a result's messages, or from errors by field" do
     from_result = Saltbox::Actions::Error::ValidationFailed.from_result(Struct.new(:errors).new(["Too late", "Full"]))
     expect([from_result.code, from_result.message, from_result.errors]).to eq(["validation_failed", "Too late; Full", nil])
+    by_field = Saltbox::Actions::Error::ValidationFailed.from_result(Struct.new(:errors).new({reason: ["Reason is required"], base: ["Too late"]}))
+    expect([by_field.message, by_field.errors]).to eq(["Reason is required; Too late", {"reason" => ["Reason is required"], "base" => ["Too late"]}])
+    carried = Saltbox::Actions::Error::ValidationFailed.from_result(Struct.new(:errors).new(["Amount can't be blank"]),
+      errors: {"payments.1.amount" => ["can't be blank"]})
+    expect([carried.message, carried.errors]).to eq(["Amount can't be blank", {"payments.1.amount" => ["can't be blank"]}])
     errors = ActiveModel::Errors.new(Event.new).tap { it.add(:title, :blank) }
     built = Saltbox::Actions::Error::ValidationFailed.for(errors)
     expect([built.code, built.message, built.errors]).to eq(["validation_failed", "Title can't be blank", {"title" => ["can't be blank"]}])

@@ -95,8 +95,8 @@ module Saltbox
         #   schema; or a callable giving it, called once per call. Either is checked against the
         #   schema as if the caller had sent it (Arguments#validate!).
         # @return [void]
-        # @raise [ArgumentError] for a type not in TYPES, or a name the action already uses,
-        #   such as params, render or errors
+        # @raise [ArgumentError] for a type not in TYPES, a name the action already uses,
+        #   such as params, render or errors, or a name or an item's field with a dot
         #
         # @example A list of records, each with typed fields
         #   attribute :payments, :array, of: {amount: :decimal, paid_on: :date}
@@ -109,6 +109,8 @@ module Saltbox
           return self._declares_id = true if name == "id" && type.nil?
           type ||= :string
           raise ArgumentError, "#{name} is a method every action has: name the attribute another way" if reserved_name?(name)
+          dotted = [name, *(of.keys.map(&:to_s) if of.is_a?(Hash))].find { it.include?(".") }
+          raise ArgumentError, "#{dotted} has a dot: an error names a field by its path, joined with dots" if dotted
           raise ArgumentError, "#{name} takes a type: one of #{TYPES.join(", ")}" unless TYPES.include?(type)
           unknown = options.keys - [:default]
           raise ArgumentError, "#{name} takes no #{unknown.join(", ")}: validations shape an attribute's schema" if unknown.any?

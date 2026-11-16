@@ -10,6 +10,8 @@ module Saltbox
     # - a field the schema does not list;
     # - a value of the wrong type, or a number its type cannot hold;
     # - a missing required field.
+    # A field inside a list or an object is named by its path, such as
+    # payments.1.amount, so a form can show the message on that item's row.
     # @api private
     class Arguments
       # @param schema [Hash] a closed JSON Schema object
@@ -68,9 +70,12 @@ module Saltbox
         arguments = defaults(properties, arguments.keys).merge(arguments)
         failures = schemer.validate(arguments).to_a
         errors = field_errors(failures)
-        out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
-        out_of_range.each { (errors[it] ||= []) << "is out of range" }
-        messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it}` is out of range" }
+        # The schema refuses an integer outside its range by name; this finds
+        # what it cannot: an id too large for its column, a float that is not finite.
+        out_of_range = arguments.flat_map { |name, value| Casting.out_of_range(value, @types[name], [name]) }
+          .reject { errors.key?(it.join(".")) }
+        out_of_range.each { (errors[it.join(".")] ||= []) << "is out of range" }
+        messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it.join("/")}` is out of range" }
         raise Error::ValidationFailed.new(messages.join("; "), errors:) if errors.any?
         Current.arguments_checked = true
         arguments
@@ -102,11 +107,19 @@ module Saltbox
 
       def field_errors(failures)
         failures.each_with_object({}) do |error, result|
-          names = error["data_pointer"].split("/")[1]&.then { |part| [part.gsub("~1", "/").gsub("~0", "~")] }
-          names ||= error.dig("details", "missing_keys") || ["arguments"]
+          path = path(error)
+          missing = error.dig("details", "missing_keys")
+          names = if missing then missing.map { [*path, it].join(".") }
+          elsif path.any? then [path.join(".")]
+          else ["arguments"]
+          end
           names.each { |name| (result[name] ||= []) << message(name, error) }
         end
       end
+
+      # The segments of the field a failure is about, from its JSON Pointer:
+      # ["payments", "1", "amount"] for /payments/1/amount.
+      def path(error) = error["data_pointer"].split("/").drop(1).map { it.gsub("~1", "/").gsub("~0", "~") }
 
       def message(name, error)
         return "#{@name} takes no id; declare attribute :id" if name == "id" && @name && !@schema.fetch("properties").key?("id")
@@ -118,7 +131,7 @@ module Saltbox
       # the schema does not list, which fields it does.
       def sentence(error)
         return error["error"] unless unknown?(error)
-        name = error["data_pointer"].delete_prefix("/").gsub("~1", "/").gsub("~0", "~")
+        name = path(error).join(".")
         "#{@name || "The action"} does not take #{name}. It #{takes}."
       end
 
@@ -130,7 +143,25 @@ module Saltbox
       end
 
       def schemer
-        self.class.schemers[@schema] ||= JSONSchemer.schema(@schema, regexp_resolver: "ecma")
+        self.class.schemers[@schema] ||= begin
+          refuse_dotted!(@schema)
+          JSONSchemer.schema(@schema, regexp_resolver: "ecma")
+        end
+      end
+
+      # Keywords whose values are data, not schemas, so a dot in them is fine.
+      DATA_KEYWORDS = %w[default enum const examples].freeze
+
+      # A field named with a dot would share its error key with a field
+      # nested under that name (a.b), so a schema may not have one.
+      def refuse_dotted!(schema)
+        case schema
+        when Hash
+          dotted = schema["properties"]&.keys&.find { it.include?(".") }
+          raise ArgumentError, "#{dotted} has a dot: an error names a field by its path, joined with dots" if dotted
+          schema.except(*DATA_KEYWORDS).each_value { refuse_dotted!(it) }
+        when Array then schema.each { refuse_dotted!(it) }
+        end
       end
     end
   end

@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.0.0 (unreleased)
+
+A refusal about one item in a list names that item, so a form can show
+it on the item's row. A caller that reads a list's errors under the
+argument's name (`errors["payments"]`) must read them under the item's
+path instead.
+
+- A field inside a list or an object is named by its path, joined with
+  dots: `payments.1.amount` for a wrong type or a field the item does
+  not take, and `payments.0.amount` for an item's missing field. Before,
+  each was named by its argument alone (`payments`).
+- `resolve_reference(model, value, field: "payments.0.payment_method")`
+  refuses under that path, and its message names only the last part:
+  "Payment method isn't one of the payment methods".
+- `Error::ValidationFailed.from_result(result, errors:)` carries a
+  service's errors by field. A result whose errors are a Hash, such as
+  `{reason: ["Reason is required"]}`, keeps its fields too, and its
+  messages are joined as the message.
+- An attribute, an item's field or a field in a hand-written schema
+  whose name has a dot raises `ArgumentError`, since its errors would
+  share a key with a field nested under it (`a.b`).
+- An integer's schema gives its range: a bigint's for an attribute, the
+  column's for a model field. A number outside it is refused by its path,
+  like any other error, and agents see the range in the catalog. A
+  number the schema can't bound (an id too large for its column, a float
+  that is not finite) is also refused by its path: `rows.1.capacity`,
+  not `rows`. The committed catalog changes, so run
+  `bin/rails actions:dump`.
+
 ## 1.4.0 (2026-11-04)
 
 The gem takes on what every app wrote around its actions. An app that

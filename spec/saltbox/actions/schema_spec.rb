@@ -91,7 +91,7 @@ RSpec.describe Saltbox::Actions::Schema do
     end
     properties = action.input_schema["properties"]
     expect(properties["rows"]).to include("type" => "array", "maxItems" => 50)
-    expect(properties["rows"]["items"]["properties"]["capacity"]).to eq("type" => %w[integer null])
+    expect(properties["rows"]["items"]["properties"]["capacity"]).to eq("type" => %w[integer null], "minimum" => -(2**63), "maximum" => 2**63 - 1)
     expect(properties["amount"]).to include("type" => %w[number string null])
     expect(properties["starts_at"]).to eq("type" => "string", "format" => "date-time")
     expect { Class.new(ApplicationAction) { attribute :page, :integer, minimum: 1 } }
@@ -113,6 +113,13 @@ RSpec.describe Saltbox::Actions::Schema do
       attribute :format, :string
     end
     expect(export.input_schema["properties"]).to have_key("format")
+  end
+
+  it "refuses an attribute or an item's field whose name has a dot, since errors name a field by its dotted path" do
+    expect { Class.new(ApplicationAction) { attribute :"rows.title", :string } }
+      .to raise_error(ArgumentError, "rows.title has a dot: an error names a field by its path, joined with dots")
+    expect { Class.new(ApplicationAction) { attribute :rows, :array, of: {"seat.row": :string} } }
+      .to raise_error(ArgumentError, "seat.row has a dot: an error names a field by its path, joined with dots")
   end
 
   it "shapes an attribute's schema with the validations that always run" do

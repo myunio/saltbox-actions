@@ -22,7 +22,7 @@ RSpec.describe "Declared names" do
   it "describes each attribute in its declaration, after what its validations give" do
     expect(action.input_schema.fetch("properties")).to eq(
       "status" => {"type" => "string", "enum" => %w[draft published cancelled], "description" => "Only events with this status"},
-      "page" => {"type" => "integer", "minimum" => 1, "description" => "Page number, from 1"}
+      "page" => {"type" => "integer", "minimum" => 1, "maximum" => 2**63 - 1, "description" => "Page number, from 1"}
     )
     unknown_cli_args = lambda do
       named("Reports::BadAction") do
