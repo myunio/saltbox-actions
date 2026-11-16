@@ -91,7 +91,7 @@ RSpec.describe Saltbox::Actions::Schema do
     end
     properties = action.input_schema["properties"]
     expect(properties["rows"]).to include("type" => "array", "maxItems" => 50)
-    expect(properties["rows"]["items"]["properties"]["capacity"]).to eq("type" => %w[integer null])
+    expect(properties["rows"]["items"]["properties"]["capacity"]).to eq("type" => %w[integer null], "minimum" => -(2**63), "maximum" => 2**63 - 1)
     expect(properties["amount"]).to include("type" => %w[number string null])
     expect(properties["starts_at"]).to eq("type" => "string", "format" => "date-time")
     expect { Class.new(ApplicationAction) { attribute :page, :integer, minimum: 1 } }

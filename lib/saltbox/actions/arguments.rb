@@ -71,9 +71,12 @@ module Saltbox
         arguments = defaults(properties, arguments.keys).merge(arguments)
         failures = schemer.validate(arguments).to_a
         errors = field_errors(failures)
-        out_of_range = arguments.keys.select { Casting.invalid?(arguments[it], @types[it]) }
-        out_of_range.each { (errors[self.class.key([it])] ||= []) << "is out of range" }
-        messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it}` is out of range" }
+        # The schema refuses an integer outside its range by name; this finds
+        # what it cannot: an id too large for its column, a float that is not finite.
+        out_of_range = arguments.flat_map { |name, value| Casting.out_of_range(value, @types[name], [name]) }
+          .reject { errors.key?(self.class.key(it)) }
+        out_of_range.each { (errors[self.class.key(it)] ||= []) << "is out of range" }
+        messages = failures.map { sentence(it) } + out_of_range.map { "value at `/#{it.join("/")}` is out of range" }
         raise Error::ValidationFailed.new(messages.join("; "), errors:) if errors.any?
         Current.arguments_checked = true
         arguments

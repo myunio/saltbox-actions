@@ -28,8 +28,11 @@ module Saltbox
       # A decimal also takes a string of digits, since a JSON number can lose
       # digits of a large amount and a string keeps every one. A hash takes any
       # keys: the action checks them itself.
+      # An integer attribute holds what a bigint can, and its schema says so,
+      # so a number outside that range is refused by name like any other.
       ATTRIBUTE_TYPES = COLUMN_TYPES.slice(:string, :integer, :decimal, :boolean, :date, :datetime, :time)
-        .merge(array: {"type" => "array"}, hash: {"type" => "object"}).freeze
+        .merge(integer: {"type" => "integer", "minimum" => -(2**63), "maximum" => 2**63 - 1},
+          array: {"type" => "array"}, hash: {"type" => "object"}).freeze
       # Numericality options with a number, and the JSON Schema keyword each gives.
       NUMBER_BOUNDS = {greater_than_or_equal_to: "minimum", less_than_or_equal_to: "maximum",
                        greater_than: "exclusiveMinimum", less_than: "exclusiveMaximum"}.freeze
@@ -75,6 +78,17 @@ module Saltbox
       def self.item_object(fields)
         {"type" => "object", "properties" => fields.to_h { |name, type| [name.to_s, nullable(ATTRIBUTE_TYPES.fetch(type))] },
          "additionalProperties" => false}
+      end
+
+      # @param limit [Integer, nil] the integer type's size in bytes; nil for
+      #   Active Model's default of 4
+      # @return [Hash{String => Integer}] the integers the type can store, as JSON Schema bounds
+      #
+      # @example
+      #   Schema.integer_range(2) # => {"minimum" => -32768, "maximum" => 32767}
+      def self.integer_range(limit)
+        bits = (limit || 4) * 8
+        {"minimum" => -(2**(bits - 1)), "maximum" => 2**(bits - 1) - 1}
       end
 
       # @param schema [Hash]
@@ -288,9 +302,19 @@ module Saltbox
               schema[keys.first] = low if low.is_a?(Integer)
               schema[keys.last] = high if high.is_a?(Integer)
             when :numericality
-              NUMBER_BOUNDS.each { |option, keyword| schema[keyword] = validator.options[option] if validator.options[option].is_a?(Numeric) }
+              NUMBER_BOUNDS.each do |option, keyword|
+                bound = validator.options[option]
+                next unless bound.is_a?(Numeric)
+                # The type's own range stays where the validation allows more.
+                kept = schema[keyword]
+                tighter = keyword.include?("inimum") ? [kept, bound].compact.max : [kept, bound].compact.min
+                schema[keyword] = tighter
+              end
             end
           end
+          # An exclusive bound at least as tight makes the inclusive one say nothing.
+          schema.delete("minimum") if schema["exclusiveMinimum"] && schema["minimum"] && schema["exclusiveMinimum"] >= schema["minimum"]
+          schema.delete("maximum") if schema["exclusiveMaximum"] && schema["maximum"] && schema["exclusiveMaximum"] <= schema["maximum"]
           default = attribute[:default]
           schema["default"] = Casting.json_value(default, attribute[:cast_type]) if attribute.key?(:default) && !default.respond_to?(:call)
           schema.compact
@@ -310,6 +334,7 @@ module Saltbox
           else
             COLUMN_TYPES.fetch(type.type) { return }.dup
           end
+          schema.merge!(Schema.integer_range(type.limit)) if schema["type"] == "integer"
           schema["maxLength"] = column.limit if column.type == :string && column.limit
           [key, Field.new(key:, schema: column.null ? Schema.nullable(schema) : schema, required:, reference: nil, type:)]
         end

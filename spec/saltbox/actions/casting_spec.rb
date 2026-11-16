@@ -86,6 +86,25 @@ RSpec.describe Saltbox::Actions::Casting do
     expect { checker.validate!("ratio" => Float::INFINITY) }.to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["ratio"]) }
   end
 
+  it "refuses an integer too large for a list item's field, naming the item and the field" do
+    action = Class.new(ApplicationAction) do
+      def self.name = "Events::ImportAction"
+      kind :change
+      attribute :rows, :array, of: {capacity: :integer}
+    end
+    expect { Saltbox::Actions::Arguments.for(action).validate!(rows: [{capacity: 1}, {capacity: 10**30}]) }
+      .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors.keys).to eq(["rows.1.capacity"]) }
+  end
+
+  it "refuses a float that is not finite in a list item, naming the item and the field" do
+    item = {"type" => "object", "properties" => {"ratio" => {"type" => "number"}}}
+    schema = {"type" => "object", "properties" => {"rows" => {"type" => "array", "items" => item}}, "required" => [], "additionalProperties" => false}
+    rows = Saltbox::Actions::Inputs::List.new({"ratio" => ActiveModel::Type::Float.new})
+    checker = Saltbox::Actions::Arguments.new(schema, types: {"rows" => rows})
+    expect { checker.validate!("rows" => [{"ratio" => 1.5}, {"ratio" => Float::INFINITY}]) }
+      .to raise_error(Saltbox::Actions::Error::ValidationFailed) { expect(it.errors).to eq("rows.1.ratio" => ["is out of range"]) }
+  end
+
   it "reads a form's number in base 10, keeping hex, octal, binary and underscored numbers as sent" do
     schema = {"type" => "object", "properties" => {"count" => {"type" => "integer"}, "ratio" => {"type" => "number"}}, "required" => [], "additionalProperties" => false}
     checker = Saltbox::Actions::Arguments.new(schema, types: {"count" => ActiveModel::Type::Integer.new, "ratio" => ActiveModel::Type::Float.new})

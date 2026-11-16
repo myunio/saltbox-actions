@@ -24,6 +24,13 @@ path instead.
   reads its errors under the escaped key; before, they were under
   `a.b`. `Arguments.key(["rows", 0, "v1.2"])` builds a key, such as a
   `resolve_reference` path.
+- An integer's schema gives its range: a bigint's for an attribute, the
+  column's for a model field. A number outside it is refused by its path,
+  like any other error, and agents see the range in the catalog. A
+  number the schema can't bound (an id too large for its column, a float
+  that is not finite) is also refused by its path: `rows.1.capacity`,
+  not `rows`. The committed catalog changes, so run
+  `bin/rails actions:dump`.
 
 ## 1.4.0 (2026-11-04)
 

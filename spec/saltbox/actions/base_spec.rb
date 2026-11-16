@@ -197,7 +197,7 @@ RSpec.describe Saltbox::Actions::Base do
           render json: {page:, page_size:}
         end
       end
-      expect(listed.input_schema["properties"]).to include("page" => {"type" => "integer", "minimum" => 1, "default" => 1},
+      expect(listed.input_schema["properties"]).to include("page" => {"type" => "integer", "minimum" => 1, "maximum" => 2**63 - 1, "default" => 1},
         "page_size" => {"type" => "integer", "minimum" => 1, "maximum" => 3, "default" => 2})
       expect(run_action({}, as: as_screen(reader), action: listed).body).to eq("page" => 1, "page_size" => 2)
       expect { run_action({page_size: 4}, as: as_screen(reader), action: listed) }.to have_field_errors(:page_size)
